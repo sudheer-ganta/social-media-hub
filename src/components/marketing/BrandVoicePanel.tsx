@@ -134,9 +134,41 @@ export function BrandVoicePanel({
         </button>
       </div>
 
+      {/* Profile Selector Dropdown */}
+      {profileNames.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+            Select Brand Profile
+          </Label>
+          {(() => {
+            const matchedName = profileNames.find(
+              (n) => n.toLowerCase() === (voice.name || "").toLowerCase()
+            ) ?? profileNames[0] ?? "";
+
+            return (
+              <Select
+                value={matchedName}
+                onValueChange={(selectedName) => onLoad(selectedName)}
+              >
+                <SelectTrigger className="h-8 text-xs font-medium bg-card">
+                  <SelectValue>{matchedName || "Choose a brand profile..."}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {profileNames.map((name) => (
+                    <SelectItem key={name} value={name} className="text-xs">
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Collapsed preview */}
       {!expanded && voice.name && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
           <Badge variant="outline" className="text-xs font-medium">{voice.name}</Badge>
           <Badge className={cn("text-xs border", PERSONALITY_COLORS[voice.personality])}>
             {voice.personality}

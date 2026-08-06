@@ -11,6 +11,16 @@ const INTENT_META: Record<SeoKeyword["intent"], { label: string; className: stri
   navigational:  { label: "Nav",      className: "bg-amber-500/10 text-amber-600 border-amber-500/25" },
 };
 
+/** The model sometimes returns an intent outside the union — don't throw on it. */
+function intentMeta(keyword: SeoKeyword) {
+  return (
+    INTENT_META[keyword.intent] ?? {
+      label: keyword.intent || "—",
+      className: "bg-muted text-muted-foreground border-border",
+    }
+  );
+}
+
 /** Difficulty reads inverted: low is good, so the colours flip vs. readability. */
 function difficultyColor(score: number) {
   return score >= 70 ? "bg-rose-500" : score >= 40 ? "bg-amber-500" : "bg-emerald-500";
@@ -131,9 +141,9 @@ export function SeoPanel({ seo }: SeoPanelProps) {
 
                 <Badge
                   variant="outline"
-                  className={cn("shrink-0 border text-[10px]", INTENT_META[kw.intent].className)}
+                  className={cn("shrink-0 border text-[10px]", intentMeta(kw).className)}
                 >
-                  {INTENT_META[kw.intent].label}
+                  {intentMeta(kw).label}
                 </Badge>
 
                 <span className="w-12 shrink-0 text-right font-mono text-[10px] text-muted-foreground">

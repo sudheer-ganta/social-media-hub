@@ -59,7 +59,14 @@ export function HashtagIntelligence({
 
       <div className="space-y-3">
         {groups.map((group) => {
-          const meta = CATEGORY_META[group.category];
+          // The model occasionally invents a category ("Event Specific").
+          // Falling back keeps the tab rendering instead of throwing on
+          // meta.label — see CampaignPlanPanel for the same guard.
+          const meta = CATEGORY_META[group.category] ?? {
+            label: group.category,
+            color: "text-muted-foreground",
+            badgeClass: "bg-muted text-muted-foreground border-border",
+          };
           const loading = isRegenerating === group.category;
 
           return (

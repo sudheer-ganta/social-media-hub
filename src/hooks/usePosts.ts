@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { postsService } from "@/services";
+import { isGenerationStalled } from "@/utils/workflow";
 import type { Post, PostInsert, PostListParams, PostUpdate } from "@/types";
 
 export const postKeys = {
@@ -55,9 +56,13 @@ export function usePost(id: string | undefined) {
     queryFn: () => postsService.getById(id as string),
     enabled: Boolean(id),
     // Poll while the AI scenario is working so generated content appears
-    // without a manual refresh.
-    refetchInterval: (query) =>
-      query.state.data?.ai_status === "generating" ? 5000 : false,
+    // without a manual refresh. A stalled run is never coming back, so stop
+    // polling once it times out rather than hammering the API forever.
+    refetchInterval: (query) => {
+      const post = query.state.data;
+      if (!post || post.ai_status !== "generating") return false;
+      return isGenerationStalled(post) ? false : 5000;
+    },
   });
 }
 

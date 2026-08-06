@@ -28,6 +28,7 @@ import {
 import { usePost, useCreatePost, useUpdatePost } from "@/hooks/usePosts";
 import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
 import { today, currentTime } from "@/utils/date";
+import { getAiRunStatus } from "@/utils/workflow";
 import { Badge } from "@/components/ui/badge";
 
 
@@ -94,7 +95,9 @@ export default function AiStudio() {
     }
   }, [hasCompetitorDetails, studio.features.competitorAnalysis, studio.setFeature]);
 
-  const generating = post?.ai_status === "generating";
+  // A run that timed out isn't "generating" any more — it's over, and the
+  // button has to unlock so the user can fire another one.
+  const generating = !!post && getAiRunStatus(post).state === "generating";
   const canGenerate = !!imageUrl && !generating && !studio.isGenerating;
 
   return (
@@ -247,11 +250,11 @@ export default function AiStudio() {
               className="w-full shadow-glow gap-2"
               size="lg"
               disabled={!canGenerate}
-              loading={studio.isGenerating || createPost.isPending || (!!post && post.ai_status === "generating")}
+              loading={studio.isGenerating || createPost.isPending || generating}
               onClick={handleGenerate}
             >
               <Sparkles className="h-4 w-4" />
-              {post?.ai_status === "generating"
+              {generating
                 ? "Generating…"
                 : post
                 ? "Regenerate"

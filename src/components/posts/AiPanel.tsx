@@ -11,13 +11,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PlatformIcon } from "@/components/shared/PlatformIcon";
+import { AiErrorBanner } from "@/components/shared/AiErrorBanner";
 import { useApprovePost, useRequestAiGeneration } from "@/hooks/usePosts";
 import {
   getFlatHashtags,
   getPlatformCaptions,
   getPrimaryCaption,
 } from "@/ai/selectors";
-import { hasAiContent } from "@/utils/workflow";
+import { getAiRunStatus, hasAiContent } from "@/utils/workflow";
 import { PLATFORM_MAP } from "@/constants";
 import type { Platform, Post } from "@/types";
 
@@ -35,9 +36,9 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
   const requestAi = useRequestAiGeneration();
   const approvePost = useApprovePost();
 
-  const generating = post.ai_status === "generating";
+  const run = getAiRunStatus(post);
+  const generating = run.state === "generating";
   const ready = post.ai_status === "ready" && hasAiContent(post);
-  const failed = post.ai_status === "failed";
 
   // These read the Marketing Studio envelope when present and fall back to the
   // original ai_* columns, so posts from either pipeline render identically.
@@ -59,10 +60,10 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
           <CardDescription>
             {generating
               ? "Generating caption, hashtags and platform versions…"
-              : ready
-                ? "Review the generated content, then approve for publishing."
-                : failed
-                  ? "Generation failed — try again."
+              : run.error
+                ? "The last run didn't finish — details below."
+                : ready
+                  ? "Review the generated content, then approve for publishing."
                   : "Generate a caption, hashtags and per-platform versions from your image."}
           </CardDescription>
         </div>
@@ -93,6 +94,14 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
       </CardHeader>
 
       <CardContent className="space-y-4">
+        <AiErrorBanner
+          state={run.state}
+          error={run.error}
+          retrying={requestAi.isPending}
+          onRetry={() => requestAi.mutate(post.id)}
+          className="rounded-md"
+        />
+
         {generating && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -163,7 +172,8 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
         )}
 
         <div className="flex flex-wrap gap-2">
-          {(post.ai_status === "pending" || failed) && (
+          {/* The error banner above carries the retry when a run went wrong. */}
+          {!generating && !ready && !run.error && (
             <Button
               type="button"
               variant="secondary"
@@ -171,7 +181,7 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
               onClick={() => requestAi.mutate(post.id)}
             >
               <Sparkles />
-              {failed ? "Retry generation" : "Generate AI content"}
+              Generate AI content
             </Button>
           )}
           {ready && !post.approved && (

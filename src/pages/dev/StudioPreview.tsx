@@ -266,6 +266,40 @@ const MOCK_PARTIAL_POST: Post = {
   },
 };
 
+/** Make reported a failure and wrote nothing back. */
+const MOCK_FAILED_POST: Post = {
+  ...MOCK_POST,
+  id: "00000000-0000-0000-0000-000000000002",
+  title: "Aurora Serum — failed run",
+  ai_status: "failed",
+  ai_studio_output: {
+    schemaVersion: STUDIO_SCHEMA_VERSION,
+    meta: {
+      status: "failed",
+      generatedAt: "2026-08-06T09:15:03.882Z",
+      model: "gemini-2.0-flash",
+      durationMs: 1420,
+      error:
+        "Gemini rejected the request body: invalid JSON in module 5 (bad escaped character).",
+      produced: [],
+    },
+  },
+};
+
+/**
+ * Stuck at 'generating' with an updated_at well past the timeout — what a
+ * scenario that dies mid-run leaves behind. Nothing in the database will ever
+ * move this row on, so the client has to call it.
+ */
+const MOCK_STALLED_POST: Post = {
+  ...MOCK_POST,
+  id: "00000000-0000-0000-0000-000000000003",
+  title: "Aurora Serum — stalled run",
+  ai_status: "generating",
+  updated_at: "2026-08-06T09:15:03.882Z",
+  ai_studio_output: null,
+};
+
 export default function StudioPreview() {
   return (
     <div className="mx-auto max-w-5xl space-y-10 p-6">
@@ -285,6 +319,25 @@ export default function StudioPreview() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Partial run — degraded banner</h2>
         <MarketingStudio post={MOCK_PARTIAL_POST} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">Failed run — error banner + retry</h2>
+        <MarketingStudio post={MOCK_FAILED_POST} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">
+          Stalled run — Make never wrote back, timed out client-side
+        </h2>
+        <MarketingStudio post={MOCK_STALLED_POST} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">
+          Post editor AiPanel — stalled run
+        </h2>
+        <AiPanel post={MOCK_STALLED_POST} onUseCaption={() => {}} />
       </section>
 
       <section className="space-y-3">

@@ -68,6 +68,17 @@ export function useBrandVoice() {
     [profilesQuery.data],
   );
 
+  // Auto-select the default profile when loaded if brand voice name is empty
+  useEffect(() => {
+    if (profiles.length > 0 && !brandVoice.name) {
+      const preferred = profiles.find((p) => p.is_default) ?? profiles[0];
+      if (preferred) {
+        setBrandVoiceState({ ...DEFAULT_BRAND_VOICE, ...preferred.voice });
+        setActiveProfileId(preferred.id);
+      }
+    }
+  }, [profiles, brandVoice.name]);
+
   // One-time migration of localStorage profiles into the table.
   const importedRef = useRef(false);
   useEffect(() => {
@@ -108,8 +119,10 @@ export function useBrandVoice() {
   );
 
   const saveMutation = useMutation({
-    mutationFn: (name: string) => brandVoicesService.save(name, brandVoice),
+    mutationFn: (name: string) =>
+      brandVoicesService.save(name, { ...brandVoice, name }),
     onSuccess: (profile: BrandVoiceProfile) => {
+      setBrandVoiceState((prev) => ({ ...prev, name: profile.name }));
       setActiveProfileId(profile.id);
       invalidate();
       toast.success(`Saved "${profile.name}"`);
@@ -138,9 +151,17 @@ export function useBrandVoice() {
 
   const loadProfile = useCallback(
     (name: string) => {
-      const profile = profiles.find((p) => p.name === name);
+      const profile = profiles.find(
+        (p) =>
+          (p.voice?.name || p.name).toLowerCase() === name.toLowerCase() ||
+          p.name.toLowerCase() === name.toLowerCase()
+      );
       if (!profile) return;
-      setBrandVoiceState({ ...DEFAULT_BRAND_VOICE, ...profile.voice });
+      setBrandVoiceState({
+        ...DEFAULT_BRAND_VOICE,
+        ...profile.voice,
+        name: profile.voice?.name || profile.name,
+      });
       setActiveProfileId(profile.id);
     },
     [profiles],
@@ -148,7 +169,11 @@ export function useBrandVoice() {
 
   const deleteProfile = useCallback(
     (name: string) => {
-      const profile = profiles.find((p) => p.name === name);
+      const profile = profiles.find(
+        (p) =>
+          (p.voice?.name || p.name).toLowerCase() === name.toLowerCase() ||
+          p.name.toLowerCase() === name.toLowerCase()
+      );
       if (profile) deleteMutation.mutate(profile.id);
     },
     [profiles, deleteMutation],
@@ -157,13 +182,18 @@ export function useBrandVoice() {
   /** Name-keyed view, kept for the panel's existing shape. */
   const savedProfiles = useMemo(
     () =>
-      Object.fromEntries(profiles.map((p) => [p.name, p.voice])) as Record<
-        string,
-        BrandVoice
-      >,
+      Object.fromEntries(
+        profiles.map((p) => [p.voice?.name || p.name, p.voice])
+      ) as Record<string, BrandVoice>,
     [profiles],
   );
-  const profileNames = useMemo(() => profiles.map((p) => p.name), [profiles]);
+  const profileNames = useMemo(
+    () =>
+      Array.from(
+        new Set(profiles.map((p) => p.voice?.name || p.name).filter(Boolean))
+      ),
+    [profiles],
+  );
 
   return {
     brandVoice,

@@ -10,7 +10,6 @@ import {
   Undo2,
   Wand2,
   TrendingUp,
-  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +28,6 @@ import {
   getCompetitorAnalysis,
   getContentVariations,
   getCtaOptions,
-  getGenerationMeta,
   getHashtagGroups,
   getImageAnalysis,
   getPlatformVariations,
@@ -37,8 +35,9 @@ import {
   getStudioInput,
   hasStudioOutput,
 } from "@/ai/selectors";
+import { AiErrorBanner } from "@/components/shared/AiErrorBanner";
 import { useApprovePost, useRequestAiGeneration } from "@/hooks/usePosts";
-import { hasAiContent } from "@/utils/workflow";
+import { getAiRunStatus, hasAiContent } from "@/utils/workflow";
 
 type Tab = "analysis" | "content" | "growth" | "brand";
 
@@ -64,9 +63,11 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
   const requestAi = useRequestAiGeneration();
   const approvePost = useApprovePost();
 
-  const generating = post.ai_status === "generating";
+  const run = getAiRunStatus(post);
+  const generating = run.state === "generating";
   const ready = post.ai_status === "ready" && hasAiContent(post);
-  const failed = post.ai_status === "failed";
+  /** Every state that should offer a Generate/Try again button. */
+  const needsRun = run.state === "idle" || !!run.error;
 
   // New rich marketing fields (Make.com writes these after upgrade)
   const imageAnalysis = getImageAnalysis(post);
@@ -78,11 +79,8 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
   const competitorAnalysis = getCompetitorAnalysis(post);
   const platformVariations = getPlatformVariations(post);
   const studioInput = getStudioInput(post);
-  const meta = getGenerationMeta(post);
   const hasRichMarketing = hasStudioOutput(post);
   const hasGrowth = !!(seo || campaign || competitorAnalysis);
-  /** A run that produced something but not everything it was asked for. */
-  const degraded = meta.status === "partial" || (meta.status === "failed" && !!meta.error);
 
   // Legacy content from original Make.com pipeline (always show these)
   const hasLegacyCaption = !!post.ai_caption;
@@ -125,19 +123,20 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
           <p className="mt-1 text-xs text-muted-foreground">
             {generating
               ? "Generating marketing assets — updating live…"
+              : run.error
+              ? "Something went wrong on the last run — see below."
               : hasRichMarketing
               ? "Full marketing assets ready. Review and approve."
               : hasLegacyContent
               ? "AI caption & hashtags ready. Click Content → to view."
-              : failed
-              ? "Generation failed — try again."
               : "Generate AI-powered marketing assets for this post."}
           </p>
         </div>
 
         {/* Action buttons */}
         <div className="flex shrink-0 flex-wrap gap-1.5">
-          {(post.ai_status === "pending" || failed) && (
+          {/* On a failed run the banner below owns the retry — don't offer it twice. */}
+          {!generating && !ready && !run.error && (
             <Button
               type="button"
               size="sm"
@@ -202,35 +201,14 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
         </div>
       )}
 
-      {/* Degraded run — some sections came back, some didn't */}
-      {degraded && !generating && (
-        <div className="flex items-start gap-3 border-b bg-amber-500/5 px-5 py-3">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-          <div className="flex-1">
-            <p className="text-xs font-medium">
-              {meta.status === "partial"
-                ? "Some assets could not be generated"
-                : "Generation failed"}
-            </p>
-            {meta.error && (
-              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                {meta.error}
-              </p>
-            )}
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            loading={requestAi.isPending}
-            onClick={() => requestAi.mutate(post.id)}
-            className="h-7 shrink-0 text-[10px]"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Retry
-          </Button>
-        </div>
-      )}
+      {/* Timed out, failed outright, or came back missing sections */}
+      <AiErrorBanner
+        state={run.state}
+        error={run.error}
+        retrying={requestAi.isPending}
+        onRetry={() => requestAi.mutate(post.id)}
+        className="border-x-0 border-t-0 px-5"
+      />
 
       {/* Upgrade nudge — shown when only legacy content exists */}
       {hasLegacyContent && !hasRichMarketing && !generating && (

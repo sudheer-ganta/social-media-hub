@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import { postsRepository, brandVoicesRepository } from "@/repositories";
 import { PromptBuilder } from "@/ai/prompts/PromptBuilder";
-import { DEFAULT_BRAND_VOICE } from "@/ai/types";
+import { DEFAULT_BRAND_VOICE, DEFAULT_FEATURE_FLAGS } from "@/ai/types";
 import type {
   AiStudioInput,
   DashboardStats,
@@ -18,7 +18,9 @@ import type {
  * capabilities stay off — they cost an extra AI call each and the user hasn't
  * asked for them here.
  */
-async function buildDefaultStudioInput(): Promise<AiStudioInput> {
+async function buildDefaultStudioInput(
+  existingInput?: AiStudioInput | null,
+): Promise<AiStudioInput> {
   let brandVoice = DEFAULT_BRAND_VOICE;
   let brandVoiceProfileId: string | null = null;
 
@@ -34,10 +36,14 @@ async function buildDefaultStudioInput(): Promise<AiStudioInput> {
   }
 
   return PromptBuilder.from({
-    goal: "brand_awareness",
-    funnelStage: "TOFU",
-    brandVoice,
-    brandVoiceProfileId,
+    goal: existingInput?.goal ?? "brand_awareness",
+    funnelStage: existingInput?.funnelStage ?? "TOFU",
+    brandVoice: existingInput?.brandVoice ?? brandVoice,
+    brandVoiceProfileId: existingInput?.brandVoiceProfileId ?? brandVoiceProfileId,
+    competitor: existingInput?.competitor ?? null,
+    features: existingInput?.features ?? DEFAULT_FEATURE_FLAGS,
+    language: existingInput?.language ?? "English",
+    captionLength: existingInput?.captionLength ?? "Medium",
   });
 }
 
@@ -114,19 +120,19 @@ export const postsService = {
    * Start a generation from anywhere that isn't the AI Studio page — the
    * Generate/Regen buttons on the post editor and the studio panel.
    *
-   * Those callers carry no settings of their own, so make sure the post has an
-   * ai_studio_input before flipping the status: Make reads that column to build
-   * the prompt, and without it the run silently falls back to bare defaults
-   * (no brand voice, no goal, no feature flags). Regenerating reuses whatever
-   * settings the post was last generated with.
+   * Automatically attaches the user's default Brand Voice profile from Supabase.
    */
   async requestAiGeneration(id: string): Promise<Post> {
     const post = await postsRepository.getById(id);
-    if (!post.ai_studio_input) {
-      await postsRepository.update(id, {
-        ai_studio_input: await buildDefaultStudioInput(),
-      });
-    }
+    const freshInput = await buildDefaultStudioInput(post.ai_studio_input);
+    // Reset first, always. A retry after a failed or stalled run would
+    // otherwise write 'generating' over a row that is already 'generating',
+    // and Make's filter watches for the transition — no edge, no run. Going
+    // through 'pending' guarantees the webhook fires every time.
+    await postsRepository.update(id, {
+      ai_status: "pending",
+      ai_studio_input: freshInput,
+    });
     return postsRepository.update(id, { ai_status: "generating" });
   },
 
