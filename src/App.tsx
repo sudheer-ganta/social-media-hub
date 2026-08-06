@@ -12,6 +12,8 @@ import CreatePost from "@/pages/CreatePost";
 import Calendar from "@/pages/Calendar";
 import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
+import AiStudio from "@/pages/AiStudio";
+import StudioPreview from "@/pages/dev/StudioPreview";
 
 export default function App() {
   return (
@@ -39,7 +41,14 @@ export default function App() {
             <Route path="calendar" element={<Calendar />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="ai-studio" element={<AiStudio />} />
           </Route>
+
+          {/* Dev-only: mock-data preview of the studio output panels.
+              Stripped from production builds by the DEV guard. */}
+          {import.meta.env.DEV && (
+            <Route path="/dev/studio-preview" element={<StudioPreview />} />
+          )}
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

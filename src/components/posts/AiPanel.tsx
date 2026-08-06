@@ -1,5 +1,6 @@
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Check, RefreshCw, Sparkles, Undo2, Wand2 } from "lucide-react";
+import { Check, ExternalLink, RefreshCw, Sparkles, Undo2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +12,11 @@ import {
 } from "@/components/ui/card";
 import { PlatformIcon } from "@/components/shared/PlatformIcon";
 import { useApprovePost, useRequestAiGeneration } from "@/hooks/usePosts";
+import {
+  getFlatHashtags,
+  getPlatformCaptions,
+  getPrimaryCaption,
+} from "@/ai/selectors";
 import { hasAiContent } from "@/utils/workflow";
 import { PLATFORM_MAP } from "@/constants";
 import type { Platform, Post } from "@/types";
@@ -25,6 +31,7 @@ interface AiPanelProps {
  * and hosts the human approval gate. Only rendered on the edit page.
  */
 export function AiPanel({ post, onUseCaption }: AiPanelProps) {
+  const navigate = useNavigate();
   const requestAi = useRequestAiGeneration();
   const approvePost = useApprovePost();
 
@@ -32,15 +39,14 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
   const ready = post.ai_status === "ready" && hasAiContent(post);
   const failed = post.ai_status === "failed";
 
-  const platformEntries = Object.entries(post.ai_platform_content ?? {}).filter(
-    ([, content]) => Boolean(content),
-  ) as [Platform, string][];
-
-  // Tolerate hashtags arriving as one merged string ("tag1, tag2") from
-  // automation tools — split into individual tags for display.
-  const hashtags = (post.ai_hashtags ?? [])
-    .flatMap((tag) => tag.split(/[,\s#]+/))
-    .filter(Boolean);
+  // These read the Marketing Studio envelope when present and fall back to the
+  // original ai_* columns, so posts from either pipeline render identically.
+  const caption = getPrimaryCaption(post);
+  const hashtags = getFlatHashtags(post);
+  const platformEntries = Object.entries(getPlatformCaptions(post)) as [
+    Platform,
+    string,
+  ][];
 
   return (
     <Card className={post.approved ? "border-success/40" : undefined}>
@@ -60,12 +66,30 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
                   : "Generate a caption, hashtags and per-platform versions from your image."}
           </CardDescription>
         </div>
-        {post.approved && (
-          <Badge className="bg-success text-success-foreground">
-            <Check className="h-3 w-3" />
-            Approved
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {post.image_url && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                navigate(
+                  `/ai-studio?image=${encodeURIComponent(post.image_url)}${post.id ? `&postId=${post.id}` : ""}`
+                )
+              }
+              className="h-8 text-xs gap-1"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open in AI Studio
+            </Button>
+          )}
+          {post.approved && (
+            <Badge className="bg-success text-success-foreground">
+              <Check className="h-3 w-3" />
+              Approved
+            </Badge>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -83,7 +107,7 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
 
         {ready && (
           <>
-            {post.ai_caption && (
+            {caption && (
               <div className="rounded-md border p-4">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -93,14 +117,14 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => onUseCaption(post.ai_caption ?? "")}
+                    onClick={() => onUseCaption(caption)}
                   >
                     <Wand2 />
                     Use as caption
                   </Button>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-                  {post.ai_caption}
+                  {caption}
                 </p>
               </div>
             )}

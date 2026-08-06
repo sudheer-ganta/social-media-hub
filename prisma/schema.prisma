@@ -9,6 +9,8 @@
 //   • the FK from `created_by` to Supabase's `auth.users`
 //   • Row Level Security policies
 //   • the `updated_at` trigger
+//   • the expression index on ai_studio_output -> 'meta' ->> 'status'
+//   • the partial unique index enforcing one default brand voice per user
 // Because of that, always create new migrations with
 //   npx prisma migrate dev --create-only
 // and review the generated SQL before applying.
@@ -39,10 +41,34 @@ model Post {
   ai_hashtags         String[]
   ai_platform_content Json?
 
+  // AI Marketing Studio. Two versioned JSONB envelopes — see src/ai/types.ts
+  // for the shapes. New studio capabilities add a key inside ai_studio_output
+  // rather than a column here, so they need no migration.
+  ai_studio_input  Json? // AiStudioInput  — frontend writes before triggering Make
+  ai_studio_output Json? // AiStudioOutput — Make writes back after generation
+
   @@index([created_by])
   @@index([status])
   @@index([publish_date])
   @@index([created_at(sort: Desc)])
   @@index([approved])
   @@map("posts")
+}
+
+/// Reusable Brand Voice profiles for the AI Marketing Studio. The `voice`
+/// payload is snapshotted into each post's ai_studio_input at generation time,
+/// so editing a profile never rewrites the settings of past posts.
+model BrandVoice {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  voice      Json     @default("{}") // BrandVoice — see src/ai/types.ts
+  is_default Boolean  @default(false)
+  created_by String   @default(dbgenerated("auth.uid()")) @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([created_by, name])
+  @@index([created_by])
+  @@index([created_at(sort: Desc)])
+  @@map("brand_voices")
 }

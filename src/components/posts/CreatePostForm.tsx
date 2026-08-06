@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CalendarClock, FileText, Send, Sparkles } from "lucide-react";
+import { CalendarClock, ExternalLink, FileText, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -259,6 +259,22 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
 
       <div className="sticky bottom-4 z-10">
         <div className="glass flex flex-wrap items-center justify-end gap-2 rounded-lg border p-3 shadow-elevated">
+          {post?.image_url && (
+            <Button
+              type="button"
+              variant="ghost"
+              loading={false}
+              onClick={() =>
+                navigate(
+                  `/ai-studio?image=${encodeURIComponent(post.image_url)}${post?.id ? `&postId=${post.id}` : ""}`,
+                )
+              }
+              className="mr-auto text-xs"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open in AI Studio
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"

@@ -1,4 +1,5 @@
 export * from "./post";
+export * from "@/ai/types";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -12,3 +13,4 @@ export interface UserSettings {
   pushNotifications: boolean;
   weeklyDigest: boolean;
 }
+

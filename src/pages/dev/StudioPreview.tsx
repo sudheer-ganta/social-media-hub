@@ -1,0 +1,298 @@
+/**
+ * Dev-only preview of the AI Marketing Studio output panels.
+ *
+ * The studio's newer sections (SEO, campaign, competitor, platform variations)
+ * can't be seen against a real database until Make.com is writing the new
+ * envelope, so this renders MarketingStudio against a fully-populated mock
+ * post instead. Mounted only when import.meta.env.DEV — see src/App.tsx.
+ *
+ * Route: /dev/studio-preview
+ */
+
+import { MarketingStudio } from "@/components/marketing/MarketingStudio";
+import { AiPanel } from "@/components/posts/AiPanel";
+import { STUDIO_SCHEMA_VERSION } from "@/ai/types";
+import type { Post } from "@/types";
+
+const MOCK_POST: Post = {
+  id: "00000000-0000-0000-0000-000000000000",
+  title: "Aurora Serum — launch",
+  caption: "",
+  image_url: "https://placehold.co/600x600/1A1A2E/E94560?text=Aurora",
+  platforms: ["instagram", "linkedin", "x"],
+  status: "draft",
+  publish_date: "2026-08-06",
+  publish_time: "09:00",
+  created_by: "00000000-0000-0000-0000-000000000000",
+  created_at: "2026-08-06T09:00:00.000Z",
+  updated_at: "2026-08-06T09:15:03.882Z",
+
+  ai_status: "ready",
+  approved: false,
+  platform_results: {},
+  published_at: null,
+  ai_caption: null,
+  ai_hashtags: null,
+  ai_platform_content: null,
+
+  ai_studio_input: {
+    schemaVersion: STUDIO_SCHEMA_VERSION,
+    goal: "product_launch",
+    funnelStage: "MOFU",
+    brandVoice: {
+      name: "Aurora",
+      description: "Clinical skincare with a calm, editorial voice.",
+      mission: "Make evidence-led skincare feel effortless.",
+      tone: "Professional",
+      writingStyle: "Conversational",
+      wordsToUse: ["crafted", "clinical", "ritual"],
+      wordsToAvoid: ["cheap", "miracle"],
+      emojiStyle: "Light",
+      ctaStyle: "Soft",
+      targetAudience: "Women 25–40, skincare-literate",
+      personality: "Premium",
+    },
+    brandVoiceProfileId: null,
+    competitor: { brandName: "Lumen Labs", website: "lumenlabs.example", socialHandle: "@lumenlabs" },
+    features: { seo: true, campaign: true, competitorAnalysis: true, platformVariations: true },
+    language: "English",
+    captionLength: "Medium",
+    modules: {
+      persona: null,
+      goalModule: null,
+      funnelModule: null,
+      brandVoiceModule: null,
+      competitorModule: null,
+    },
+    builtAt: "2026-08-06T09:14:22.114Z",
+  },
+
+  ai_studio_output: {
+    schemaVersion: STUDIO_SCHEMA_VERSION,
+    meta: {
+      status: "complete",
+      generatedAt: "2026-08-06T09:15:03.882Z",
+      model: "gemini-2.0-flash",
+      durationMs: 41768,
+      error: null,
+      produced: [
+        "imageAnalysis",
+        "contentVariations",
+        "ctaOptions",
+        "hashtagGroups",
+        "seo",
+        "campaign",
+        "competitor",
+        "platformVariations",
+      ],
+    },
+
+    imageAnalysis: {
+      productCategory: "Skincare",
+      industry: "Beauty",
+      targetAudience: "Women 25–40 who read ingredient lists",
+      mood: "Calm, clinical",
+      colorPalette: ["#1A1A2E", "#E94560", "#F5F0E8"],
+      brandStyle: "Minimal luxury",
+      primarySubject: "Amber glass serum bottle",
+      secondarySubjects: ["Linen cloth", "Morning shadow"],
+      objects: ["bottle", "dropper", "ceramic dish"],
+      sceneDescription:
+        "A single amber bottle on unbleached linen, lit by hard morning light from the left.",
+      suggestedCampaignType: "Product launch",
+      suggestedMarketingObjective: "Lead generation",
+      suggestedBuyerPersona:
+        "Reads ingredient lists before buying. Distrusts hype, responds to evidence and restraint.",
+      confidenceScore: 87,
+    },
+
+    contentVariations: {
+      variations: [
+        {
+          tone: "Professional",
+          caption:
+            "Ten percent vitamin C, stabilised at pH 3.5. The concentration matters less than whether it survives the bottle.",
+          hook: "The concentration matters less than you think.",
+          wordCount: 62,
+        },
+        {
+          tone: "Storytelling",
+          caption:
+            "We spent nine months on the bottle before we touched the formula. Amber glass, airless pump — because light is what kills vitamin C.",
+          hook: "We spent nine months on the bottle.",
+          wordCount: 74,
+        },
+        {
+          tone: "Minimal",
+          caption: "10% vitamin C. Amber glass. pH 3.5.",
+          hook: "10% vitamin C.",
+          wordCount: 18,
+        },
+      ],
+    },
+
+    ctaOptions: {
+      options: [
+        { type: "Soft", text: "See the full formula →", label: "Builds curiosity" },
+        { type: "Luxury", text: "Reserve yours", label: "Implies scarcity" },
+        { type: "Professional", text: "Read the clinical results", label: "Evidence-led" },
+        { type: "Urgency", text: "Launch pricing ends Sunday", label: "Time-boxed" },
+      ],
+    },
+
+    hashtagGroups: {
+      groups: [
+        {
+          category: "trending",
+          suggestedQuantity: 5,
+          hashtags: [
+            { tag: "skincare", difficultyScore: 88, popularityScore: 96 },
+            { tag: "vitaminc", difficultyScore: 71, popularityScore: 84 },
+          ],
+        },
+        {
+          category: "niche",
+          suggestedQuantity: 8,
+          hashtags: [
+            { tag: "ingredientfirst", difficultyScore: 22, popularityScore: 41 },
+            { tag: "phbalanced", difficultyScore: 18, popularityScore: 33 },
+          ],
+        },
+        {
+          category: "branded",
+          suggestedQuantity: 2,
+          hashtags: [{ tag: "auroraritual", difficultyScore: 4, popularityScore: 12 }],
+        },
+      ],
+    },
+
+    seo: {
+      primaryKeyword: "vitamin c serum",
+      keywords: [
+        { keyword: "vitamin c serum", searchVolume: 40500, difficultyScore: 78, intent: "commercial" },
+        { keyword: "best vitamin c serum for sensitive skin", searchVolume: 2900, difficultyScore: 34, intent: "commercial" },
+        { keyword: "what ph should vitamin c serum be", searchVolume: 720, difficultyScore: 12, intent: "informational" },
+        { keyword: "buy aurora serum", searchVolume: null, difficultyScore: 6, intent: "transactional" },
+      ],
+      metaTitle: "Aurora Vitamin C Serum — 10%, stabilised at pH 3.5",
+      metaDescription:
+        "A 10% vitamin C serum in airless amber glass, stabilised at pH 3.5 so it stays potent from first pump to last. Clinical results, no hype.",
+      altText: "Amber glass Aurora vitamin C serum bottle on unbleached linen in morning light",
+      slug: "aurora-vitamin-c-serum",
+      readabilityScore: 71,
+    },
+
+    campaign: {
+      name: "Glow Week",
+      bigIdea:
+        "Lead with the bottle, not the formula — the engineering story is what competitors can't copy.",
+      durationDays: 14,
+      beats: [
+        { day: 0, channel: "instagram", angle: "Teaser", contentIdea: "Bottle only, no product name. Caption asks what nine months of engineering buys you." },
+        { day: 3, channel: "linkedin", angle: "Proof", contentIdea: "Stability testing chart — potency at day 1 vs day 90 vs a clear-glass control." },
+        { day: 7, channel: "instagram", angle: "Launch", contentIdea: "Full reveal with launch pricing and the pH explainer carousel." },
+        { day: 14, channel: "x", angle: "Social proof", contentIdea: "Quote-tweet the three most technical customer questions and answer them." },
+      ],
+      kpis: ["Email signups", "Add-to-cart rate", "Saves per post"],
+      budgetTier: "low",
+    },
+
+    competitor: {
+      brandName: "Lumen Labs",
+      positioning: "Mass-premium actives sold on concentration numbers and speed of result.",
+      toneObserved: "Confident, slightly clinical, heavy on percentages",
+      contentThemes: ["Before/after", "Percentage claims", "Dermatologist cameos"],
+      postingFrequency: "4–5×/week, weekday mornings",
+      strengths: [
+        "Instantly legible claims — the number is the whole message",
+        "Consistent grid, strong visual recall",
+      ],
+      weaknesses: [
+        "No formulation or stability story — concentration is treated as the only variable",
+        "Almost no founder or process presence",
+      ],
+      gaps: [
+        "Packaging engineering as a trust signal",
+        "Honest discussion of what actives degrade and why",
+        "Long-form ingredient education",
+      ],
+      differentiationAdvice:
+        "Don't compete on concentration — they own that number. Own delivery and stability instead: the amber airless bottle is a claim they structurally cannot make.",
+    },
+
+    platformVariations: {
+      instagram: {
+        caption:
+          "Nine months on the bottle before we touched the formula.\n\nLight is what kills vitamin C — so the bottle came first. Amber glass, airless pump, 10% at pH 3.5.",
+        hashtags: ["skincare", "vitaminc", "ingredientfirst"],
+        characterCount: 380,
+        notes: "First 125 characters show before the 'more' cut — the hook lands inside that.",
+      },
+      linkedin: {
+        caption:
+          "We delayed launch by nine months to redesign the packaging.\n\nVitamin C degrades on exposure to light and air. Most serums ship in clear glass with a dropper, which is the worst possible case for both. Our stability testing at day 90 is below.",
+        hashtags: ["productdevelopment", "skincare"],
+        characterCount: 1120,
+        notes: "Truncates at ~210 characters; front-load the business insight, not the product.",
+      },
+      x: {
+        caption:
+          "Most vitamin C serums ship in clear glass with a dropper.\n\nLight and air are exactly what degrade vitamin C.\n\nWe fixed the bottle first.",
+        hashtags: ["skincare"],
+        characterCount: 268,
+        notes: "Under the 280 limit with room for a link card.",
+      },
+    },
+  },
+};
+
+/** Same post, but a run that only half-succeeded — exercises the warning banner. */
+const MOCK_PARTIAL_POST: Post = {
+  ...MOCK_POST,
+  id: "00000000-0000-0000-0000-000000000001",
+  title: "Aurora Serum — partial run",
+  ai_studio_output: {
+    schemaVersion: STUDIO_SCHEMA_VERSION,
+    meta: {
+      status: "partial",
+      generatedAt: "2026-08-06T09:15:03.882Z",
+      model: "gemini-2.0-flash",
+      durationMs: 38210,
+      error: "SEO call returned malformed JSON after 2 retries",
+      produced: ["imageAnalysis", "contentVariations"],
+    },
+    imageAnalysis: MOCK_POST.ai_studio_output!.imageAnalysis,
+    contentVariations: MOCK_POST.ai_studio_output!.contentVariations,
+  },
+};
+
+export default function StudioPreview() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-10 p-6">
+      <div>
+        <h1 className="text-xl font-bold">Studio Preview</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Dev-only. Renders MarketingStudio against mock envelopes so the output
+          panels can be checked without a live Make.com run.
+        </p>
+      </div>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">Complete run — all eight sections</h2>
+        <MarketingStudio post={MOCK_POST} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">Partial run — degraded banner</h2>
+        <MarketingStudio post={MOCK_PARTIAL_POST} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">
+          Post editor AiPanel — derived from the envelope, no legacy columns set
+        </h2>
+        <AiPanel post={MOCK_POST} onUseCaption={() => {}} />
+      </section>
+    </div>
+  );
+}

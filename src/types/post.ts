@@ -1,3 +1,5 @@
+import type { AiStudioInput, AiStudioOutput } from "@/ai/types";
+
 export type PostStatus =
   | "draft"
   | "scheduled"
@@ -51,6 +53,10 @@ export interface Post {
   ai_caption: string | null;
   ai_hashtags: string[] | null;
   ai_platform_content: Partial<Record<Platform, string>> | null;
+  // AI Marketing Studio. Read these through the helpers in @/ai/selectors
+  // rather than directly — they handle nulls and legacy rows.
+  ai_studio_input: AiStudioInput | null;
+  ai_studio_output: AiStudioOutput | null;
 }
 
 /** Fields the app writes when creating a post; automation fields use DB defaults. */

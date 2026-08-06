@@ -4,3 +4,4 @@ export {
   isCloudinaryConfigured,
 } from "./cloudinary.service";
 export { settingsService, DEFAULT_SETTINGS } from "./settings.service";
+export { brandVoicesService } from "./brand-voices.service";

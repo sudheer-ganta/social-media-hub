@@ -12,6 +12,7 @@ import {
   Settings,
   Sparkles,
   Sun,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -37,6 +38,7 @@ import type { Theme } from "@/types";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/ai-studio", label: "AI Studio", icon: Wand2 },
   { to: "/posts", label: "Posts", icon: FileText },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },

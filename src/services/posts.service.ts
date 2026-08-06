@@ -1,6 +1,9 @@
 import dayjs from "dayjs";
-import { postsRepository } from "@/repositories";
+import { postsRepository, brandVoicesRepository } from "@/repositories";
+import { PromptBuilder } from "@/ai/prompts/PromptBuilder";
+import { DEFAULT_BRAND_VOICE } from "@/ai/types";
 import type {
+  AiStudioInput,
   DashboardStats,
   Paginated,
   Post,
@@ -8,6 +11,35 @@ import type {
   PostListParams,
   PostUpdate,
 } from "@/types";
+
+/**
+ * Settings for a generation started outside the AI Studio: the user's default
+ * brand voice if they've saved one, otherwise the app defaults. Optional
+ * capabilities stay off — they cost an extra AI call each and the user hasn't
+ * asked for them here.
+ */
+async function buildDefaultStudioInput(): Promise<AiStudioInput> {
+  let brandVoice = DEFAULT_BRAND_VOICE;
+  let brandVoiceProfileId: string | null = null;
+
+  try {
+    const profiles = await brandVoicesRepository.listAll();
+    const preferred = profiles.find((p) => p.is_default) ?? profiles[0];
+    if (preferred) {
+      brandVoice = preferred.voice;
+      brandVoiceProfileId = preferred.id;
+    }
+  } catch {
+    // A missing or unreadable profile shouldn't block generation.
+  }
+
+  return PromptBuilder.from({
+    goal: "brand_awareness",
+    funnelStage: "TOFU",
+    brandVoice,
+    brandVoiceProfileId,
+  });
+}
 
 /**
  * Business layer for posts. Components and hooks talk to this — the
@@ -78,7 +110,23 @@ export const postsService = {
    * this update; the Make.com scenario filters on ai_status = 'generating',
    * generates content, and writes it back with ai_status = 'ready'.
    */
-  requestAiGeneration(id: string): Promise<Post> {
+  /**
+   * Start a generation from anywhere that isn't the AI Studio page — the
+   * Generate/Regen buttons on the post editor and the studio panel.
+   *
+   * Those callers carry no settings of their own, so make sure the post has an
+   * ai_studio_input before flipping the status: Make reads that column to build
+   * the prompt, and without it the run silently falls back to bare defaults
+   * (no brand voice, no goal, no feature flags). Regenerating reuses whatever
+   * settings the post was last generated with.
+   */
+  async requestAiGeneration(id: string): Promise<Post> {
+    const post = await postsRepository.getById(id);
+    if (!post.ai_studio_input) {
+      await postsRepository.update(id, {
+        ai_studio_input: await buildDefaultStudioInput(),
+      });
+    }
     return postsRepository.update(id, { ai_status: "generating" });
   },
 
