@@ -66,8 +66,6 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
   const run = getAiRunStatus(post);
   const generating = run.state === "generating";
   const ready = post.ai_status === "ready" && hasAiContent(post);
-  /** Every state that should offer a Generate/Try again button. */
-  const needsRun = run.state === "idle" || !!run.error;
 
   // New rich marketing fields (Make.com writes these after upgrade)
   const imageAnalysis = getImageAnalysis(post);
