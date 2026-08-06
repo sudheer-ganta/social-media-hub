@@ -1,0 +1,48 @@
+// Social Content Hub — database schema, managed by Prisma Migrate.
+//
+// No `generator` block on purpose: the frontend talks to Supabase via
+// supabase-js, so Prisma is a migration tool here, not a runtime client.
+//
+// Not expressible in the Prisma schema language (they live in the
+// migration SQL instead — see prisma/migrations/*/migration.sql):
+//   • the CHECK constraint on `status`
+//   • the FK from `created_by` to Supabase's `auth.users`
+//   • Row Level Security policies
+//   • the `updated_at` trigger
+// Because of that, always create new migrations with
+//   npx prisma migrate dev --create-only
+// and review the generated SQL before applying.
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Post {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title        String
+  caption      String   @default("")
+  image_url    String   @default("")
+  platforms    Json     @default("[]")
+  status       String   @default("draft")
+  publish_date DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  publish_time DateTime @default(dbgenerated("'09:00:00'::time without time zone")) @db.Time(6)
+  created_by   String   @default(dbgenerated("auth.uid()")) @db.Uuid
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  // Automation pipeline (written by Make.com / AI scenarios)
+  ai_status           String    @default("pending")
+  approved            Boolean   @default(false)
+  platform_results    Json      @default("{}")
+  published_at        DateTime? @db.Timestamptz(6)
+  ai_caption          String?
+  ai_hashtags         String[]
+  ai_platform_content Json?
+
+  @@index([created_by])
+  @@index([status])
+  @@index([publish_date])
+  @@index([created_at(sort: Desc)])
+  @@index([approved])
+  @@map("posts")
+}
