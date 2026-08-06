@@ -99,13 +99,13 @@ export default function AiStudio() {
 
   return (
     <PageContainer className="max-w-none px-0 py-0">
-      <div className="flex min-h-[calc(100vh-64px)]">
+      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-64px)]">
         {/* ── Left Settings Panel ─────────────────────────────────────── */}
         <motion.aside
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.3 }}
-          className="w-full max-w-[380px] shrink-0 border-r bg-card flex flex-col"
+          className="w-full lg:w-[380px] lg:max-w-[380px] shrink-0 border-b lg:border-b-0 lg:border-r bg-card flex flex-col"
         >
           {/* Left header */}
           <div className="flex items-center gap-3 border-b px-5 py-4">

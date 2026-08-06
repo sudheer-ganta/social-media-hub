@@ -248,7 +248,7 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b px-5 gap-1">
+      <div className="flex border-b px-5 gap-1 overflow-x-auto scrollbar-none shrink-0">
         {TABS.map(({ id, label, icon: Icon }) => {
           // Analysis: only available when rich marketing data exists
           // Content: available if ANY AI content exists (legacy OR rich)
