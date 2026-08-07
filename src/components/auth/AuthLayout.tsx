@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { CalendarClock, ImageUp, Send, Sparkles } from "lucide-react";
+import { CalendarClock, ImageUp, Send } from "lucide-react";
+import { FlowPostIcon } from "@/components/brand/Logo";
 import { SupabaseNotice } from "@/components/shared/SupabaseNotice";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { Footer } from "@/components/layout/Footer";
@@ -30,11 +31,11 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
           }}
         />
         <div className="relative flex h-full flex-col justify-between p-10 text-primary-foreground">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-              <Sparkles className="h-5 w-5" />
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 p-1 backdrop-blur shadow-sm">
+              <FlowPostIcon className="h-8 w-8 text-white" />
             </div>
-            <span className="text-lg font-bold">Flow Post</span>
+            <span className="text-xl font-extrabold tracking-tight">FlowPost</span>
           </div>
 
           <div className="space-y-6">
@@ -79,10 +80,10 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
           className="w-full max-w-md"
         >
           <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-glow">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950 p-1 border border-blue-200/50 dark:border-blue-800/50">
+              <FlowPostIcon className="h-7 w-7 text-primary" />
             </div>
-            <span className="font-bold">Flow Post</span>
+            <span className="text-lg font-extrabold tracking-tight">FlowPost</span>
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>

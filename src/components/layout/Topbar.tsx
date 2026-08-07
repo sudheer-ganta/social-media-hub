@@ -10,10 +10,10 @@ import {
   Plug,
   Plus,
   Settings,
-  Sparkles,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FlowPostIcon } from "@/components/brand/Logo";
 import { cn } from "@/lib/utils";
 
 const PAGE_TITLES: Record<string, string> = {
@@ -53,8 +53,8 @@ export function Topbar() {
           >
             {mobileOpen ? <X /> : <Menu />}
           </Button>
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary lg:hidden">
-            <Sparkles className="h-4 w-4 text-primary-foreground" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 p-0.5 border border-primary/20 lg:hidden">
+            <FlowPostIcon className="h-6 w-6" />
           </div>
           <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         </div>

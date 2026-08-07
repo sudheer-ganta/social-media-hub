@@ -1,4 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#6d5cff"/>
-  <path d="M9 21.5c2.5 1.8 6.5 2 9 0.5s3.5-4.5 2-6.5-4.5-2-6.5-1c-2.4 1.2-5 1-6.5-1S7.5 8.5 10 7.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="favIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="50%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#60A5FA" />
+    </linearGradient>
+    <linearGradient id="favGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer subtle guide ring -->
+  <circle cx="50" cy="50" r="44" stroke="url(#favGlow)" stroke-width="2" stroke-opacity="0.35" fill="none" />
+
+  <!-- FlowPost Swirling Rings Icon (Middle Part Only - No Background Rect) -->
+  <circle cx="50" cy="36" r="28" stroke="url(#favIconGrad)" stroke-width="4.5" fill="none" opacity="0.9" />
+  <circle cx="62" cy="45" r="28" stroke="url(#favIconGrad)" stroke-width="4.5" fill="none" opacity="0.9" />
+  <circle cx="55" cy="60" r="28" stroke="url(#favIconGrad)" stroke-width="4.5" fill="none" opacity="0.9" />
+  <circle cx="41" cy="55" r="28" stroke="url(#favIconGrad)" stroke-width="4.5" fill="none" opacity="0.9" />
+  <circle cx="36" cy="43" r="28" stroke="url(#favIconGrad)" stroke-width="4.5" fill="none" opacity="0.9" />
+
+  <!-- Inner central circle ring and core -->
+  <circle cx="50" cy="50" r="19" stroke="url(#favIconGrad)" stroke-width="4" fill="none" />
+  <circle cx="50" cy="50" r="13" fill="url(#favIconGrad)" />
 </svg>

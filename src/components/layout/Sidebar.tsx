@@ -11,11 +11,11 @@ import {
   Moon,
   Plug,
   Settings,
-  Sparkles,
   Sun,
   Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { FlowPostIcon } from "@/components/brand/Logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -91,9 +91,9 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
       className="sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r bg-card lg:flex"
     >
       {/* Brand */}
-      <div className={cn("flex h-16 items-center gap-2.5 border-b px-4", collapsed && "justify-center px-0")}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary shadow-glow">
-          <Sparkles className="h-5 w-5 text-primary-foreground" />
+      <div className={cn("flex h-16 items-center gap-3 border-b px-4", collapsed && "justify-center px-0")}>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 p-1 border border-primary/20 shadow-sm">
+          <FlowPostIcon className="h-7 w-7" />
         </div>
         <AnimatePresence initial={false}>
           {!collapsed && (
@@ -103,11 +103,11 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
               exit={{ opacity: 0 }}
               className="min-w-0"
             >
-              <p className="truncate text-sm font-bold leading-tight">
-                Flow Post
+              <p className="truncate text-base font-extrabold leading-tight tracking-tight">
+                Flow<span className="text-blue-600 dark:text-blue-400">Post</span>
               </p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                Content workspace
+              <p className="truncate text-[11px] text-muted-foreground font-medium">
+                Content Workspace
               </p>
             </motion.div>
           )}
