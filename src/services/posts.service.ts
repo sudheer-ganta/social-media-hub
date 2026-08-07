@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import { postsRepository, brandVoicesRepository } from "@/repositories";
 import { PromptBuilder } from "@/ai/prompts/PromptBuilder";
-import { DEFAULT_BRAND_VOICE, DEFAULT_FEATURE_FLAGS, EMPTY_BRAND_VOICE } from "@/ai/types";
+import { DEFAULT_FEATURE_FLAGS, EMPTY_BRAND_VOICE } from "@/ai/types";
 import {
   toStudioOutput,
   type AudienceRegister,

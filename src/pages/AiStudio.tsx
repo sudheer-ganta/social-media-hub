@@ -28,7 +28,6 @@ import {
 import { usePost, useCreatePost, useUpdatePost } from "@/hooks/usePosts";
 import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
 import { today, currentTime } from "@/utils/date";
-import { Badge } from "@/components/ui/badge";
 
 
 export default function AiStudio() {
