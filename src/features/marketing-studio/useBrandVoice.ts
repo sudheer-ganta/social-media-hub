@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { brandVoicesService } from "@/services";
-import { DEFAULT_BRAND_VOICE } from "@/ai/types";
+import { DEFAULT_BRAND_VOICE, EMPTY_BRAND_VOICE } from "@/ai/types";
 import type { BrandVoice, BrandVoiceProfile } from "@/types";
 
 const ACTIVE_KEY = "ms-active-brand-voice";
@@ -71,10 +71,12 @@ export function useBrandVoice() {
   // Auto-select the default profile when loaded if brand voice name is empty
   useEffect(() => {
     if (profiles.length > 0 && !brandVoice.name) {
-      const preferred = profiles.find((p) => p.is_default) ?? profiles[0];
+      const preferred = profiles.find((p) => p.is_default);
       if (preferred) {
         setBrandVoiceState({ ...DEFAULT_BRAND_VOICE, ...preferred.voice });
         setActiveProfileId(preferred.id);
+      } else {
+        setBrandVoiceState(EMPTY_BRAND_VOICE);
       }
     }
   }, [profiles, brandVoice.name]);
@@ -151,6 +153,23 @@ export function useBrandVoice() {
 
   const loadProfile = useCallback(
     (name: string) => {
+      if (name === "None" || name === "None (No Brand Voice)") {
+        setBrandVoiceState({
+          name: "None",
+          description: "",
+          mission: "",
+          tone: "",
+          writingStyle: "",
+          wordsToUse: [],
+          wordsToAvoid: [],
+          emojiStyle: "None" as any,
+          ctaStyle: "None" as any,
+          targetAudience: "",
+          personality: "" as any,
+        });
+        setActiveProfileId(null);
+        return;
+      }
       const profile = profiles.find(
         (p) =>
           (p.voice?.name || p.name).toLowerCase() === name.toLowerCase() ||

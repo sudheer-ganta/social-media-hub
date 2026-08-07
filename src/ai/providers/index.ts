@@ -1,25 +1,17 @@
 /**
- * Active AI provider export.
+ * Active AI provider.
  *
- * Current provider: Make.com (server-side, no API key in browser).
+ * Current provider: the FlowPost Express backend, which calls Gemini
+ * server-side. See `server/src/ai/` for the module and
+ * `services/ai.service.ts` for the browser's side of the call.
  *
- * To switch providers:
- *   1. Create a new provider file (e.g. openai.ts, gemini-direct.ts)
- *   2. Import and export it here
- *   3. No UI component changes needed
- *
- * Example future providers:
- *   - gemini-direct.ts  — calls Gemini from browser (user supplies own key)
- *   - openai.ts         — calls OpenAI from browser
- *   - edge-function.ts  — calls a Supabase Edge Function (adds a proxy layer)
+ * Switching models is a backend change — `AI_PROVIDER` plus a file in
+ * `server/src/ai/providers/`. Nothing in the browser needs to know, which is
+ * the point: a provider the browser could choose is a provider whose key the
+ * browser would have to hold.
  */
 
 export type { AIProvider } from "./base";
 
-// The Make.com provider is implicit — triggering generation means writing
-// ai_studio_input + ai_status = "generating" to Supabase.
-// Make.com's DB webhook fires and runs the Gemini pipeline.
-// useAiGenerate.ts implements this directly via postsService.
-
-export const ACTIVE_PROVIDER_NAME = "Make.com (Server-side Gemini)";
+export const ACTIVE_PROVIDER_NAME = "FlowPost AI (server-side Gemini)";
 export const ACTIVE_PROVIDER_IS_CLIENT_SIDE = false;

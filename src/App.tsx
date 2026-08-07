@@ -11,6 +11,7 @@ import Posts from "@/pages/Posts";
 import CreatePost from "@/pages/CreatePost";
 import Calendar from "@/pages/Calendar";
 import Analytics from "@/pages/Analytics";
+import Integrations from "@/pages/Integrations";
 import Settings from "@/pages/Settings";
 import AiStudio from "@/pages/AiStudio";
 import StudioPreview from "@/pages/dev/StudioPreview";
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="posts/:id/edit" element={<CreatePost />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="analytics" element={<Analytics />} />
+            <Route path="integrations" element={<Integrations />} />
             <Route path="settings" element={<Settings />} />
             <Route path="ai-studio" element={<AiStudio />} />
           </Route>

@@ -1,0 +1,130 @@
+import { getSupabase } from "@/lib/supabase";
+import { API_BASE_URL } from "@/constants/api";
+import type { CaptionBrief, CaptionResult } from "@/ai/caption";
+
+/**
+ * The browser's side of the AI API.
+ *
+ * One rule governs this file: **the browser never talks to a model.** It talks
+ * to `POST /api/ai/caption`, and the Express backend holds the Gemini key.
+ * There is no `VITE_GEMINI_*` variable anywhere in this app, and there must
+ * never be one — a `VITE_` prefix is what puts a value in the bundle.
+ *
+ * This replaces the Make.com trigger, which reached Gemini by writing
+ * `ai_status = 'generating'` to Supabase and waiting for a webhook to write
+ * results back. That indirection is gone: a request now owns its own response.
+ */
+
+const AI_ENDPOINT = "/api/ai";
+
+/**
+ * Generation is a model call, not a database round trip — give it room.
+ *
+ * A post with an image is now three round trips inside one request: download
+ * the image, analyse it, then write from the analysis. 60s was enough for the
+ * single-call flow and is not reliably enough for this one.
+ */
+const REQUEST_TIMEOUT_MS = 90_000;
+
+/**
+ * The current Supabase access token. Throws when there is no session: every
+ * route here is user-scoped and rate-attributed, so an anonymous request has
+ * no meaningful answer.
+ */
+async function getAccessToken(): Promise<string> {
+  const {
+    data: { session },
+  } = await getSupabase().auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("You need to be signed in to generate content.");
+  }
+  return session.access_token;
+}
+
+/**
+ * One authenticated call to the AI API.
+ *
+ * The backend answers errors as `{ error }` with a message written for a
+ * member — "the AI is busy", "tell us what the post is about" — so that
+ * message is preferred over a generic one whenever it is there. Mirrors
+ * `services/integrations.service.ts`, which does the same for its own routes.
+ */
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  fallback: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${AI_ENDPOINT}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...init.headers,
+        Authorization: `Bearer ${await getAccessToken()}`,
+      },
+    });
+  } catch (cause) {
+    // An abort here is our own timeout firing, not the user navigating away.
+    if (cause instanceof DOMException && cause.name === "AbortError") {
+      throw new Error("Generation took too long. Please try again.");
+    }
+    throw new Error(
+      "Could not reach the AI service. Check your connection and try again.",
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message =
+      body && typeof body === "object" && typeof body.error === "string"
+        ? body.error
+        : fallback;
+    throw new Error(message);
+  }
+
+  return body as T;
+}
+
+/**
+ * Writes captions for one brief.
+ *
+ * Synchronous from the caller's point of view: the promise resolves with the
+ * captions themselves. Nothing is saved — the result goes into the editor, the
+ * user edits it, and the existing posts API saves whatever they settle on.
+ */
+export async function generateCaption(
+  brief: CaptionBrief,
+): Promise<CaptionResult> {
+  return request<CaptionResult>(
+    "/caption",
+    { method: "POST", body: JSON.stringify(brief) },
+    "Could not generate a caption. Please try again.",
+  );
+}
+
+/** Whether this server can generate at all, and with which model. */
+export async function fetchAiStatus(): Promise<{
+  configured: boolean;
+  provider: string;
+  model: string;
+}> {
+  return request(
+    "/status",
+    { method: "GET" },
+    "Could not check whether AI generation is available.",
+  );
+}
+
+export const aiService = {
+  generateCaption,
+  fetchAiStatus,
+};

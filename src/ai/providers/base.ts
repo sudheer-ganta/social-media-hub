@@ -1,32 +1,31 @@
 /**
- * AIProvider interface — the abstraction layer for AI backends.
+ * AIProvider interface — the browser's view of where generation happens.
  *
- * In Phase 1 the "provider" is Make.com (the frontend writes settings to
- * Supabase and Make handles Gemini). This interface is a placeholder that
- * documents the contract so that adding a local provider (e.g. direct
- * OpenAI/Gemini calls for power users who supply their own key) is a
- * one-file change without touching UI components.
+ * There is exactly one implementation and there is meant to be: the Express
+ * backend. The browser posts a brief to `/api/ai/caption` and gets captions
+ * back; which model wrote them is the backend's business, and swapping Gemini
+ * for something else changes nothing on this side.
+ *
+ * The real provider abstraction — one file per vendor behind one interface —
+ * lives in `server/src/ai/providers/`, on the side of the boundary that can
+ * hold an API key. This type exists so UI code has a name for the contract,
+ * not so the browser can pick a model.
  */
 
-import type { MarketingStudioRequest } from "@/ai/types";
-
-export interface AIProviderResponse {
-  ok: boolean;
-  error?: string;
-}
+import type { CaptionBrief, CaptionResult } from "@/ai/caption";
 
 export interface AIProvider {
-  /**
-   * Trigger AI generation for a post.
-   * In the Make.com provider this means updating the DB to start the webhook.
-   */
-  triggerGeneration(
-    postId: string,
-    settings: MarketingStudioRequest
-  ): Promise<AIProviderResponse>;
+  /** Generate captions for one brief. */
+  generateCaption(brief: CaptionBrief): Promise<CaptionResult>;
 
-  /** Human-readable name shown in the UI */
+  /** Human-readable name shown in the UI. */
   readonly name: string;
-  /** Whether this provider makes direct API calls (vs. server-side via Make) */
+
+  /**
+   * Whether this provider makes model calls from the browser.
+   *
+   * Always false, and a new provider that would make it true needs a very good
+   * argument: a client-side provider means an API key in the bundle.
+   */
   readonly isClientSide: boolean;
 }

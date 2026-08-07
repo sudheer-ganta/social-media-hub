@@ -3,15 +3,17 @@
  *
  * These types flow through three places:
  *   1. Frontend → PromptBuilder.ts (assembles AiStudioInput)
- *   2. AiStudioInput → Supabase (ai_studio_input column)
- *   3. Make.com → Supabase (writes one AiStudioOutput envelope to ai_studio_output)
+ *   2. AiStudioInput → Supabase (ai_studio_input column) as the record of what
+ *      a generation was asked for
+ *   3. The backend AI module's result → AiStudioOutput envelope, folded in by
+ *      `ai/caption.ts` and stored in the ai_studio_output column
  *
  * ─── Why two columns instead of one per feature ─────────────────────────────
- * Everything Make writes back lands in a single versioned envelope. Adding a
- * new studio capability (SEO, campaign plan, competitor analysis, A/B tests…)
- * means adding a key to AiStudioOutput — no migration, no Prisma regen, no
- * Supabase column. Bump STUDIO_SCHEMA_VERSION when an existing key's shape
- * changes incompatibly so readers can branch on it.
+ * Everything a generation produces lands in a single versioned envelope.
+ * Adding a new studio capability (SEO, campaign plan, competitor analysis,
+ * A/B tests…) means adding a key to AiStudioOutput — no migration, no Prisma
+ * regen, no Supabase column. Bump STUDIO_SCHEMA_VERSION when an existing key's
+ * shape changes incompatibly so readers can branch on it.
  */
 
 // ─── Schema version ──────────────────────────────────────────────────────────
@@ -76,6 +78,20 @@ export interface BrandVoice {
   targetAudience: string;
   personality: BrandPersonality;
 }
+
+export const EMPTY_BRAND_VOICE: BrandVoice = {
+  name: "None",
+  description: "",
+  mission: "",
+  tone: "",
+  writingStyle: "",
+  wordsToUse: [],
+  wordsToAvoid: [],
+  emojiStyle: "None" as any,
+  ctaStyle: "None" as any,
+  targetAudience: "",
+  personality: "" as any,
+};
 
 export const DEFAULT_BRAND_VOICE: BrandVoice = {
   name: "",
@@ -155,7 +171,7 @@ export interface AiStudioInput {
   features: StudioFeatureFlags;
   language: string;
   captionLength: CaptionLength;
-  /** Expanded prompt modules Make.com reads directly. */
+  /** Expanded prompt modules, kept as the record of the brief used. */
   modules: StudioPromptModules;
   /** ISO timestamp when the request was built. */
   builtAt: string;
@@ -177,25 +193,35 @@ export type MarketingStudioRequest = AiStudioInput;
 export type GenerationStatus = "pending" | "generating" | "complete" | "partial" | "failed";
 
 /**
- * Without this, a failed or half-finished Make run is indistinguishable from
+ * Without this, a failed or half-finished run is indistinguishable from
  * "never generated" — both leave the output column null-ish.
  */
 export interface GenerationMeta {
   status: GenerationStatus;
-  /** ISO timestamp Make finished (or gave up). */
+  /** ISO timestamp the generation finished (or gave up). */
   generatedAt: string | null;
-  /** e.g. "gemini-2.0-flash" — lets you compare output quality across models. */
+  /** e.g. "gemini-2.5-flash" — lets you compare output quality across models. */
   model: string | null;
-  /** Wall-clock duration of the Make scenario, in milliseconds. */
+  /** Wall-clock duration of the generation, in milliseconds. */
   durationMs: number | null;
   /** Human-readable failure reason when status is "partial" or "failed". */
   error: string | null;
-  /** Which output keys Make actually produced this run. */
+  /** Which output keys were actually produced this run. */
   produced: string[];
 }
 
 // ─── Output: per-feature shapes ──────────────────────────────────────────────
 
+/**
+ * What the model saw in the post's image, and what a marketer can do with it.
+ *
+ * Produced by the backend's vision stage (`server/src/ai/generators/
+ * image-analysis.generator.ts`) and folded into the envelope by
+ * `ai/caption.ts`. The required fields are the ones the studio's Analysis card
+ * has always rendered; the optional block below them is what the two-stage
+ * pipeline added, and is optional so an envelope written by the old Make.com
+ * scenario still satisfies this type.
+ */
 export interface ImageAnalysis {
   productCategory: string;
   industry: string;
@@ -211,6 +237,22 @@ export interface ImageAnalysis {
   suggestedMarketingObjective: string;
   suggestedBuyerPersona: string;
   confidenceScore: number;          // 0–100
+
+  // ── Added by the vision pipeline ──
+  /** Type of place, never a named location. */
+  setting?: string;
+  composition?: string;
+  lighting?: string;
+  /** Words legible in the image itself. */
+  textInImage?: string[];
+  /** Emotions the image can trigger in a viewer. */
+  emotions?: string[];
+  /** Marketable themes it carries, e.g. "legacy", "quiet luxury". */
+  themes?: string[];
+  /** What its elements can stand for. */
+  symbolism?: string[];
+  /** Storytelling openings it offers, one sentence each. */
+  storyAngles?: string[];
 }
 
 export interface ContentVariation {
@@ -311,12 +353,12 @@ export interface PlatformVariation {
 /** Keyed by Platform — kept loose so adding a platform needs no change here. */
 export type PlatformVariations = Record<string, PlatformVariation>;
 
-// ─── Output envelope (Make.com → Supabase ai_studio_output) ──────────────────
+// ─── Output envelope (generation → Supabase ai_studio_output) ────────────────
 
 /**
- * Everything Make writes back. Every feature key is optional: a run with
- * features.seo off simply omits `seo`, and a partial run omits whatever
- * failed (see meta.produced / meta.error).
+ * Everything a generation writes back. Every feature key is optional: a run
+ * that did not produce SEO simply omits `seo`, and a partial run omits
+ * whatever failed (see meta.produced / meta.error).
  */
 export interface AiStudioOutput {
   schemaVersion: number;

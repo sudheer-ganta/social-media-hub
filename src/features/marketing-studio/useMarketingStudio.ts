@@ -7,14 +7,11 @@
  *   - Brand voice (delegated to useBrandVoice)
  *   - Competitor context
  *   - PromptBuilder invocation
- *   - Generation trigger (writes settings to DB + triggers Make webhook)
+ *   - Generation, through the backend AI API
  */
 
 import { useCallback, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { postsService } from "@/services";
-import { postKeys } from "@/hooks/usePosts";
+import { useGenerateWithSettings } from "@/hooks/usePosts";
 import { PromptBuilder } from "@/ai/prompts/PromptBuilder";
 import { useBrandVoice } from "./useBrandVoice";
 import { DEFAULT_FEATURE_FLAGS } from "@/ai/types";
@@ -26,10 +23,9 @@ import type {
   MarketingGoal,
   StudioFeatureFlags,
 } from "@/ai/types";
-import type { Post } from "@/types";
 
 export function useMarketingStudio() {
-  const queryClient = useQueryClient();
+  const generate = useGenerateWithSettings();
   const brandVoiceApi = useBrandVoice();
 
   const [goal, setGoal] = useState<MarketingGoal>("brand_awareness");
@@ -46,7 +42,7 @@ export function useMarketingStudio() {
     [],
   );
 
-  /** Build the structured JSON payload for Make.com */
+  /** Build the structured settings payload sent with the generation request. */
   const buildRequest = useCallback((): AiStudioInput => {
     return PromptBuilder.from({
       goal,
@@ -69,27 +65,18 @@ export function useMarketingStudio() {
     captionLength,
   ]);
 
-  /** Trigger AI generation for a given post */
-  const generateMutation = useMutation({
-    mutationFn: async (postId: string) => {
-      const settings = buildRequest();
-      // 1. Save the marketing settings to the post
-      await postsService.update(postId, { ai_studio_input: settings });
-      // 2. Trigger the Make.com webhook by setting ai_status = "generating"
-      return postsService.requestAiGeneration(postId);
-    },
-    onSuccess: (post: Post) => {
-      queryClient.setQueryData(postKeys.detail(post.id), post);
-      queryClient.invalidateQueries({ queryKey: postKeys.all });
-      toast.success("AI generation started", {
-        description:
-          "Marketing assets are being generated. Results appear automatically.",
-      });
-    },
-    onError: (error: Error) => {
-      toast.error("Generation failed", { description: error.message });
-    },
-  });
+  /**
+   * Generate for a post with the settings currently on screen.
+   *
+   * One call now: the settings and the post id go to the backend together, and
+   * the mutation resolves with the finished post. The previous version wrote
+   * the settings, then wrote `ai_status = 'generating'` to nudge a Make.com
+   * webhook, then left the page polling for a write-back that might never come.
+   */
+  const triggerGeneration = useCallback(
+    (postId: string) => generate.mutate({ id: postId, settings: buildRequest() }),
+    [generate, buildRequest],
+  );
 
   return {
     // Settings state
@@ -112,7 +99,7 @@ export function useMarketingStudio() {
 
     // Actions
     buildRequest,
-    triggerGeneration: generateMutation.mutate,
-    isGenerating: generateMutation.isPending,
+    triggerGeneration,
+    isGenerating: generate.isPending,
   };
 }

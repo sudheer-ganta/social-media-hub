@@ -5,3 +5,6 @@ export * from "./useTheme";
 export * from "./useSettings";
 export * from "./useAutoResize";
 export * from "./useMediaQuery";
+export * from "./useIntegrations";
+export * from "./useIntegrationActivity";
+export * from "./useAiCaption";

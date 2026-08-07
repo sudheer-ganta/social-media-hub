@@ -39,7 +39,7 @@ export function PostAiSummary({ post, onApplyCaption }: PostAiSummaryProps) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const isGenerating = post.ai_status === "generating";
+  const isGenerating = requestAi.isPending;
   const isReady = post.ai_status === "ready";
   const isFailed = post.ai_status === "failed";
 
@@ -167,7 +167,7 @@ export function PostAiSummary({ post, onApplyCaption }: PostAiSummaryProps) {
       {isGenerating && (
         <div className="flex items-center gap-2 rounded-lg bg-accent/40 px-3 py-2 text-xs text-muted-foreground">
           <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-          Generating content via Make.com... updates automatically.
+          Generating content…
         </div>
       )}
 

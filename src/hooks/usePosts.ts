@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { postsService } from "@/services";
-import { isGenerationStalled } from "@/utils/workflow";
+import type { AiStudioInput } from "@/ai/types";
 import type { Post, PostInsert, PostListParams, PostUpdate } from "@/types";
 
 export const postKeys = {
@@ -55,14 +55,10 @@ export function usePost(id: string | undefined) {
     queryKey: postKeys.detail(id ?? ""),
     queryFn: () => postsService.getById(id as string),
     enabled: Boolean(id),
-    // Poll while the AI scenario is working so generated content appears
-    // without a manual refresh. A stalled run is never coming back, so stop
-    // polling once it times out rather than hammering the API forever.
-    refetchInterval: (query) => {
-      const post = query.state.data;
-      if (!post || post.ai_status !== "generating") return false;
-      return isGenerationStalled(post) ? false : 5000;
-    },
+    // No polling. Generation used to happen out of band — the browser wrote a
+    // row, Make.com answered it minutes later, and this query watched for the
+    // write-back. Since Sprint 4.1 the mutation that generates also resolves
+    // with the finished post, so there is nothing to wait for.
   });
 }
 
@@ -134,6 +130,13 @@ export function usePublishPost() {
   });
 }
 
+/**
+ * Generates AI content for a saved post and stores it.
+ *
+ * `isPending` covers the whole generation now, not just the moment it was
+ * requested — the backend answers in the same request, so every Generate and
+ * Regenerate button gets an honest loading state without a poll loop.
+ */
 export function useRequestAiGeneration() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -141,12 +144,31 @@ export function useRequestAiGeneration() {
     onSuccess: (post: Post) => {
       invalidatePostData(queryClient);
       queryClient.setQueryData(postKeys.detail(post.id), post);
-      toast.success("AI generation started", {
-        description: "Caption, hashtags and per-platform versions are on the way.",
+      toast.success("AI content ready", {
+        description: "Caption, hashtags and per-platform versions generated.",
       });
     },
     onError: (error: Error) => {
-      toast.error("Couldn't start AI generation", { description: error.message });
+      toast.error("Couldn't generate AI content", { description: error.message });
+    },
+  });
+}
+
+/** The same, with settings chosen on the AI Studio page instead of defaults. */
+export function useGenerateWithSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, settings }: { id: string; settings: AiStudioInput }) =>
+      postsService.generateWithSettings(id, settings),
+    onSuccess: (post: Post) => {
+      invalidatePostData(queryClient);
+      queryClient.setQueryData(postKeys.detail(post.id), post);
+      toast.success("AI content ready", {
+        description: "Marketing assets generated for this post.",
+      });
+    },
+    onError: (error: Error) => {
+      toast.error("Generation failed", { description: error.message });
     },
   });
 }

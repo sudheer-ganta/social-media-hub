@@ -1,12 +1,14 @@
 /**
  * Reusable prompt modules for the AI Marketing Studio.
  *
- * These are NOT Gemini prompt strings — they are structured data
- * objects that the PromptBuilder assembles into the ai_studio_input
- * JSON payload. Make.com reads these and constructs the actual Gemini prompt.
+ * These are NOT Gemini prompt strings — they are structured data objects that
+ * the PromptBuilder assembles into the ai_studio_input JSON payload, which is
+ * stored with a post as the record of the brief it was generated from. The
+ * prompt itself is written on the backend; see
+ * `server/src/ai/prompts/caption.prompt.ts`.
  *
- * Keeping modules here means prompt logic stays out of UI components,
- * is testable, and can be evolved without touching React code.
+ * Keeping this metadata here means the labels and descriptions the settings UI
+ * renders live in one place, and can be evolved without touching React code.
  */
 
 import type {

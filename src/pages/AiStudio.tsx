@@ -28,7 +28,6 @@ import {
 import { usePost, useCreatePost, useUpdatePost } from "@/hooks/usePosts";
 import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
 import { today, currentTime } from "@/utils/date";
-import { getAiRunStatus } from "@/utils/workflow";
 import { Badge } from "@/components/ui/badge";
 
 
@@ -79,6 +78,7 @@ export default function AiStudio() {
       // Create a new post then trigger generation
       const created = await createPost.mutateAsync(baseInput);
       setPostId(created.id);
+      navigate(`/ai-studio?postId=${created.id}`, { replace: true });
       studio.triggerGeneration(created.id);
     }
   };
@@ -88,16 +88,16 @@ export default function AiStudio() {
   );
 
   // Clearing the competitor fields would otherwise leave the analysis toggle on
-  // and send Make a request it can't fulfil.
+  // and send a request the generator can't fulfil.
   useEffect(() => {
     if (!hasCompetitorDetails && studio.features.competitorAnalysis) {
       studio.setFeature("competitorAnalysis", false);
     }
   }, [hasCompetitorDetails, studio.features.competitorAnalysis, studio.setFeature]);
 
-  // A run that timed out isn't "generating" any more — it's over, and the
-  // button has to unlock so the user can fire another one.
-  const generating = !!post && getAiRunStatus(post).state === "generating";
+  // Generation is synchronous now: the only thing that can be in flight is
+  // this page's own request, which `studio.isGenerating` already reports.
+  const generating = studio.isGenerating;
   const canGenerate = !!imageUrl && !generating && !studio.isGenerating;
 
   return (
@@ -257,11 +257,11 @@ export default function AiStudio() {
               {generating
                 ? "Generating…"
                 : post
-                ? "Regenerate"
-                : "Generate Marketing Assets"}
+                  ? "Regenerate"
+                  : "Generate Marketing Assets"}
             </Button>
             <p className="text-center text-[10px] text-muted-foreground mt-2">
-              Powered by Gemini via Make.com · API key stays private
+              Powered by Gemini on the FlowPost backend · API key stays private
             </p>
           </div>
         </motion.aside>
@@ -318,10 +318,7 @@ export default function AiStudio() {
                   ))}
                 </div>
 
-                <Badge variant="outline" className="text-xs gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Gemini API key stays private in Make.com
-                </Badge>
+
               </div>
             )}
           </motion.div>

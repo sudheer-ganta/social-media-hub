@@ -1,14 +1,19 @@
 /**
- * PromptBuilder — assembles the structured AiStudioInput JSON that is saved
- * to the ai_studio_input column and consumed by Make.com.
+ * PromptBuilder — assembles the structured AiStudioInput JSON saved to the
+ * ai_studio_input column, which is the record of *what a generation was asked
+ * for*: goal, funnel stage, brand voice, language, length.
+ *
+ * Since Sprint 4.1 the prompt itself is built on the backend, next to the
+ * model, in `server/src/ai/prompts/caption.prompt.ts`. What this builder
+ * produces is the settings payload that gets sent with the request and stored
+ * with the result, so a caption stays reproducible.
  *
  * Responsibilities:
- *   - Validate inputs
- *   - Assemble modules into a single JSON payload
- *   - Produce the exact shape Make.com expects
+ *   - Assemble settings into a single versioned JSON payload
  *
  * NOT responsible for:
  *   - Calling any AI API
+ *   - Writing prompt text
  *   - Rendering UI
  *   - Saving to the database
  */
@@ -74,7 +79,7 @@ export class PromptBuilder {
       features: { ...DEFAULT_FEATURE_FLAGS, ...features },
       language,
       captionLength,
-      // Expanded module data for Make.com to read directly
+      // Expanded module data, stored as the record of the brief used
       modules: {
         persona: MARKETING_ANALYST_PERSONA,
         goalModule: buildGoalModule(goal),

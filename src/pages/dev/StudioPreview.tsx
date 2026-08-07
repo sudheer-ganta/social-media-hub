@@ -1,10 +1,11 @@
 /**
  * Dev-only preview of the AI Marketing Studio output panels.
  *
- * The studio's newer sections (SEO, campaign, competitor, platform variations)
- * can't be seen against a real database until Make.com is writing the new
- * envelope, so this renders MarketingStudio against a fully-populated mock
- * post instead. Mounted only when import.meta.env.DEV — see src/App.tsx.
+ * The studio's optional sections (SEO, campaign, competitor) are not produced
+ * by the caption generator yet, so they can't be seen against a real database.
+ * This renders MarketingStudio against a fully-populated mock post instead, so
+ * the output panels stay checkable. Mounted only when import.meta.env.DEV —
+ * see src/App.tsx.
  *
  * Route: /dev/studio-preview
  */
@@ -104,6 +105,20 @@ const MOCK_POST: Post = {
       suggestedBuyerPersona:
         "Reads ingredient lists before buying. Distrusts hype, responds to evidence and restraint.",
       confidenceScore: 87,
+
+      // The block the vision pipeline added. Present here so this preview
+      // shows the card as it now renders for a real generation.
+      setting: "Interior windowsill, early morning",
+      composition: "Centred, hard shadow running to the right, deep negative space",
+      lighting: "Hard low-angle daylight, single source",
+      textInImage: [],
+      emotions: ["calm", "trust", "restraint"],
+      themes: ["evidence over hype", "quiet ritual", "clinical beauty"],
+      symbolism: ["The single bottle as an argument against a ten-step routine."],
+      storyAngles: [
+        "One bottle, one claim — what a shorter shelf actually buys you.",
+        "The morning light is doing what the packaging usually has to.",
+      ],
     },
 
     contentVariations: {
@@ -266,7 +281,7 @@ const MOCK_PARTIAL_POST: Post = {
   },
 };
 
-/** Make reported a failure and wrote nothing back. */
+/** The generation failed and nothing usable came back. */
 const MOCK_FAILED_POST: Post = {
   ...MOCK_POST,
   id: "00000000-0000-0000-0000-000000000002",
@@ -287,14 +302,15 @@ const MOCK_FAILED_POST: Post = {
 };
 
 /**
- * Stuck at 'generating' with an updated_at well past the timeout — what a
- * scenario that dies mid-run leaves behind. Nothing in the database will ever
- * move this row on, so the client has to call it.
+ * A row left at 'generating' by the retired Make.com pipeline, which could die
+ * mid-run and never write back. Nothing produces this state any more — it is
+ * kept so the panels can be checked against rows that predate Sprint 4.1,
+ * which should now read as "never generated" and offer a fresh run.
  */
-const MOCK_STALLED_POST: Post = {
+const MOCK_LEGACY_PENDING_POST: Post = {
   ...MOCK_POST,
   id: "00000000-0000-0000-0000-000000000003",
-  title: "Aurora Serum — stalled run",
+  title: "Aurora Serum — legacy pending row",
   ai_status: "generating",
   updated_at: "2026-08-06T09:15:03.882Z",
   ai_studio_output: null,
@@ -307,7 +323,7 @@ export default function StudioPreview() {
         <h1 className="text-xl font-bold">Studio Preview</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Dev-only. Renders MarketingStudio against mock envelopes so the output
-          panels can be checked without a live Make.com run.
+          panels can be checked without spending a real generation.
         </p>
       </div>
 
@@ -328,21 +344,21 @@ export default function StudioPreview() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">
-          Stalled run — Make never wrote back, timed out client-side
+          Legacy pending row — reads as idle, offers a fresh run
         </h2>
-        <MarketingStudio post={MOCK_STALLED_POST} />
+        <MarketingStudio post={MOCK_LEGACY_PENDING_POST} />
       </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">
-          Post editor AiPanel — stalled run
+          Post editor AiPanel — legacy pending row
         </h2>
-        <AiPanel post={MOCK_STALLED_POST} onUseCaption={() => {}} />
+        <AiPanel post={MOCK_LEGACY_PENDING_POST} onUseCaption={() => {}} />
       </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">
-          Post editor AiPanel — derived from the envelope, no legacy columns set
+          Post editor AiPanel — derived from the envelope, no flat columns set
         </h2>
         <AiPanel post={MOCK_POST} onUseCaption={() => {}} />
       </section>

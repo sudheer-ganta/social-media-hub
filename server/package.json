@@ -8,7 +8,10 @@
     "build": "npm install --prefix .. && npm run db:generate && tsc",
     "start": "node dist/server.js",
     "db:generate": "npm --prefix .. run db:generate",
-    "verify:sprint2": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint2.ts"
+    "verify:sprint2": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint2.ts",
+    "verify:sprint33": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint33.ts",
+    "verify:sprint41": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint41.ts",
+    "verify:sprint42": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint42.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

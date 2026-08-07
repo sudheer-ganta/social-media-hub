@@ -33,8 +33,8 @@ export function getWorkflowStatus(post: Post): WorkflowStatus {
 
 /**
  * True when a post carries any AI output — the Marketing Studio envelope or
- * the legacy per-column fields. Both are checked: a post generated purely
- * through the studio has none of the legacy columns set, and gating on those
+ * the flat per-column fields. Both are checked: a post generated purely
+ * through the studio has none of the flat columns set, and gating on those
  * alone would leave it stuck without an Approve button.
  */
 export function hasAiContent(post: Post): boolean {
@@ -47,19 +47,9 @@ export function hasAiContent(post: Post): boolean {
   );
 }
 
-/**
- * How long a post may sit at ai_status = 'generating' before we stop believing
- * it. Make normally writes back within a minute; anything past this means the
- * scenario died without ever flipping the row to 'failed' — a broken module,
- * an expired connection, or an operations limit. Nothing in the database will
- * ever correct that, so the client has to.
- */
-export const AI_GENERATION_TIMEOUT_MS = 3 * 60 * 1000;
-
 export type AiRunState =
   | "idle"
   | "generating"
-  | "stalled"
   | "ready"
   | "partial"
   | "failed";
@@ -72,34 +62,28 @@ export interface AiRunStatus {
   canRetry: boolean;
 }
 
-/** True when a run has been 'generating' past the timeout with no write-back. */
-export function isGenerationStalled(post: Post, now = Date.now()): boolean {
-  if (post.ai_status !== "generating") return false;
-  const startedAt = Date.parse(post.updated_at);
-  if (Number.isNaN(startedAt)) return false;
-  return now - startedAt > AI_GENERATION_TIMEOUT_MS;
-}
-
 /**
  * The one place that decides what an AI run is currently doing and whether
- * something went wrong with it. Three separate signals feed in:
+ * something went wrong with it.
  *
- *   - ai_status — set by us, then by Make on success or explicit failure
- *   - ai_studio_output.meta — Make's own report, including partial runs
- *   - updated_at — the only evidence available when Make dies silently
+ * ─── Why there is no "stalled" state any more ────────────────────────────────
+ * Generation used to be a database handshake: the browser wrote
+ * ai_status = 'generating', a Make.com scenario noticed, and minutes later
+ * something wrote back. When the scenario died it wrote nothing, so a row
+ * could sit at 'generating' forever and the client had to time it out itself.
+ *
+ * Since Sprint 4.1 the backend answers in the same request. A run that fails
+ * fails visibly, in front of the user, and a row is only ever written once the
+ * outcome is known — so 'generating' is never a persisted state, and a stall
+ * has nothing left to mean.
  */
-export function getAiRunStatus(post: Post, now = Date.now()): AiRunStatus {
+export function getAiRunStatus(post: Post): AiRunStatus {
   const meta = getGenerationMeta(post);
 
+  // Only reachable for rows written by the retired pipeline, which are now
+  // simply out of date. Offer the retry that replaces them.
   if (post.ai_status === "generating") {
-    return isGenerationStalled(post, now)
-      ? {
-          state: "stalled",
-          error:
-            "The generation never came back. The Make.com scenario likely stopped before it could write results. Check the scenario's run history, then try again.",
-          canRetry: true,
-        }
-      : { state: "generating", error: null, canRetry: false };
+    return { state: "idle", error: null, canRetry: true };
   }
 
   if (post.ai_status === "failed" || meta.status === "failed") {
@@ -107,7 +91,7 @@ export function getAiRunStatus(post: Post, now = Date.now()): AiRunStatus {
       state: "failed",
       error:
         meta.error ??
-        "The AI scenario reported a failure but didn't say why. Check the Make.com run history for the failing module.",
+        "The last generation didn't finish. Try again — if it keeps failing, check that the server has an AI key configured.",
       canRetry: true,
     };
   }

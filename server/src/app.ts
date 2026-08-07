@@ -24,5 +24,20 @@ app.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
+// OAuth connect routes, one router per provider
+import linkedinRoutes from './routes/linkedin.routes';
+
+app.use('/auth/linkedin', linkedinRoutes);
+
+// Provider-agnostic read API for the Integrations page
+import integrationsRoutes from './routes/integrations.routes';
+
+app.use('/api/integrations', integrationsRoutes);
+
+// Native AI generation. Replaces the Make.com scenario that used to sit
+// between the browser and Gemini — see routes/ai.routes.ts.
+import aiRoutes from './routes/ai.routes';
+
+app.use('/api/ai', aiRoutes);
 
 export default app;

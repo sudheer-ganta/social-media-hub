@@ -7,6 +7,7 @@ import {
   FileText,
   LayoutDashboard,
   Menu,
+  Plug,
   Plus,
   Settings,
   Sparkles,
@@ -21,6 +22,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/posts/new": "Create Post",
   "/calendar": "Calendar",
   "/analytics": "Analytics",
+  "/integrations": "Integrations",
   "/settings": "Settings",
 };
 
@@ -29,6 +31,7 @@ const MOBILE_NAV = [
   { to: "/posts", label: "Posts", icon: FileText },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/integrations", label: "Integrations", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -28,8 +28,10 @@ interface AiPanelProps {
 }
 
 /**
- * Shows the AI-generated content written back by the Make.com scenario
- * and hosts the human approval gate. Only rendered on the edit page.
+ * Shows the AI content stored on a saved post and hosts the human approval
+ * gate. Only rendered on the edit page — a post that has never been saved has
+ * nothing stored to review, and the live generation from this session is shown
+ * by AiCaptionPanel instead.
  */
 export function AiPanel({ post, onUseCaption }: AiPanelProps) {
   const navigate = useNavigate();
@@ -37,11 +39,14 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
   const approvePost = useApprovePost();
 
   const run = getAiRunStatus(post);
-  const generating = run.state === "generating";
+  // The only generation that can be in flight is this component's own request.
+  // The database never holds a "generating" state now that the backend answers
+  // in the same call.
+  const generating = requestAi.isPending;
   const ready = post.ai_status === "ready" && hasAiContent(post);
 
-  // These read the Marketing Studio envelope when present and fall back to the
-  // original ai_* columns, so posts from either pipeline render identically.
+  // These read the studio envelope when present and fall back to the flat
+  // ai_* columns, so a post stored either way renders identically.
   const caption = getPrimaryCaption(post);
   const hashtags = getFlatHashtags(post);
   const platformEntries = Object.entries(getPlatformCaptions(post)) as [
@@ -64,7 +69,7 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
                 ? "The last run didn't finish — details below."
                 : ready
                   ? "Review the generated content, then approve for publishing."
-                  : "Generate a caption, hashtags and per-platform versions from your image."}
+                  : "Generate a caption, hashtags and per-platform versions for this post."}
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
@@ -109,8 +114,7 @@ export function AiPanel({ post, onUseCaption }: AiPanelProps) {
             className="flex items-center gap-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground"
           >
             <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-            Working on it — this usually takes under a minute. The page updates
-            automatically when it's done.
+            Working on it — this usually takes a few seconds.
           </motion.div>
         )}
 

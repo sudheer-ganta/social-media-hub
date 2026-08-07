@@ -9,6 +9,7 @@ import {
   LogOut,
   Monitor,
   Moon,
+  Plug,
   Settings,
   Sparkles,
   Sun,
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
   { to: "/posts", label: "Posts", icon: FileText },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/integrations", label: "Integrations", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

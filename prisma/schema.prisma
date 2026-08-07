@@ -45,7 +45,8 @@ model Post {
   created_at   DateTime   @default(now()) @db.Timestamptz(6)
   updated_at   DateTime   @default(now()) @db.Timestamptz(6)
 
-  // Automation pipeline (written by Make.com / AI scenarios)
+  // AI pipeline. Written by the backend AI module via the posts API —
+  // see server/src/ai/ and src/services/posts.service.ts.
   ai_status           String    @default("pending")
   approved            Boolean   @default(false)
   platform_results    Json      @default("{}")
@@ -57,8 +58,8 @@ model Post {
   // AI Marketing Studio. Two versioned JSONB envelopes — see src/ai/types.ts
   // for the shapes. New studio capabilities add a key inside ai_studio_output
   // rather than a column here, so they need no migration.
-  ai_studio_input  Json? // AiStudioInput  — frontend writes before triggering Make
-  ai_studio_output Json? // AiStudioOutput — Make writes back after generation
+  ai_studio_input  Json? // AiStudioInput  — the settings a generation was asked for
+  ai_studio_output Json? // AiStudioOutput — the result it produced
 
   // Per-network publish attempts, one row per provider. Supersedes the
   // `platform_results` JSON blob for anything the backend publishes itself.
@@ -118,6 +119,24 @@ model SocialAccount {
   expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
 
   status SocialAccountStatus @default(CONNECTED)
+
+  /// Scopes the provider actually granted, which can be narrower than we asked
+  /// for. Drives the Permissions list and the "publishing enabled" check, so it
+  /// is read at render time rather than re-derived from provider config.
+  scopes String[] @default([])
+
+  /// The provider API version this connection was established against, e.g.
+  /// LinkedIn's `202401`. Kept so a future breaking API change can be spotted
+  /// per-connection instead of assumed global.
+  providerVersion String? @map("provider_version")
+
+  /// Last time the provider confirmed the profile — set by a successful connect
+  /// or by Refresh Connection. Distinct from `updatedAt`, which any write moves.
+  lastSyncedAt DateTime? @map("last_synced_at") @db.Timestamptz(6)
+
+  /// Last time the connection's health was checked, successfully or not. A
+  /// failed check updates this but not `lastSyncedAt`.
+  lastHealthCheck DateTime? @map("last_health_check") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

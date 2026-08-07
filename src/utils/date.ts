@@ -46,6 +46,29 @@ export function formatRelative(dateTime: string): string {
   return dayjs(dateTime).fromNow();
 }
 
+/**
+ * The full timestamp, for a `title` attribute behind a relative one.
+ * "2 minutes ago" is what a member wants to read; "7 Aug 2026, 2:31 PM" is what
+ * they want when they hover to check.
+ */
+export function formatAbsolute(dateTime: string): string {
+  const d = dayjs(dateTime);
+  return d.isValid() ? d.format("D MMM YYYY, h:mm A") : dateTime;
+}
+
+/**
+ * A calendar day rather than an elapsed duration: "Today", "Yesterday", or a
+ * short date. Right for things that happened once — a connection date reads
+ * better as "Today" than as "20 hours ago".
+ */
+export function formatCalendarDay(dateTime: string): string {
+  const d = dayjs(dateTime);
+  if (!d.isValid()) return dateTime;
+  if (d.isToday()) return "Today";
+  if (d.isSame(dayjs().subtract(1, "day"), "day")) return "Yesterday";
+  return d.format("D MMM YYYY");
+}
+
 export function publishDayjs(post: {
   publish_date: string;
   publish_time: string;

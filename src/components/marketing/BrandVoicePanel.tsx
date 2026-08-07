@@ -135,36 +135,40 @@ export function BrandVoicePanel({
       </div>
 
       {/* Profile Selector Dropdown */}
-      {profileNames.length > 0 && (
-        <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
-            Select Brand Profile
-          </Label>
-          {(() => {
-            const matchedName = profileNames.find(
-              (n) => n.toLowerCase() === (voice.name || "").toLowerCase()
-            ) ?? profileNames[0] ?? "";
+      <div className="space-y-1">
+        <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+          Select Brand Profile
+        </Label>
+        {(() => {
+          const currentName =
+            voice.name === "None" || !voice.name
+              ? "None (No Brand Voice)"
+              : profileNames.find(
+                  (n) => n.toLowerCase() === (voice.name || "").toLowerCase()
+                ) ?? voice.name;
 
-            return (
-              <Select
-                value={matchedName}
-                onValueChange={(selectedName) => onLoad(selectedName)}
-              >
-                <SelectTrigger className="h-8 text-xs font-medium bg-card">
-                  <SelectValue>{matchedName || "Choose a brand profile..."}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {profileNames.map((name) => (
-                    <SelectItem key={name} value={name} className="text-xs">
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            );
-          })()}
-        </div>
-      )}
+          return (
+            <Select
+              value={currentName}
+              onValueChange={(selectedName) => onLoad(selectedName)}
+            >
+              <SelectTrigger className="h-8 text-xs font-medium bg-card">
+                <SelectValue>{currentName}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="None (No Brand Voice)" className="text-xs">
+                  None (No Brand Voice)
+                </SelectItem>
+                {profileNames.map((name) => (
+                  <SelectItem key={name} value={name} className="text-xs">
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          );
+        })()}
+      </div>
 
       {/* Collapsed preview */}
       {!expanded && voice.name && (

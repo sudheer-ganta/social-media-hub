@@ -4,14 +4,13 @@ import { cn } from "@/lib/utils";
 import type { AiRunState } from "@/utils/workflow";
 
 const TITLES: Partial<Record<AiRunState, string>> = {
-  stalled: "Generation timed out",
   failed: "Generation failed",
   partial: "Some assets could not be generated",
 };
 
 interface AiErrorBannerProps {
   state: AiRunState;
-  /** Why it failed — the reason Make reported, or ours when it went silent. */
+  /** Why it failed, in the backend's own words. */
   error: string | null;
   onRetry: () => void;
   retrying?: boolean;
@@ -30,7 +29,7 @@ export function AiErrorBanner({
   retrying,
   className,
 }: AiErrorBannerProps) {
-  if (state !== "stalled" && state !== "failed" && state !== "partial") {
+  if (state !== "failed" && state !== "partial") {
     return null;
   }
 

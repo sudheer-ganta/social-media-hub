@@ -157,6 +157,92 @@ export function ImageAnalysisCard({ analysis }: ImageAnalysisCardProps) {
         </Section>
       )}
 
+      {/* How it was shot. Optional: only the vision pipeline produces these,
+          so an envelope written by the old Make scenario simply skips it. */}
+      {(analysis.setting || analysis.lighting || analysis.composition) && (
+        <div className="grid grid-cols-2 gap-4">
+          {analysis.setting && (
+            <Section icon={Building2} label="Setting">
+              <p className="text-sm">{analysis.setting}</p>
+            </Section>
+          )}
+          {analysis.lighting && (
+            <Section icon={Sparkles} label="Light">
+              <p className="text-sm">{analysis.lighting}</p>
+            </Section>
+          )}
+          {analysis.composition && (
+            <Section icon={Eye} label="Composition">
+              <p className="text-sm">{analysis.composition}</p>
+            </Section>
+          )}
+          {analysis.textInImage?.length ? (
+            <Section icon={Package} label="Text In Image">
+              <div className="flex flex-wrap gap-1.5">
+                {analysis.textInImage.map((text) => (
+                  <Badge key={text} variant="outline" className="text-xs">
+                    {text}
+                  </Badge>
+                ))}
+              </div>
+            </Section>
+          ) : null}
+        </div>
+      )}
+
+      {/* What a marketer can do with it — the interpretation half of the
+          analysis, and the material the captions are actually built from. */}
+      {analysis.themes?.length ? (
+        <Section icon={Target} label="Themes">
+          <div className="flex flex-wrap gap-1.5">
+            {analysis.themes.map((theme) => (
+              <Badge key={theme} className="bg-primary/10 text-primary border-primary/20 text-xs">
+                {theme}
+              </Badge>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {analysis.emotions?.length ? (
+        <Section icon={Users} label="Emotions It Triggers">
+          <div className="flex flex-wrap gap-1.5">
+            {analysis.emotions.map((emotion) => (
+              <Badge key={emotion} variant="secondary" className="text-xs">
+                {emotion}
+              </Badge>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {analysis.symbolism?.length ? (
+        <Section icon={Sparkles} label="Symbolism">
+          <ul className="space-y-1">
+            {analysis.symbolism.map((entry) => (
+              <li key={entry} className="text-sm text-muted-foreground leading-relaxed">
+                {entry}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      {analysis.storyAngles?.length ? (
+        <Section icon={Target} label="Storytelling Angles">
+          <div className="space-y-2">
+            {analysis.storyAngles.map((angle) => (
+              <div
+                key={angle}
+                className="rounded-lg border border-accent bg-accent/50 p-3 text-sm leading-relaxed"
+              >
+                {angle}
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
       {/* Confidence score */}
       <ConfidenceBar score={analysis.confidenceScore} />
     </motion.div>

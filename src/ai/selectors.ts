@@ -29,7 +29,7 @@ interface StudioBearing {
   ai_studio_output?: AiStudioOutput | null;
 }
 
-/** Adds the pre-studio columns, still written by the original Make scenario. */
+/** Adds the flat columns, written alongside the envelope on every run. */
 interface LegacyBearing extends StudioBearing {
   ai_caption?: string | null;
   ai_hashtags?: string[] | null;
@@ -61,7 +61,7 @@ export function producedKeys(post: StudioBearing): StudioOutputKey[] {
   return STUDIO_OUTPUT_KEYS.filter((key) => output[key] != null);
 }
 
-/** True when Make wrote back at least one generated section. */
+/** True when at least one generated section was written back. */
 export function hasStudioOutput(post: StudioBearing): boolean {
   return producedKeys(post).length > 0;
 }
@@ -115,7 +115,8 @@ export function getPrimaryCaption(post: LegacyBearing): string | null {
 
 /**
  * Every hashtag as a flat, de-duplicated list without the leading `#`.
- * Legacy rows sometimes hold one merged string ("tag1, tag2"), so split those.
+ * Rows written by the retired pipeline sometimes hold one merged string
+ * ("tag1, tag2"), so split those.
  */
 export function getFlatHashtags(post: LegacyBearing): string[] {
   const groups = post.ai_studio_output?.hashtagGroups?.groups;

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,12 +19,12 @@ import { CaptionEditor } from "./CaptionEditor";
 import { PlatformSelector } from "./PlatformSelector";
 import { SchedulePicker } from "./SchedulePicker";
 import { AiPanel } from "./AiPanel";
-import {
-  useCreatePost,
-  useRequestAiGeneration,
-  useUpdatePost,
-} from "@/hooks/usePosts";
+import { AiCaptionPanel } from "./AiCaptionPanel";
+import { useCreatePost, useUpdatePost } from "@/hooks/usePosts";
+import { useAiCaption } from "@/hooks/useAiCaption";
+import { postsService } from "@/services";
 import { currentTime, today } from "@/utils/date";
+import type { AudienceRegister } from "@/ai/caption";
 import {
   postSchema,
   validateFutureSchedule,
@@ -45,7 +45,7 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
   const navigate = useNavigate();
   const createPost = useCreatePost();
   const updatePost = useUpdatePost();
-  const requestAi = useRequestAiGeneration();
+  const ai = useAiCaption();
 
   const defaultValues = useMemo<PostFormValues>(
     () => ({
@@ -74,42 +74,67 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
     defaultValues,
   });
 
+  const title = watch("title");
+  const imageUrl = watch("image_url");
+
   /**
-   * "Generate AI" saves the current draft (caption may still be empty —
-   * the AI writes one) and flags it for the AI scenario. New posts are
-   * created first, then we jump to their edit page to watch progress.
+   * The register the AI writes in. Form state rather than a saved setting: it
+   * changes per post far more often than a brand voice does — the same brand
+   * writes one way for a launch reel and another for a hiring post.
+   */
+  const [audience, setAudience] = useState<AudienceRegister>("gen_z_millennial");
+
+  /**
+   * Why generation can't run yet, or null when it can.
+   *
+   * Only the title is required. The old Make-based flow also demanded an
+   * image, because the scenario's first step was analysing one — the caption
+   * generator writes from the brief, so an image is context when it exists and
+   * nothing more.
+   */
+  const blockedReason =
+    (title ?? "").trim().length < 3
+      ? "Add a title first — that's what the AI writes about."
+      : null;
+
+  /**
+   * "Generate AI" now calls the backend and puts the result on screen. It
+   * saves nothing: the post does not have to exist, no draft is created behind
+   * the user's back, and abandoning a caption they don't like leaves no trace.
    */
   const handleGenerateAi = async () => {
     const values = getValues();
-    if (values.title.trim().length < 3) {
+
+    if (blockedReason) {
       setError("title", { message: "Give your post a title first." });
-      toast.error("Add a title before generating AI content.");
-      return;
-    }
-    if (!values.image_url) {
-      setError("image_url", { message: "AI generation needs an image." });
-      toast.error("Upload an image before generating AI content.");
+      toast.error(blockedReason);
       return;
     }
 
-    const input = {
-      title: values.title.trim(),
+    const generated = await ai.generate({
+      title: values.title,
       caption: values.caption,
       image_url: values.image_url,
       platforms: values.platforms,
-      status: "draft" as const,
-      publish_date: values.publish_date,
-      publish_time: values.publish_time,
-    };
+      audience,
+    });
 
-    if (post) {
-      await updatePost.mutateAsync({ id: post.id, input });
-      await requestAi.mutateAsync(post.id);
-    } else {
-      const created = await createPost.mutateAsync(input);
-      await requestAi.mutateAsync(created.id);
-      navigate(`/posts/${created.id}/edit`, { replace: true });
+    // Drop the recommended option straight into an empty editor — with nothing
+    // to overwrite there is no decision to make. A caption the user has
+    // already written or chosen is left alone; the panel's "Use as caption"
+    // buttons are how it gets replaced.
+    if (generated && !values.caption.trim()) {
+      setValue("caption", generated.caption, { shouldValidate: true });
     }
+  };
+
+  /** Appends the generated hashtags to whatever is in the editor. */
+  const handleAppendHashtags = (hashtags: string[]) => {
+    const current = getValues("caption").trimEnd();
+    const tags = hashtags.map((tag) => `#${tag}`).join(" ");
+    setValue("caption", current ? `${current}\n\n${tags}` : tags, {
+      shouldValidate: true,
+    });
   };
 
   const schedule = {
@@ -139,10 +164,22 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         publish_time: values.publish_time,
       };
 
-      if (post) {
-        await updatePost.mutateAsync({ id: post.id, input });
-      } else {
-        await createPost.mutateAsync(input);
+      const saved = post
+        ? await updatePost.mutateAsync({ id: post.id, input })
+        : await createPost.mutateAsync(input);
+
+      // A generation from this session belongs to the row now that one exists.
+      // Storing it keeps the AI panels populated on reload and preserves which
+      // model wrote what — the caption itself is already in `input`, edits and
+      // all, because the editor is the source of truth for that.
+      if (ai.result) {
+        try {
+          await postsService.applyAiResult(saved.id, ai.result, saved);
+        } catch (cause) {
+          // The post is saved; only its AI provenance failed to attach. Worth
+          // saying, not worth turning a successful save into an error.
+          console.error("[ai] could not attach generation to post", cause);
+        }
       }
 
       const messages: Partial<Record<PostStatus, string>> = {
@@ -248,6 +285,23 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         </CardContent>
       </Card>
 
+      <AiCaptionPanel
+        result={ai.result}
+        isGenerating={ai.isGenerating}
+        error={ai.error}
+        blockedReason={blockedReason}
+        audience={audience}
+        onAudienceChange={setAudience}
+        hasImage={Boolean(imageUrl?.trim())}
+        onGenerate={handleGenerateAi}
+        onUseCaption={(caption) =>
+          setValue("caption", caption, { shouldValidate: true })
+        }
+        onAppendHashtags={handleAppendHashtags}
+      />
+
+      {/* The saved post's own AI content and the approval gate. Only on an
+          existing post — there is nothing stored to review before that. */}
       {post && (
         <AiPanel
           post={post}
@@ -287,11 +341,13 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
           <Button
             type="button"
             variant="secondary"
-            loading={requestAi.isPending || createPost.isPending}
+            loading={ai.isGenerating}
+            disabled={Boolean(blockedReason)}
+            title={blockedReason ?? undefined}
             onClick={handleGenerateAi}
           >
             <Sparkles />
-            Generate AI
+            {ai.result ? "Regenerate" : "Generate AI"}
           </Button>
           <Button
             type="button"
