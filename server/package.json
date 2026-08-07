@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "npm run db:generate && tsc",
+    "build": "npm install --prefix .. && npm run db:generate && tsc",
     "start": "node dist/server.js",
     "db:generate": "npm --prefix .. run db:generate",
     "verify:sprint2": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint2.ts"
