@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { API_BASE_URL } from "@/constants/api";
 import type { CaptionBrief, CaptionResult } from "@/ai/caption";
+import type { AnalysisBrief, CaptionAnalysis } from "@/ai/analysis";
 
 /**
  * The browser's side of the AI API.
@@ -111,6 +112,27 @@ export async function generateCaption(
   );
 }
 
+/**
+ * Scores one caption — Marketing Intelligence.
+ *
+ * Takes whatever is in the editor rather than whatever was generated, which is
+ * the entire reason this is a separate endpoint from `/caption`. Nothing is
+ * saved: the result comes back, the caller folds it into the studio envelope
+ * with `withAnalysis`, and the existing posts API stores it with the post.
+ *
+ * Cheaper and faster than a generation — one model call, no image download —
+ * so it is fine to run after every meaningful edit.
+ */
+export async function analyzeCaption(
+  brief: AnalysisBrief,
+): Promise<CaptionAnalysis> {
+  return request<CaptionAnalysis>(
+    "/analyse",
+    { method: "POST", body: JSON.stringify(brief) },
+    "Could not analyse this caption. Please try again.",
+  );
+}
+
 /** Whether this server can generate at all, and with which model. */
 export async function fetchAiStatus(): Promise<{
   configured: boolean;
@@ -126,5 +148,6 @@ export async function fetchAiStatus(): Promise<{
 
 export const aiService = {
   generateCaption,
+  analyzeCaption,
   fetchAiStatus,
 };

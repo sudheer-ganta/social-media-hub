@@ -10,6 +10,7 @@ import {
   Undo2,
   Wand2,
   TrendingUp,
+  Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +23,15 @@ import { SeoPanel } from "./SeoPanel";
 import { CampaignPlanPanel } from "./CampaignPlanPanel";
 import { CompetitorAnalysisPanel } from "./CompetitorAnalysisPanel";
 import { PlatformVariationsPanel } from "./PlatformVariationsPanel";
+import { ReachScorePanel } from "./ReachScorePanel";
+import { PrePublishChecklist } from "./PrePublishChecklist";
 import type { Post } from "@/types";
+import { useCaptionAnalysis } from "@/hooks/useCaptionAnalysis";
 import {
+  getCaptionAnalysis,
+  getFlatHashtags,
+  getPrimaryCaption,
+  isAnalysisStale,
   getCampaignPlan,
   getCompetitorAnalysis,
   getContentVariations,
@@ -39,7 +47,7 @@ import { AiErrorBanner } from "@/components/shared/AiErrorBanner";
 import { useApprovePost, useRequestAiGeneration } from "@/hooks/usePosts";
 import { getAiRunStatus, hasAiContent } from "@/utils/workflow";
 
-type Tab = "analysis" | "content" | "growth" | "brand";
+type Tab = "analysis" | "content" | "reach" | "growth" | "brand";
 
 interface TabItem {
   id: Tab;
@@ -50,6 +58,7 @@ interface TabItem {
 const TABS: TabItem[] = [
   { id: "analysis", label: "Analysis", icon: ScanEye },
   { id: "content",  label: "Content",  icon: FileText },
+  { id: "reach",    label: "Reach",    icon: Gauge },
   { id: "growth",   label: "Growth",   icon: TrendingUp },
   { id: "brand",    label: "Brand",    icon: Mic2 },
 ];
@@ -80,6 +89,34 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
   const studioInput = getStudioInput(post);
   const hasRichMarketing = hasStudioOutput(post);
   const hasGrowth = !!(seo || campaign || competitorAnalysis);
+
+  // ── Marketing Intelligence ────────────────────────────────────────────────
+  //
+  // A live analysis from this session takes precedence over the stored one:
+  // the user pressed the button because the stored score no longer described
+  // what they were looking at.
+  const analysisApi = useCaptionAnalysis();
+  const storedAnalysis = getCaptionAnalysis(post);
+  const analysis = analysisApi.analysis ?? storedAnalysis;
+  const captionForAnalysis = getPrimaryCaption(post) ?? "";
+  const analysisStale =
+    !analysisApi.analysis && isAnalysisStale(post, captionForAnalysis);
+
+  const runAnalysis = () =>
+    analysisApi.analyse({
+      caption: captionForAnalysis,
+      hashtags: getFlatHashtags(post),
+      platforms: post.platforms ?? [],
+      goal: studioInput?.goal,
+      funnelStage: studioInput?.funnelStage,
+      language: studioInput?.language,
+      brand: studioInput?.brandVoice,
+      // Passing the stored vision read is what makes the `visual` dimension
+      // mean anything — without it the analyser knows an image exists but not
+      // whether the copy uses the one that was chosen.
+      ...(imageAnalysis && { imageAnalysis }),
+      hasImage: Boolean(post.image_url),
+    });
 
   // The flat ai_* columns, written alongside the envelope (always show these)
   const hasLegacyCaption = !!post.ai_caption;
@@ -234,6 +271,10 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
               ? !hasRichMarketing
               : id === "content"
               ? !hasAnyContent
+              : id === "reach"
+              // Enabled as soon as there is a caption to judge, stored score or
+              // not — the tab is where you go *to* run one.
+              ? !captionForAnalysis
               : false;
 
           const active = activeTab === id;
@@ -259,6 +300,14 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
               )}
               {id === "content" && contentHasDot && (
                 <span className="ml-0.5 flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              )}
+              {id === "reach" && analysis && (
+                <span
+                  className={cn(
+                    "ml-0.5 flex h-1.5 w-1.5 rounded-full",
+                    analysisStale ? "bg-amber-500" : "bg-emerald-500",
+                  )}
+                />
               )}
               {id === "growth" && hasGrowth && (
                 <span className="ml-0.5 flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -399,6 +448,58 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
                         ))}
                     </div>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Reach tab ─────────────────────────────────────────── */}
+            {activeTab === "reach" && (
+              <div className="space-y-8">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Marketing Intelligence</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Scores the caption as it stands — a separate pass from the
+                      one that wrote it.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={analysis ? "outline" : "secondary"}
+                    loading={analysisApi.isAnalysing}
+                    onClick={runAnalysis}
+                    className="h-8 shrink-0 text-xs"
+                  >
+                    <Gauge className="h-3.5 w-3.5" />
+                    {analysis ? "Re-analyse" : "Analyse"}
+                  </Button>
+                </div>
+
+                {analysisApi.error && (
+                  <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-muted-foreground">
+                    {analysisApi.error}
+                  </p>
+                )}
+
+                {analysis ? (
+                  <>
+                    <PrePublishChecklist checklist={analysis.checklist} />
+                    <div className="border-t" />
+                    <ReachScorePanel
+                      analysis={analysis}
+                      stale={analysisStale}
+                      onReanalyse={runAnalysis}
+                    />
+                  </>
+                ) : (
+                  !analysisApi.isAnalysing && (
+                    <EmptyTabState
+                      icon={Gauge}
+                      title="Not analysed yet"
+                      description="Run an analysis to get a reach score, a pre-publish checklist and the specific changes worth making."
+                    />
+                  )
                 )}
               </div>
             )}

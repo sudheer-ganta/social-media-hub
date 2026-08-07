@@ -7,6 +7,7 @@ import { aiService, AiError, AiProviderError } from '../services/ai.service';
  *
  *   GET  /api/ai/status    is generation available on this server?
  *   POST /api/ai/caption   write captions for one post brief
+ *   POST /api/ai/analyse   score a caption before it is published
  *
  * This router replaces the Make.com scenario that used to sit between the
  * browser and Gemini. The browser no longer writes a row and waits for a
@@ -70,6 +71,35 @@ router.post(
   handle(async (req, res) => {
     const result = await aiService.generateCaption(req.user.id, req.body);
     res.json(result);
+  }),
+);
+
+// POST /api/ai/analyse → reach score, checklist, forecast and improvements.
+//
+// Separate from /caption because it answers a different question about a
+// different caption. /caption writes; this judges whatever is in the editor
+// now, which after two minutes of editing is not what /caption returned.
+//
+// Nothing is stored. The result goes back to the browser, which folds it into
+// the studio envelope and saves it with the post like every other section.
+router.post(
+  '/analyse',
+  requireAuth,
+  handle(async (req, res) => {
+    const analysis = await aiService.analyseCaption(req.user.id, req.body);
+    res.json(analysis);
+  }),
+);
+
+// The American spelling, for the same handler. Every other identifier in this
+// codebase is British ("analyse", "normalise"), and a client that guesses the
+// other spelling should get an analysis rather than a 404.
+router.post(
+  '/analyze',
+  requireAuth,
+  handle(async (req, res) => {
+    const analysis = await aiService.analyseCaption(req.user.id, req.body);
+    res.json(analysis);
   }),
 );
 

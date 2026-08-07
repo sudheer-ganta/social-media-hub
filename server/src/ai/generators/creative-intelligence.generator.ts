@@ -1,7 +1,9 @@
+import { resolveBrandProfile } from '../brand/brand-profile';
 import { buildCaptionPrompt } from '../prompts/caption.prompt';
 import { AiProviderError, type AiTextProvider } from '../providers';
 import { analyseImage } from './image-analysis.generator';
 import type {
+  BrandProfile,
   CaptionRequest,
   CaptionResult,
   CaptionVariation,
@@ -12,18 +14,27 @@ import type {
 } from '../types';
 
 /**
- * The caption generator.
+ * Creative Intelligence — the first engine.
  *
- * Owns the one flow that matters: brief in → captions out. As of Sprint 4.2
- * that flow has two model calls in it, not one:
+ * Owns the one flow that matters: brief in → captions out.
  *
- *   image → [stage 1: look]  → analysis ─┐
- *                                        ├→ [stage 2: write] → captions
- *   brief, brand, audience ───────────────┘
+ *   image → [Vision] → analysis ─┬→ [Brand Intelligence] → profile ─┐
+ *   brand profile ───────────────┘                                  ├→ [write] → captions
+ *   brief, audience ────────────────────────────────────────────────┘
  *
- * Stage one is in `image-analysis.generator.ts` and is allowed to fail; stage
- * two runs either way. The old single-call flow is exactly what remains when
- * there is no image, so a text-only post costs the same one call it always did.
+ * Vision is in `image-analysis.generator.ts` and is allowed to fail; the write
+ * runs either way. The old single-call flow is exactly what remains when there
+ * is no image, so a text-only post costs the same one call it always did.
+ *
+ * Brand Intelligence sits between the two because it needs both: it fills the
+ * gaps in a sparse brand profile from what the picture revealed, which is why
+ * it cannot run before Vision and must run before the prompt is built. It adds
+ * no model call — see `brand/brand-profile.ts`.
+ *
+ * The counterpart engine is `marketing-intelligence.generator.ts`, which judges
+ * what this one writes. Naming them for what they do rather than "engine 1" and
+ * "engine 2" is the difference between a call site that reads as an ordering
+ * and one that reads as a job.
  *
  * This is also the only place that treats model output as *untrusted* — a
  * response schema constrains shape, not sense, and a model can still return
@@ -173,8 +184,11 @@ export async function generateCaption(
     }
   }
 
+  // ── Brand Intelligence: reconcile what the brand said with what was seen ──
+  const brand = resolveBrandProfile({ brand: request.brandVoice, imageAnalysis: analysis });
+
   // ── Stage two: write from what it saw ─────────────────────────────────────
-  const built = buildCaptionPrompt(request, { imageAnalysis: analysis });
+  const built = buildCaptionPrompt(request, { imageAnalysis: analysis, brand });
 
   const payload = (await provider.generateJson({
     systemInstruction: built.systemInstruction,
@@ -219,6 +233,10 @@ export async function generateCaption(
     hashtags,
     platformCaptions: normalisePlatformCaptions(payload, request, caption),
     ...(analysis && { imageAnalysis: analysis }),
+    // Returned so the studio's Brand tab can show what was *actually* used —
+    // including the fields Brand Intelligence inferred, which the user never
+    // typed and would otherwise have no way of seeing.
+    brand,
     ...(angles.length > 0 && { angles }),
     ...(payload.seo && { seo: payload.seo }),
     ...(payload.campaign && { campaign: payload.campaign }),

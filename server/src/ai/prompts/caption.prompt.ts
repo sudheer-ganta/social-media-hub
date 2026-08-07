@@ -1,7 +1,8 @@
-import type { CaptionRequest, ImageAnalysis } from '../types';
+import { renderBrandSection } from '../brand/brand-profile';
+import type { BrandProfile, CaptionRequest, ImageAnalysis } from '../types';
 
 /**
- * Stage two: write the copy.
+ * Creative Intelligence: write the copy.
  *
  * Everything the model is told lives here — persona, what the image contains,
  * marketing framing, brand voice, audience register, platform rules, output
@@ -28,10 +29,23 @@ import type { CaptionRequest, ImageAnalysis } from '../types';
  * inverts: the model is told what is there and required to build from it. The
  * old wording survives only for the case it was always right about — a post
  * whose image could not be analysed.
+ *
+ * ─── What changed in v3 ──────────────────────────────────────────────────────
+ * The brand block is no longer assembled here. It comes from Brand
+ * Intelligence (`brand/brand-profile.ts`), which merges what the user typed
+ * with what Vision saw and renders one `## Brand` section that this prompt and
+ * the analysis prompt both use.
+ *
+ * That is not a tidy-up. The two prompts would otherwise have separate
+ * renderers, so a caption could be written against one brand description and
+ * scored against another — a discrepancy that never shows up as an error, only
+ * as scores that feel slightly wrong. One renderer makes that unsayable. It
+ * also brings three facts into this prompt that were sitting unused in the
+ * request: what the brand sells, its USP, and who it competes with.
  */
 
 /** Bump when the prompt's shape changes, so `meta.promptVersion` stays honest. */
-export const CAPTION_PROMPT_VERSION = 2;
+export const CAPTION_PROMPT_VERSION = 3;
 
 // ─── Persona ─────────────────────────────────────────────────────────────────
 
@@ -404,29 +418,6 @@ function imageSection(analysis: ImageAnalysis): string {
     .join('\n\n');
 }
 
-function brandVoiceSection(request: CaptionRequest): string | null {
-  const voice = request.brandVoice;
-  if (!voice) return null;
-
-  return section('## Brand voice', [
-    voice.name && `- Brand: ${voice.name}`,
-    voice.description && `- What the brand does: ${voice.description}`,
-    voice.mission && `- Mission: ${voice.mission}`,
-    voice.tone && `- Tone: ${voice.tone}`,
-    voice.writingStyle && `- Writing style: ${voice.writingStyle}`,
-    voice.personality && `- Personality: ${voice.personality}`,
-    voice.targetAudience && `- Audience: ${voice.targetAudience}`,
-    voice.emojiStyle && `- Emoji usage: ${voice.emojiStyle}`,
-    voice.ctaStyle && `- Call-to-action style: ${voice.ctaStyle}`,
-    voice.wordsToUse?.length
-      ? `- Work these words in naturally where they fit: ${voice.wordsToUse.join(', ')}`
-      : null,
-    voice.wordsToAvoid?.length
-      ? `- Never use these words: ${voice.wordsToAvoid.join(', ')}`
-      : null,
-  ]);
-}
-
 function platformSection(request: CaptionRequest): string | null {
   if (request.platforms.length === 0) return null;
 
@@ -476,11 +467,18 @@ export interface BuiltPrompt {
 export interface BuildCaptionPromptOptions {
   /** Stage one's read of the image, when there was an image and it worked. */
   imageAnalysis?: ImageAnalysis | null;
+  /**
+   * What Brand Intelligence resolved for this request. Required in practice —
+   * the generator always resolves one, even when the caller sent no brand at
+   * all, because an empty profile is still a renderable thing (it renders to
+   * nothing) and an optional here would put a null check in the prompt body.
+   */
+  brand: BrandProfile;
 }
 
 export function buildCaptionPrompt(
   request: CaptionRequest,
-  { imageAnalysis }: BuildCaptionPromptOptions = {},
+  { imageAnalysis, brand }: BuildCaptionPromptOptions,
 ): BuiltPrompt {
   const tones = VARIATION_TONES.slice(0, request.variationCount);
   const count = request.variationCount;
@@ -508,7 +506,7 @@ export function buildCaptionPrompt(
 
     `## How to write\n${AUDIENCE_BRIEF[request.audience] ?? AUDIENCE_BRIEF.gen_z_millennial}`,
 
-    brandVoiceSection(request),
+    renderBrandSection(brand),
     competitorSection(request),
     platformSection(request),
     regenerateSection(request),

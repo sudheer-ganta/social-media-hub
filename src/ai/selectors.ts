@@ -22,6 +22,7 @@ import {
   type SeoAnalysis,
   type StudioOutputKey,
 } from "./types";
+import type { CaptionAnalysis } from "./analysis";
 
 /** Minimal shape these helpers need — avoids a circular import on Post. */
 interface StudioBearing {
@@ -98,6 +99,42 @@ export function getCompetitorAnalysis(post: StudioBearing): CompetitorAnalysis |
 
 export function getPlatformVariations(post: StudioBearing): PlatformVariations | null {
   return post.ai_studio_output?.platformVariations ?? null;
+}
+
+/**
+ * Marketing Intelligence's verdict on the stored caption.
+ *
+ * Null on a post that was generated but never analysed, which is the normal
+ * state — analysis is a separate, user-triggered call. Callers should read
+ * "no analysis yet" from this, never "the caption scored zero".
+ */
+export function getCaptionAnalysis(post: StudioBearing): CaptionAnalysis | null {
+  return post.ai_studio_output?.analysis ?? null;
+}
+
+/**
+ * True when the stored analysis was run against a caption that has since been
+ * edited — which makes the score stale rather than wrong.
+ *
+ * Compared on length and first line rather than on the whole string: those two
+ * are what every score in the analysis actually hangs off, and a user who fixed
+ * one typo should not be told their reach score is meaningless. A rewritten
+ * opening line, or a materially different length, means it is.
+ */
+export function isAnalysisStale(post: LegacyBearing, caption?: string): boolean {
+  const analysis = getCaptionAnalysis(post);
+  if (!analysis) return false;
+
+  const current = caption ?? getPrimaryCaption(post) ?? "";
+  if (!current) return false;
+
+  const currentHook = current.split(/\r?\n/).find((line) => line.trim())?.trim() ?? "";
+  const lengthDrift = Math.abs(current.length - analysis.metrics.characterCount);
+
+  return (
+    currentHook.length !== analysis.metrics.hookCharacterCount ||
+    lengthDrift > Math.max(20, analysis.metrics.characterCount * 0.1)
+  );
 }
 
 // ─── Flattened views, envelope first with a legacy fallback ──────────────────

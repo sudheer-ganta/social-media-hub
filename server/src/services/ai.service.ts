@@ -2,12 +2,16 @@ import { env } from '../config/env';
 import {
   activeProvider,
   AiProviderError,
+  analyseCaption,
   generateCaption,
+  type AnalysisRequest,
   type AudienceRegister,
+  type CaptionAnalysis,
   type CaptionLength,
   type CaptionRequest,
   type CaptionResult,
   type FunnelStage,
+  type ImageAnalysis,
   type MarketingGoal,
 } from '../ai';
 
@@ -180,16 +184,45 @@ function readBrandVoice(value: unknown): CaptionRequest['brandVoice'] {
     }),
     wordsToUse: readStringArray(voice.wordsToUse, 25),
     wordsToAvoid: readStringArray(voice.wordsToAvoid, 25),
+
+    // ── Brand Intelligence additions ───────────────────────────────────────
+    //
+    // Read under the same key as the rest of the voice, so a client that has
+    // never heard of a brand profile posts exactly the body it always did and
+    // these simply come back undefined. `products` and `competitors` are lists
+    // of short names, and `usp` is a sentence — hence the different bounds.
+    ...(readString(voice.industry, 120) && {
+      industry: readString(voice.industry, 120),
+    }),
+    ...(readString(voice.usp, 400) && { usp: readString(voice.usp, 400) }),
+    products: readStringArray(voice.products, 15),
+    competitors: readStringArray(voice.competitors, 10),
+    brandColors: readColors(voice.brandColors),
   };
 
-  // An object of nothing but two empty arrays is not a brand voice; sending it
-  // would put an empty "## Brand voice" heading in front of the model.
+  // An object of nothing but empty arrays is not a brand; sending it would put
+  // an empty "## Brand" heading in front of the model.
+  const listKeys = ['wordsToUse', 'wordsToAvoid', 'products', 'competitors', 'brandColors'] as const;
   const meaningful =
-    Object.keys(brandVoice).length > 2 ||
-    (brandVoice.wordsToUse?.length ?? 0) > 0 ||
-    (brandVoice.wordsToAvoid?.length ?? 0) > 0;
+    Object.keys(brandVoice).length > listKeys.length ||
+    listKeys.some((key) => (brandVoice[key]?.length ?? 0) > 0);
 
   return meaningful ? brandVoice : undefined;
+}
+
+/**
+ * Hex codes only.
+ *
+ * A brand colour reaches a prompt as literal text and nothing else, so the
+ * filter is about keeping the block truthful rather than about safety: "our
+ * signature gold" tells a model nothing it can act on, and passing it through
+ * as though it were a colour value makes the brand section read as precise
+ * when it is not.
+ */
+function readColors(value: unknown): string[] {
+  return readStringArray(value, 8)
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(entry));
 }
 
 /**
@@ -309,6 +342,112 @@ export function parseCaptionRequest(body: unknown): CaptionRequest {
   };
 }
 
+// ─── Analysis request ────────────────────────────────────────────────────────
+
+/** Long enough for any caption a network will accept, with room to be told so. */
+const MAX_CAPTION_LENGTH = 8000;
+/** Matches the generator's floor — below it there is nothing to judge. */
+const MIN_CAPTION_LENGTH = 12;
+const MAX_ANALYSED_HASHTAGS = 40;
+
+/**
+ * The vision block, when the caller passes back what generation already found.
+ *
+ * Read defensively rather than trusted: this arrives from the browser, which
+ * got it from a previous response, and nothing stops a client sending a hand-
+ * written object. Every field is bounded and the whole thing is optional — an
+ * analysis without it simply scores `visual` with low confidence.
+ *
+ * Only the fields the analysis prompt actually renders are kept. Passing the
+ * other fourteen through would put a large object in the request for no change
+ * in what the model reads.
+ */
+function readImageAnalysis(value: unknown): ImageAnalysis | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const a = value as Record<string, unknown>;
+
+  const primarySubject = readString(a.primarySubject, 160) ?? '';
+  const sceneDescription = readString(a.sceneDescription, 600) ?? '';
+  if (!primarySubject && !sceneDescription) return undefined;
+
+  return {
+    primarySubject,
+    sceneDescription,
+    secondarySubjects: readStringArray(a.secondarySubjects, 6),
+    objects: readStringArray(a.objects, 12),
+    setting: readString(a.setting, 200) ?? '',
+    composition: readString(a.composition, 300) ?? '',
+    lighting: readString(a.lighting, 200) ?? '',
+    mood: readString(a.mood, 120) ?? '',
+    colorPalette: readColors(a.colorPalette),
+    brandStyle: readString(a.brandStyle, 160) ?? '',
+    textInImage: readStringArray(a.textInImage, 8),
+    emotions: readStringArray(a.emotions, 6),
+    themes: readStringArray(a.themes, 6),
+    symbolism: readStringArray(a.symbolism, 6),
+    storyAngles: readStringArray(a.storyAngles, 6),
+    productCategory: readString(a.productCategory, 120) ?? '',
+    industry: readString(a.industry, 120) ?? '',
+    targetAudience: readString(a.targetAudience, 300) ?? '',
+    suggestedCampaignType: readString(a.suggestedCampaignType, 160) ?? '',
+    suggestedMarketingObjective: readString(a.suggestedMarketingObjective, 160) ?? '',
+    suggestedBuyerPersona: readString(a.suggestedBuyerPersona, 300) ?? '',
+    confidenceScore: readClampedInt(a.confidenceScore, 0, 100, 0),
+  };
+}
+
+/**
+ * Turns an unknown body into an {@link AnalysisRequest}.
+ *
+ * Same policy as {@link parseCaptionRequest}: exactly one field can fail the
+ * request, and everything else defaults. The difference is which field — there
+ * is no useful analysis of an empty caption, and unlike a missing funnel stage
+ * there is nothing sensible to assume in its place.
+ *
+ * `hasImage` is taken from the caller rather than inferred from
+ * `imageAnalysis`, because the two genuinely differ: a post can have an image
+ * whose analysis was never run or has since been discarded, and treating that
+ * as "no image" would score the copy as text-only and quietly drop the visual
+ * dimension it should be judged on.
+ */
+export function parseAnalysisRequest(body: unknown): AnalysisRequest {
+  if (!body || typeof body !== 'object') {
+    throw new AiError('Send a JSON body containing the caption to analyse.');
+  }
+
+  const input = body as Record<string, unknown>;
+  const caption = readString(input.caption, MAX_CAPTION_LENGTH);
+
+  if (!caption || caption.length < MIN_CAPTION_LENGTH) {
+    throw new AiError(
+      'There is not enough caption here to analyse yet. Write a line or two first.',
+      422,
+    );
+  }
+
+  const imageAnalysis = readImageAnalysis(input.imageAnalysis);
+
+  return {
+    caption,
+    // Normalised the same way the generator normalises what it produces, so a
+    // tag list round-tripped through the browser is counted identically here.
+    hashtags: readStringArray(input.hashtags, MAX_ANALYSED_HASHTAGS).map((tag) =>
+      tag.replace(/^#+/, ''),
+    ),
+    platforms: readPlatforms(input.platforms),
+    goal: readEnum(input.goal, GOALS, 'brand_awareness'),
+    funnelStage: readEnum(input.funnelStage, FUNNEL_STAGES, 'TOFU'),
+    audience: readEnum(input.audience, AUDIENCE_REGISTERS, DEFAULT_AUDIENCE),
+    language: readString(input.language, MAX_FREE_TEXT_LENGTH) ?? 'English',
+    ...(readBrandVoice(input.brand ?? input.brandVoice) && {
+      brand: readBrandVoice(input.brand ?? input.brandVoice),
+    }),
+    ...(imageAnalysis && { imageAnalysis }),
+    hasImage:
+      typeof input.hasImage === 'boolean' ? input.hasImage : Boolean(imageAnalysis),
+  };
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export const aiService = {
@@ -352,6 +491,42 @@ export const aiService = {
     });
 
     return result;
+  },
+
+  /**
+   * Scores one caption — Marketing Intelligence.
+   *
+   * Deliberately its own entry point rather than a flag on `generateCaption`.
+   * The caption worth analysing is usually not the one the model wrote: it is
+   * the one sitting in the editor after the user rewrote the opening line. An
+   * analyser reachable only as a side effect of generation could never see it.
+   */
+  async analyseCaption(userId: string, body: unknown): Promise<CaptionAnalysis> {
+    const request = parseAnalysisRequest(body);
+    const provider = activeProvider(env.AI_PROVIDER);
+
+    if (!provider.isConfigured()) {
+      throw new AiError('AI analysis is not set up on this server yet.', 503);
+    }
+
+    const analysis = await analyseCaption(request, { provider });
+
+    console.info('[ai] analysis served', {
+      userId,
+      model: analysis.meta.model,
+      durationMs: analysis.meta.durationMs,
+      reachScore: analysis.reachScore,
+      readiness: analysis.checklist.readiness,
+      analysisVersion: analysis.meta.analysisVersion,
+      weightsVersion: analysis.meta.weightsVersion,
+      platforms: request.platforms,
+      // Answers "why is the visual dimension missing?" without a second look:
+      // an image whose analysis was not passed back scores differently.
+      hasImage: request.hasImage,
+      imageAnalysisSupplied: Boolean(request.imageAnalysis),
+    });
+
+    return analysis;
   },
 
   /**

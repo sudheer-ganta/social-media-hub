@@ -16,11 +16,24 @@
  */
 import { env } from '../config/env';
 import { buildCaptionPrompt } from '../ai/prompts/caption.prompt';
-import { generateCaption } from '../ai/generators/caption.generator';
+import { resolveBrandProfile } from '../ai/brand/brand-profile';
+import { generateCaption } from '../ai/generators/creative-intelligence.generator';
 import { AiProviderError, activeProvider } from '../ai/providers';
 import type { AiTextProvider, GenerateJsonOptions } from '../ai/providers';
 import { aiService, AiError, parseCaptionRequest } from '../services/ai.service';
 import type { CaptionRequest } from '../ai/types';
+
+/**
+ * Builds a prompt the way the generator does — Brand Intelligence first.
+ *
+ * The prompt builder takes a resolved brand profile rather than the raw
+ * request, so every call site has to run the same merge the generator runs.
+ */
+function promptFor(request: CaptionRequest) {
+  return buildCaptionPrompt(request, {
+    brand: resolveBrandProfile({ brand: request.brandVoice }),
+  });
+}
 
 let passed = 0;
 let failed = 0;
@@ -166,7 +179,7 @@ async function main() {
   // ── Prompt assembly ────────────────────────────────────────────────────────
   console.log('\nPrompt assembly');
 
-  const built = buildCaptionPrompt(parsed);
+  const built = promptFor(parsed);
   check('carries the persona in the system instruction',
     built.systemInstruction.includes('senior social media copywriter'));
   check('names the subject', built.prompt.includes('Aurora Serum launch'));
@@ -175,11 +188,11 @@ async function main() {
     built.prompt.includes('LinkedIn:') && built.prompt.includes('Instagram:'),
   );
   check(
-    'omits the brand voice section when there is no voice',
-    !built.prompt.includes('## Brand voice'),
+    'omits the brand section when there is no brand',
+    !built.prompt.includes('## Brand'),
   );
 
-  const regenerate = buildCaptionPrompt(
+  const regenerate = promptFor(
     parseCaptionRequest({ ...BASE_BODY, previousCaption: 'A first attempt.' }),
   );
   check(

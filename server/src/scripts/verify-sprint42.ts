@@ -22,14 +22,36 @@
  * way to confirm the model, the schema and the image part work together.
  */
 import { buildCaptionPrompt } from '../ai/prompts/caption.prompt';
+import { resolveBrandProfile } from '../ai/brand/brand-profile';
 import { buildVisionPrompt } from '../ai/prompts/vision.prompt';
-import { generateCaption } from '../ai/generators/caption.generator';
+import { generateCaption } from '../ai/generators/creative-intelligence.generator';
 import { analyseImage } from '../ai/generators/image-analysis.generator';
 import { fetchInlineImage, ImageFetchError } from '../ai/vision/image-source';
 import { activeProvider } from '../ai/providers';
 import type { AiTextProvider, GenerateJsonOptions } from '../ai/providers';
 import { parseCaptionRequest } from '../services/ai.service';
 import type { CaptionRequest, ImageAnalysis } from '../ai/types';
+
+/**
+ * Builds a prompt the way the generator does — Brand Intelligence first.
+ *
+ * The prompt builder takes a resolved {@link BrandProfile} rather than the raw
+ * request, so every call site has to run the same merge the generator runs.
+ * Doing it through one helper here keeps these checks testing the prompt rather
+ * than testing whether the script remembered to resolve a brand.
+ */
+function promptFor(
+  request: CaptionRequest,
+  options: { imageAnalysis?: ImageAnalysis | null } = {},
+) {
+  return buildCaptionPrompt(request, {
+    ...options,
+    brand: resolveBrandProfile({
+      brand: request.brandVoice,
+      imageAnalysis: options.imageAnalysis,
+    }),
+  });
+}
 
 let passed = 0;
 let failed = 0;
@@ -182,7 +204,7 @@ async function main() {
   // ── Prompt assembly ────────────────────────────────────────────────────────
   console.log('\nPrompt assembly');
 
-  const withImage = buildCaptionPrompt(
+  const withImage = promptFor(
     baseRequest({ imageUrl: 'https://example.com/hall.jpg' }),
     { imageAnalysis: ANALYSIS },
   );
@@ -214,7 +236,8 @@ async function main() {
     withImage.systemInstruction.includes('Elevate'),
   );
 
-  const analysedButUncertain = buildCaptionPrompt(baseRequest(), {
+  const analysedButUncertain = promptFor(
+baseRequest(), {
     imageAnalysis: { ...ANALYSIS, confidenceScore: 30 },
   });
   check(
@@ -222,7 +245,7 @@ async function main() {
     analysedButUncertain.prompt.includes('This reading is uncertain'),
   );
 
-  const imageUnreadable = buildCaptionPrompt(
+  const imageUnreadable = promptFor(
     baseRequest({ imageUrl: 'https://example.com/hall.jpg' }),
     { imageAnalysis: null },
   );
@@ -231,13 +254,14 @@ async function main() {
     imageUnreadable.prompt.includes('never claim to know what the image shows'),
   );
 
-  const textOnly = buildCaptionPrompt(baseRequest());
+  const textOnly = promptFor(
+baseRequest());
   check(
     'says nothing about an image when there is none',
     !textOnly.prompt.includes('image'),
   );
 
-  const professional = buildCaptionPrompt(
+  const professional = promptFor(
     baseRequest({ audience: 'professional' }),
   );
   check(

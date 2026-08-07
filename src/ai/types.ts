@@ -65,6 +65,26 @@ export type CaptionLength = "Short" | "Medium" | "Long";
 
 // ─── Brand Voice ─────────────────────────────────────────────────────────────
 
+/**
+ * The brand, as the user described it.
+ *
+ * ─── Why the extra five fields ───────────────────────────────────────────────
+ * The original shape described how the brand *sounds*. That is enough to write
+ * a caption in the right voice and not enough to judge whether the caption will
+ * sell anything: the analyser has to know what is being sold, to whom, and why
+ * they would pick this brand over the next one.
+ *
+ * `industry`, `products`, `usp`, `competitors` and `brandColors` are all
+ * optional, and everything that consumes them treats an empty value as
+ * "unknown" rather than as a reason to fail. A user who never opens the new
+ * fields gets exactly the behaviour they had before.
+ *
+ * ─── Why no migration ────────────────────────────────────────────────────────
+ * `brand_voices.voice` is JSONB. Adding a key to this interface adds a key to
+ * that payload and nothing else — the same additive trick `AiStudioOutput`
+ * relies on. A profile saved before these fields existed simply has them
+ * undefined, which is a state every reader already handles.
+ */
 export interface BrandVoice {
   name: string;
   description: string;
@@ -77,6 +97,21 @@ export interface BrandVoice {
   ctaStyle: CtaStyle;
   targetAudience: string;
   personality: BrandPersonality;
+
+  // ── Brand Intelligence ──
+  /** e.g. "luxury weddings", "developer tooling". */
+  industry?: string;
+  /** What the brand actually sells. */
+  products?: string[];
+  /** The one line explaining why someone picks this brand over a rival. */
+  usp?: string;
+  /**
+   * Named rivals. Distinct from {@link CompetitorContext}, which is a single
+   * competitor the studio researches in depth — this is the standing list.
+   */
+  competitors?: string[];
+  /** Hex codes. Compared against the palette the image actually contains. */
+  brandColors?: string[];
 }
 
 export const EMPTY_BRAND_VOICE: BrandVoice = {
@@ -105,6 +140,11 @@ export const DEFAULT_BRAND_VOICE: BrandVoice = {
   ctaStyle: "Soft",
   targetAudience: "",
   personality: "Professional",
+  industry: "",
+  products: [],
+  usp: "",
+  competitors: [],
+  brandColors: [],
 };
 
 /**
@@ -372,6 +412,18 @@ export interface AiStudioOutput {
   campaign?: CampaignPlan;
   competitor?: CompetitorAnalysis;
   platformVariations?: PlatformVariations;
+  /**
+   * Marketing Intelligence's verdict — reach score, checklist, forecast.
+   *
+   * Written by a different call from every other key here, and often at a
+   * different time: a post can be generated once and re-analysed after each
+   * edit. That is why it is an ordinary optional key rather than part of the
+   * generation result — see `ai/analysis.ts`.
+   *
+   * Typed structurally rather than imported to keep this file free of a
+   * circular import; `ai/analysis.ts` imports `AiStudioOutput` from here.
+   */
+  analysis?: import("./analysis").CaptionAnalysis;
 }
 
 /** Keys of AiStudioOutput that hold generated content (i.e. not schemaVersion/meta). */
@@ -386,6 +438,7 @@ export const STUDIO_OUTPUT_KEYS: StudioOutputKey[] = [
   "campaign",
   "competitor",
   "platformVariations",
+  "analysis",
 ];
 
 export const EMPTY_GENERATION_META: GenerationMeta = {

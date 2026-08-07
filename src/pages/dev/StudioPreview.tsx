@@ -258,6 +258,259 @@ const MOCK_POST: Post = {
         notes: "Under the 280 limit with room for a link card.",
       },
     },
+
+    /**
+     * A Marketing Intelligence verdict, as the second engine returns it.
+     *
+     * Deliberately not a flattering one. The point of this preview is to check
+     * the panels against the output that is hard to render — a mid-range score
+     * with a blocker in the checklist, a dimension the model was unsure about,
+     * and one platform failing outright. A mock scoring 94 across the board
+     * would show none of the states that actually need looking at.
+     */
+    analysis: {
+      reachScore: 68,
+      scores: {
+        hook: {
+          score: 8,
+          confidence: "High",
+          reason: "Opens on a decision the brand made, not on the product.",
+        },
+        visual: {
+          score: 7,
+          confidence: "Medium",
+          reason: "Names the amber glass, but does nothing with the morning light.",
+        },
+        platformFit: {
+          score: 4.5,
+          confidence: "High",
+          reason: "Runs well past X's limit and buries the hook on LinkedIn.",
+        },
+        audienceFit: {
+          score: 9,
+          confidence: "Medium",
+          reason: "Evidence-first framing suits a reader who checks ingredient lists.",
+        },
+        cta: {
+          score: 4,
+          confidence: "High",
+          reason: "Ends on a claim about stability with nothing to do next.",
+        },
+        readability: {
+          score: 8,
+          confidence: "High",
+          reason: "Two short blocks, no sentence over twenty words.",
+        },
+        hashtags: {
+          score: 5,
+          confidence: "Low",
+          reason: "#skincare is too broad to reach anyone specific.",
+        },
+      },
+      weights: {
+        hook: 0.22,
+        visual: 0.16,
+        platformFit: 0.16,
+        audienceFit: 0.14,
+        cta: 0.13,
+        readability: 0.1,
+        hashtags: 0.09,
+      },
+      explanation: {
+        strengths: [
+          "The nine-month delay is a specific, checkable claim — rare in skincare copy.",
+          "Audience fit: evidence-first framing suits a reader who checks ingredient lists.",
+        ],
+        weaknesses: [
+          "Nothing asks the reader to do anything.",
+          "Call to action: ends on a claim about stability with nothing to do next.",
+          "x: 380 characters against a 280 limit — X will reject or cut this.",
+        ],
+      },
+      metrics: {
+        characterCount: 380,
+        wordCount: 64,
+        sentenceCount: 4,
+        paragraphCount: 2,
+        lineCount: 3,
+        emojiCount: 0,
+        hashtagCount: 3,
+        mentionCount: 0,
+        linkCount: 0,
+        readingTimeSeconds: 20,
+        averageWordsPerSentence: 16,
+        longestParagraphWords: 38,
+        readingEase: 64,
+        hookCharacterCount: 56,
+        endsWithQuestion: false,
+      },
+      platforms: [
+        {
+          platform: "instagram",
+          score: 8.5,
+          checks: [
+            {
+              id: "hook-before-fold",
+              label: "Hook lands before Instagram truncates",
+              status: "pass",
+              detail: "The opening line is 56 characters and Instagram shows 125.",
+            },
+            {
+              id: "hashtag-count",
+              label: "Hashtag count suits Instagram",
+              status: "warn",
+              detail:
+                "3 hashtags. Instagram posts do better with at least 3 — and these are broad.",
+            },
+          ],
+          recommendations: [
+            "Put the 3 hashtags in the first comment rather than the caption — same reach, and the caption stays readable.",
+          ],
+        },
+        {
+          platform: "x",
+          score: 4.5,
+          checks: [
+            {
+              id: "length-limit",
+              label: "Within the X limit",
+              status: "fail",
+              detail: "380 characters against a 280 limit — X will reject or cut this.",
+            },
+            {
+              id: "cta-present",
+              label: "Asks the reader to do something",
+              status: "warn",
+              detail:
+                "No obvious call to action. Even a question at the end gives the reader somewhere to go.",
+            },
+          ],
+          recommendations: ["Cut 100 characters to fit X."],
+        },
+      ],
+      engagement: {
+        saves: "High",
+        shares: "Medium",
+        comments: "Low",
+        clicks: "Low",
+        rationale:
+          "A specific technical claim gets saved for later and rarely argued with, and there is nothing here to click.",
+      },
+      checklist: {
+        readiness: 62,
+        items: [
+          {
+            id: "within-platform-limits",
+            label: "Fits every platform's character limit",
+            passed: false,
+            severity: "blocker",
+            fix: "Too long for x. Trim it before publishing.",
+          },
+          {
+            id: "clear-cta",
+            label: "Asks the reader to do something",
+            passed: false,
+            severity: "important",
+            fix: "Close with one clear next step — a question, a link, or an instruction.",
+          },
+          {
+            id: "hashtag-count",
+            label: "Hashtag count suits every platform",
+            passed: false,
+            severity: "important",
+            fix: "3 hashtags. Instagram posts do better with at least 3 — and these are broad.",
+          },
+          {
+            id: "strong-opening-line",
+            label: "Opening line survives the feed cut-off",
+            passed: true,
+            severity: "important",
+          },
+          { id: "image-attached", label: "Has an image", passed: true, severity: "important" },
+          {
+            id: "readable-blocks",
+            label: "Broken into readable blocks",
+            passed: true,
+            severity: "polish",
+          },
+          {
+            id: "sentence-length",
+            label: "Sentences are easy to scan",
+            passed: true,
+            severity: "polish",
+          },
+        ],
+      },
+      improvements: [
+        {
+          dimension: "cta",
+          issue: "The caption ends on a stability claim and asks for nothing.",
+          suggestion:
+            "Add a final line pointing at the day-90 results — the evidence is the offer for this audience.",
+          estimatedGain: 9,
+        },
+        {
+          dimension: "platformFit",
+          issue: "The same 380 characters go out to X, which cuts at 280.",
+          suggestion:
+            "Write the X version down to the bottle argument alone and drop the pH detail.",
+          estimatedGain: 7,
+        },
+        {
+          dimension: "hashtags",
+          issue: "#skincare competes with millions of posts.",
+          suggestion:
+            "Swap it for two ingredient-level tags the target reader actually follows.",
+          estimatedGain: 4,
+        },
+      ],
+      brand: {
+        name: "Aurora",
+        description: "Clinical skincare with a calm, editorial voice.",
+        mission: "Make evidence-led skincare feel effortless.",
+        industry: "Beauty",
+        audience: "Women 25–40, skincare-literate",
+        tone: "Professional",
+        writingStyle: "Conversational",
+        personality: "Premium",
+        products: ["Skincare"],
+        usp: "",
+        competitors: [],
+        ctaStyle: "Soft",
+        emojiStyle: "Light",
+        wordsToUse: ["crafted", "clinical", "ritual"],
+        wordsToAvoid: ["cheap", "miracle"],
+        brandColors: ["#1A1A2E", "#E94560", "#F5F0E8"],
+        completeness: 82,
+        // `industry` and `products` were never typed by the user — the image
+        // supplied both, and the panel should be able to say so.
+        provenance: {
+          name: "brand",
+          description: "brand",
+          mission: "brand",
+          industry: "image",
+          products: "image",
+          audience: "brand",
+          tone: "brand",
+          writingStyle: "brand",
+          personality: "brand",
+          ctaStyle: "brand",
+          emojiStyle: "brand",
+          wordsToUse: "brand",
+          wordsToAvoid: "brand",
+          brandColors: "image",
+        },
+      },
+      meta: {
+        analysisVersion: "1.0.0",
+        weightsVersion: "1.0.0",
+        promptVersion: 1,
+        provider: "gemini",
+        model: "gemini-2.0-flash",
+        durationMs: 3140,
+        analysedAt: "2026-08-06T09:16:12.004Z",
+      },
+    },
   },
 };
 

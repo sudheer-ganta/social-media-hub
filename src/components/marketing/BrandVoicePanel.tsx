@@ -341,6 +341,77 @@ export function BrandVoicePanel({
                 </div>
               </div>
 
+              {/* ── Market position ──────────────────────────────────────
+                  Everything above describes how the brand *sounds*, which is
+                  enough to write in the right voice and not enough to judge
+                  whether the copy will sell anything. These four are what the
+                  analyser needs: what is sold, in which market, why it wins,
+                  and against whom. All optional — a blank field is read as
+                  "unknown", never as a reason to fail. */}
+              <div className="space-y-3 rounded-lg border border-dashed p-3">
+                <div>
+                  <p className="text-xs font-medium">Market position</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Used to score reach, not just to set the voice. Anything you
+                    leave blank is inferred from the image where possible.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Industry</Label>
+                    <Input
+                      value={voice.industry ?? ""}
+                      onChange={(e) => set("industry", e.target.value)}
+                      placeholder="Luxury weddings"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Products / Services</Label>
+                    <TagInput
+                      value={voice.products ?? []}
+                      onChange={(tags) => set("products", tags)}
+                      placeholder="Venue hire, planning…"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    Unique Selling Point
+                  </Label>
+                  <Input
+                    value={voice.usp ?? ""}
+                    onChange={(e) => set("usp", e.target.value)}
+                    placeholder="The only candlelit hall licensed for winter ceremonies"
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Competitors</Label>
+                    <TagInput
+                      value={voice.competitors ?? []}
+                      onChange={(tags) => set("competitors", tags)}
+                      placeholder="Rival brand names…"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Brand Colours</Label>
+                    {/* Hex only. "Our signature gold" tells a model nothing it
+                        can act on, and passing it through would make the brand
+                        block read as precise when it is not. */}
+                    <TagInput
+                      value={voice.brandColors ?? []}
+                      onChange={(tags) => set("brandColors", tags)}
+                      placeholder="#1A1A2E…"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Words */}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
