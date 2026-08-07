@@ -12,6 +12,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root endpoint so it doesn't show "Cannot GET /"
+app.get('/', (req, res) => {
+  res.json({ message: 'Flow Post API is running perfectly!' });
+});
+
 import { requireAuth } from './middleware/auth.middleware';
 
 // Protected endpoint to test auth middleware
