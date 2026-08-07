@@ -35,7 +35,7 @@ const MOBILE_NAV = [
 export function Topbar() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const title = PAGE_TITLES[location.pathname] ?? "Social Content Hub";
+  const title = PAGE_TITLES[location.pathname] ?? "Flow Post";
 
   return (
     <header className="glass sticky top-0 z-20 border-b">

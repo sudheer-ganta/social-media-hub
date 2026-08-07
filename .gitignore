@@ -12,3 +12,4 @@ npm-debug.log*
 .idea
 
 /generated/prisma
+server/src/generated

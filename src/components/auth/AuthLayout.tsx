@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { CalendarClock, ImageUp, Send, Sparkles } from "lucide-react";
 import { SupabaseNotice } from "@/components/shared/SupabaseNotice";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { Footer } from "@/components/layout/Footer";
 
 interface AuthLayoutProps {
   title: string;
@@ -33,7 +34,7 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
               <Sparkles className="h-5 w-5" />
             </div>
-            <span className="text-lg font-bold">Social Content Hub</span>
+            <span className="text-lg font-bold">Flow Post</span>
           </div>
 
           <div className="space-y-6">
@@ -64,13 +65,13 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
           </div>
 
           <p className="text-xs text-primary-foreground/70">
-            © {new Date().getFullYear()} Social Content Hub
+            © {new Date().getFullYear()} Flow Post
           </p>
         </div>
       </div>
 
       {/* Form panel */}
-      <div className="flex items-center justify-center px-4 py-10 sm:px-8">
+      <div className="flex items-center justify-center px-4 py-10 sm:px-8 relative">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -81,7 +82,7 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-glow">
               <Sparkles className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-bold">Social Content Hub</span>
+            <span className="font-bold">Flow Post</span>
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
@@ -91,6 +92,9 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
             {isSupabaseConfigured() ? children : <SupabaseNotice />}
           </div>
         </motion.div>
+        <div className="absolute bottom-4 w-full">
+          <Footer />
+        </div>
       </div>
     </div>
   );

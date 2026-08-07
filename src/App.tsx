@@ -14,6 +14,8 @@ import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
 import AiStudio from "@/pages/AiStudio";
 import StudioPreview from "@/pages/dev/StudioPreview";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
 
 export default function App() {
   return (
@@ -25,6 +27,8 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
 
           {/* Protected app routes */}
           <Route

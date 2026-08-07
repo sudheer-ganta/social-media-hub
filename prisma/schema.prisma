@@ -1,7 +1,12 @@
 // Social Content Hub — database schema, managed by Prisma Migrate.
 //
-// No `generator` block on purpose: the frontend talks to Supabase via
-// supabase-js, so Prisma is a migration tool here, not a runtime client.
+// Two consumers, two access paths:
+//   • the React frontend reads/writes `posts` and `brand_voices` through
+//     supabase-js (PostgREST), so those models keep snake_case *field* names
+//     that match the JSON the browser sees.
+//   • the Express backend (server/) reads/writes the integration tables
+//     through Prisma Client. Those models use idiomatic camelCase fields
+//     @map'd onto snake_case columns, and are never exposed to PostgREST.
 //
 // Not expressible in the Prisma schema language (they live in the
 // migration SQL instead — see prisma/migrations/*/migration.sql):
@@ -19,18 +24,26 @@ datasource db {
   provider = "postgresql"
 }
 
+// Generated into the backend's source tree, because the backend is the only
+// Prisma Client consumer. CommonJS to match server/tsconfig.json.
+generator client {
+  provider     = "prisma-client"
+  output       = "../server/src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
 model Post {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title        String
-  caption      String   @default("")
-  image_url    String   @default("")
-  platforms    Json     @default("[]")
-  status       String   @default("draft")
-  publish_date DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
-  publish_time DateTime @default(dbgenerated("'09:00:00'::time without time zone")) @db.Time(6)
-  created_by   String   @default(dbgenerated("auth.uid()")) @db.Uuid
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+  caption      String     @default("")
+  image_url    String     @default("")
+  platforms    Json       @default("[]")
+  status       PostStatus @default(DRAFT)
+  publish_date DateTime   @default(dbgenerated("CURRENT_DATE")) @db.Date
+  publish_time DateTime   @default(dbgenerated("'09:00:00'::time without time zone")) @db.Time(6)
+  created_by   String     @default(dbgenerated("auth.uid()")) @db.Uuid
+  created_at   DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime   @default(now()) @db.Timestamptz(6)
 
   // Automation pipeline (written by Make.com / AI scenarios)
   ai_status           String    @default("pending")
@@ -46,6 +59,10 @@ model Post {
   // rather than a column here, so they need no migration.
   ai_studio_input  Json? // AiStudioInput  — frontend writes before triggering Make
   ai_studio_output Json? // AiStudioOutput — Make writes back after generation
+
+  // Per-network publish attempts, one row per provider. Supersedes the
+  // `platform_results` JSON blob for anything the backend publishes itself.
+  post_platforms PostPlatform[]
 
   @@index([created_by])
   @@index([status])
@@ -71,4 +88,112 @@ model BrandVoice {
   @@index([created_by])
   @@index([created_at(sort: Desc)])
   @@map("brand_voices")
+}
+
+// ─── Integrations (backend-only, via Prisma Client) ──────────────────────────
+//
+// These three tables are written exclusively by the Express backend. They have
+// RLS enabled with *no* policies, which makes them invisible to the anon and
+// authenticated PostgREST roles — the browser can never read an OAuth token,
+// even with a valid session. The backend connects as the database owner, which
+// bypasses RLS. Anything the UI needs about a connection is served by the API,
+// which returns profile fields only and never the encrypted token columns.
+
+/// One connected social network per user, per provider account.
+/// Tokens are stored as AES-256-GCM ciphertext — see
+/// server/src/services/encryption.service.ts. Nothing writes them in plaintext.
+model SocialAccount {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  displayName       String? @map("display_name")
+  username          String?
+  profileImage      String? @map("profile_image")
+
+  encryptedAccessToken  String  @map("encrypted_access_token")
+  encryptedRefreshToken String? @map("encrypted_refresh_token")
+
+  /// When the access token stops working. Null for providers that don't expire.
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  status SocialAccountStatus @default(CONNECTED)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// Reconnecting the same LinkedIn account upserts this row rather than
+  /// stacking duplicates, which is what makes the OAuth callback idempotent.
+  @@unique([userId, provider, providerAccountId])
+  @@index([userId])
+  @@index([provider, status])
+  @@map("social_accounts")
+}
+
+enum SocialAccountStatus {
+  CONNECTED
+  EXPIRED
+  REVOKED
+  ERROR
+
+  @@map("social_account_status")
+}
+
+/// Append-only audit trail. Written through activity.service.ts, never
+/// directly — see server/src/services/activity.service.ts.
+model ActivityLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  action    String
+  provider  String?
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action])
+  @@map("activity_logs")
+}
+
+/// One publish attempt per post per network. `publishedId` is the provider's
+/// own id for the created post (LinkedIn's URN, for example), which is what
+/// later lets us link out to it or delete it.
+model PostPlatform {
+  id           String        @id @default(uuid()) @db.Uuid
+  postId       String        @map("post_id") @db.Uuid
+  provider     String
+  status       PublishStatus @default(PENDING)
+  publishedId  String?       @map("published_id")
+  errorMessage String?       @map("error_message")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, provider])
+  @@index([postId])
+  @@index([status])
+  @@map("post_platforms")
+}
+
+enum PublishStatus {
+  PENDING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+
+  @@map("publish_status")
+}
+
+/// The publishing lifecycle of a post. Labels are lowercase in the database so
+/// the existing supabase-js frontend — which reads and writes 'draft',
+/// 'scheduled', 'published' as plain strings — keeps working unchanged.
+/// QUEUED is new in Sprint 2: handed to the publisher, not yet in flight.
+enum PostStatus {
+  DRAFT      @map("draft")
+  SCHEDULED  @map("scheduled")
+  QUEUED     @map("queued")
+  PUBLISHING @map("publishing")
+  PUBLISHED  @map("published")
+  FAILED     @map("failed")
+
+  @@map("post_status")
 }

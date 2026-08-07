@@ -1,8 +1,15 @@
 import type { AiStudioInput, AiStudioOutput } from "@/ai/types";
 
+/**
+ * Mirrors the `post_status` enum in the database (see prisma/schema.prisma).
+ * `queued` is written only by the backend publisher — a post it has claimed
+ * but not yet started sending — so the UI never sets it, but must be able to
+ * read it.
+ */
 export type PostStatus =
   | "draft"
   | "scheduled"
+  | "queued"
   | "publishing"
   | "published"
   | "failed";

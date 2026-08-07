@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { Footer } from "@/components/layout/Footer";
 
 const COLLAPSE_KEY = "sch-sidebar-collapsed";
 
@@ -25,11 +26,12 @@ export function AppLayout() {
       <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapse} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
-        <main className="flex-1">
+        <main className="flex-1 flex flex-col">
           <AnimatePresence mode="wait">
             <Outlet key={location.pathname} />
           </AnimatePresence>
         </main>
+        <Footer />
       </div>
     </div>
   );

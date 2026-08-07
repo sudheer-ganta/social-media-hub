@@ -15,6 +15,10 @@ export function getWorkflowStatus(post: Post): WorkflowStatus {
       return "failed";
     case "published":
       return "published";
+    // Claimed by the backend publisher but not yet sent. Collapsed into
+    // "publishing" rather than given its own badge: the distinction matters to
+    // the scheduler, not to someone watching their post go out.
+    case "queued":
     case "publishing":
       return "publishing";
     case "scheduled":

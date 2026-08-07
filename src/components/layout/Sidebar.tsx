@@ -102,7 +102,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
               className="min-w-0"
             >
               <p className="truncate text-sm font-bold leading-tight">
-                Social Content Hub
+                Flow Post
               </p>
               <p className="truncate text-[11px] text-muted-foreground">
                 Content workspace
