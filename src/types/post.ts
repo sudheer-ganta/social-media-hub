@@ -40,6 +40,47 @@ export interface PlatformResult {
   error?: string;
 }
 
+/**
+ * Mirrors the `publish_status` enum in the database — one row per network per
+ * post, written only by the backend publisher.
+ */
+export type PublishStatus = "PENDING" | "PUBLISHING" | "PUBLISHED" | "FAILED";
+
+/** One network's publish attempt, as `GET /api/posts/:id/publish` returns it. */
+export interface PostPlatformState {
+  provider: string;
+  /** Resolved from the backend catalogue, so the UI never maps ids to names. */
+  providerName: string;
+  status: PublishStatus;
+  /** The network's own id, e.g. `urn:li:share:…`. Null until published. */
+  publishedId: string | null;
+  /** A permalink, or null when one cannot be built. Drives "View on LinkedIn". */
+  url: string | null;
+  /**
+   * Already written for a member — the backend translates provider errors
+   * before storing them, so this is safe to render as-is.
+   */
+  errorMessage: string | null;
+}
+
+/** Where a post stands across every network. */
+export interface PublishState {
+  postId: string;
+  status: string;
+  publishedAt: string | null;
+  platforms: PostPlatformState[];
+}
+
+/** What a successful `POST /api/posts/:id/publish` resolves with. */
+export interface PublishResult {
+  postId: string;
+  provider: string;
+  status: "published";
+  publishedId: string;
+  url: string | null;
+  publishedAt: string;
+}
+
 export interface Post {
   id: string;
   title: string;

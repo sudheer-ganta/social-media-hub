@@ -97,6 +97,111 @@ export async function startPlatformPublish(
   });
 }
 
+/** Why {@link claimPlatformPublish} refused. */
+export type PublishClaimRefusal = 'in_progress' | 'already_published';
+
+export type PublishClaim =
+  | { claimed: true }
+  | { claimed: false; reason: PublishClaimRefusal };
+
+/**
+ * Takes exclusive ownership of one network's publish attempt, or reports why it
+ * could not.
+ *
+ * This is the duplicate-publish guard, and it is a *database* guard on purpose.
+ * Disabling the button in the browser stops the common case; it does nothing
+ * about a double-submit that beats the re-render, two open tabs, a retried
+ * request, or a second server instance. Publishing the same post to someone's
+ * professional feed twice is not a cosmetic bug, so the check has to happen
+ * where the concurrency actually resolves.
+ *
+ * Two atomic steps, both relying on constraints rather than on read-then-write:
+ *
+ *  1. A conditional `updateMany` that only matches a row sitting in PENDING or
+ *     FAILED. Two requests racing means exactly one sees `count === 1`.
+ *  2. When no row exists at all, a plain `create`. The unique index on
+ *     (post_id, provider) is what arbitrates — the loser gets P2002 and is
+ *     told the attempt is already in flight.
+ *
+ * A PUBLISHED row is never reclaimed. Retrying a *failed* publish is a normal
+ * thing to want; republishing a successful one is almost always a mistake, and
+ * the caller is told so rather than silently posting again.
+ */
+export async function claimPlatformPublish(
+  postId: string,
+  provider: string,
+): Promise<PublishClaim> {
+  const { count } = await prisma.postPlatform.updateMany({
+    where: {
+      postId,
+      provider,
+      status: { in: [PublishStatus.PENDING, PublishStatus.FAILED] },
+    },
+    data: {
+      status: PublishStatus.PUBLISHING,
+      errorMessage: null,
+      publishedId: null,
+    },
+  });
+  if (count === 1) return { claimed: true };
+
+  const existing = await prisma.postPlatform.findUnique({
+    where: { postId_provider: { postId, provider } },
+  });
+
+  if (existing) {
+    return {
+      claimed: false,
+      reason:
+        existing.status === PublishStatus.PUBLISHED
+          ? 'already_published'
+          : 'in_progress',
+    };
+  }
+
+  try {
+    await prisma.postPlatform.create({
+      data: { postId, provider, status: PublishStatus.PUBLISHING },
+    });
+    return { claimed: true };
+  } catch (error) {
+    // P2002 — a concurrent request created the row between our read and this
+    // write. That request owns the attempt; this one steps aside.
+    if (isUniqueViolation(error)) {
+      return { claimed: false, reason: 'in_progress' };
+    }
+    throw error;
+  }
+}
+
+/**
+ * Releases a claim without recording a failure against the network.
+ *
+ * For the case where we claimed the attempt and then found a problem on *our*
+ * side — no connection, a caption that cannot be published — before anything
+ * was sent. Leaving the row in PUBLISHING would wedge the post forever, and
+ * writing FAILED would put a LinkedIn-shaped error on a post LinkedIn never
+ * saw.
+ */
+export async function releasePlatformClaim(
+  postId: string,
+  provider: string,
+): Promise<void> {
+  await prisma.postPlatform.updateMany({
+    where: { postId, provider, status: PublishStatus.PUBLISHING },
+    data: { status: PublishStatus.PENDING, errorMessage: null },
+  });
+}
+
+/** Prisma's unique-constraint error, without importing its error classes. */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'P2002'
+  );
+}
+
 export async function markPlatformPublished(
   postId: string,
   provider: string,
@@ -138,6 +243,16 @@ export async function listPlatformsForPost(
   });
 }
 
+/** One network's attempt for one post, or null if it has never been tried. */
+export async function findPlatformForPost(
+  postId: string,
+  provider: string,
+): Promise<PostPlatform | null> {
+  return prisma.postPlatform.findUnique({
+    where: { postId_provider: { postId, provider } },
+  });
+}
+
 export const postRepository = {
   findById,
   findByIdForUser,
@@ -145,7 +260,10 @@ export const postRepository = {
   updateStatus,
   claimForPublishing,
   startPlatformPublish,
+  claimPlatformPublish,
+  releasePlatformClaim,
   markPlatformPublished,
   markPlatformFailed,
   listPlatformsForPost,
+  findPlatformForPost,
 };

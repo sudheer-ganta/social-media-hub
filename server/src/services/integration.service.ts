@@ -382,7 +382,9 @@ const TIMELINE_ACTIONS = new Set<string>([
   ActivityAction.SOCIAL_CONNECT,
   ActivityAction.SOCIAL_DISCONNECT,
   ActivityAction.SOCIAL_REFRESH,
+  ActivityAction.POST_PUBLISH_STARTED,
   ActivityAction.POST_PUBLISH,
+  ActivityAction.POST_PUBLISH_FAILED,
   ActivityAction.FAILURE,
 ]);
 
@@ -498,11 +500,24 @@ function describeActivity(
         tone: 'positive',
       };
     }
+    case ActivityAction.POST_PUBLISH_STARTED:
+      return {
+        title: `Publishing to ${network}`,
+        description: asString(details.title) ?? asString(details.postId),
+        tone: 'neutral',
+      };
     case ActivityAction.POST_PUBLISH:
       return {
         title: `Published to ${network}`,
         description: asString(details.title) ?? asString(details.postId),
         tone: 'positive',
+      };
+    case ActivityAction.POST_PUBLISH_FAILED:
+      return {
+        title: `Publish to ${network} failed`,
+        // Already member-facing — see activityService.logPublishFailed.
+        description: asString(details.reason) ?? asString(details.title),
+        tone: 'negative',
       };
     case ActivityAction.FAILURE:
       return {

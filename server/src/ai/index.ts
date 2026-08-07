@@ -33,6 +33,17 @@ export {
   buildVisionPrompt,
   VISION_PROMPT_VERSION,
 } from './prompts/vision.prompt';
+export {
+  buildAltTextPrompt,
+  ALT_TEXT_PROMPT_VERSION,
+} from './prompts/alt-text.prompt';
 export { generateCaption } from './generators/caption.generator';
 export { analyseImage } from './generators/image-analysis.generator';
-export { fetchInlineImage, ImageFetchError } from './vision/image-source';
+export { generateAltText } from './generators/alt-text.generator';
+export {
+  fetchImageBytes,
+  fetchInlineImage,
+  ImageFetchError,
+  type FetchedImage,
+  type FetchImageOptions,
+} from './vision/image-source';

@@ -11,7 +11,8 @@
     "verify:sprint2": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint2.ts",
     "verify:sprint33": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint33.ts",
     "verify:sprint41": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint41.ts",
-    "verify:sprint42": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint42.ts"
+    "verify:sprint42": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint42.ts",
+    "verify:publish": "ts-node-dev --transpile-only --quiet src/scripts/verify-publish.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

@@ -9,6 +9,7 @@ import { assertLinkedInConfigured, linkedinConfig } from './config';
 import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode } from './token';
 import { verify } from './verify';
+import { publish } from './publisher';
 import { getCatalogEntry } from '../catalog';
 import { socialConnectionService } from '../../services/social-connection.service';
 import { buildIntegrationsRedirect } from '../../services/oauth-redirect';
@@ -260,4 +261,8 @@ export const linkedinProvider: Provider = {
   // Sprint 3.3 — Refresh Connection. Not part of the OAuth flow above: it is
   // called from the service layer with a decrypted token, never from a route.
   verify,
+  // Sprint 4.2 — publishing; 4.3 — media. Same shape as `verify`: driven by the
+  // publish service with a decrypted token, never wired to a route. Text and
+  // image posts go through this one method; see publisher.ts.
+  publish,
 };

@@ -89,6 +89,104 @@ export interface LinkedInProfile {
   profileImage: string | null;
 }
 
+/**
+ * The kinds of media a post can carry.
+ *
+ * All four of LinkedIn's are named here even though only `image` uploads
+ * today. That is the point: the type is the contract, and a kind that exists
+ * in the union but not in `media.ts` fails as an explicit "not supported yet"
+ * rather than as a shape nobody modelled. Adding video is a branch in
+ * {@link import('./media').uploadMedia}, not a second upload system.
+ */
+export type LinkedInMediaKind = 'image' | 'video' | 'document';
+
+/**
+ * One piece of media, already fetched, on its way to LinkedIn.
+ *
+ * Bytes rather than a URL, deliberately. Downloading a member-supplied address
+ * is a server-side request forgery primitive and this backend has exactly one
+ * vetted way to do it (`ai/vision/image-source.ts`); handing the provider a URL
+ * would make every provider a second place that has to get that right.
+ */
+export interface LinkedInMediaAsset {
+  kind: LinkedInMediaKind;
+  /** From the response that produced these bytes. Lowercased, no charset. */
+  mimeType: string;
+  data: Buffer;
+  byteLength: number;
+  /** Null when the format's header could not be read — see the validator. */
+  width: number | null;
+  height: number | null;
+  /**
+   * Accessibility text. Null is allowed and simply omits the field; LinkedIn
+   * does not require it. Generating one when the member has not written one is
+   * the publish service's job, not this layer's.
+   */
+  altText: string | null;
+}
+
+/** One asset that made it to LinkedIn, and the URN that now refers to it. */
+export interface LinkedInUploadedMedia {
+  kind: LinkedInMediaKind;
+  /** `urn:li:image:…` from the Images API, `urn:li:digitalmediaAsset:…` from Assets. */
+  urn: string;
+  altText: string | null;
+  /** Which upload surface produced the URN. Decides the post body's shape. */
+  endpoint: LinkedInMediaEndpoint;
+}
+
+/**
+ * The two upload surfaces, which pair with the two publishing surfaces.
+ *
+ * `images` (versioned `/rest/images`) pairs with `/rest/posts`; `assets`
+ * (`/v2/assets`) pairs with `/v2/ugcPosts`. They are **not** interchangeable
+ * after the fact — see the note in `publisher.ts` about why the choice is made
+ * before a single byte is uploaded.
+ */
+export type LinkedInMediaEndpoint = 'images' | 'assets';
+
+/**
+ * Everything `publisher.ts` needs to create one post.
+ *
+ * Deliberately not a `Post` or a `SocialAccount`: the provider layer takes
+ * primitives so it stays ignorant of our tables. Assembling this from a draft
+ * and a connection is the publish service's job.
+ */
+export interface LinkedInPublishInput {
+  /**
+   * Plaintext, decrypted by the caller immediately before this call. The
+   * publisher holds it for the duration of one HTTP request and never logs,
+   * stores or echoes it.
+   */
+  accessToken: string;
+  /** The OIDC `sub` we stored at connect time. Becomes `urn:li:person:{sub}`. */
+  providerAccountId: string;
+  /** The member's text, unescaped. The formatter handles little text format. */
+  caption: string;
+  /**
+   * Attached media, in the order it should appear. Absent or empty publishes a
+   * text post — the publisher branches on this and nothing above it needs to
+   * know which of the two happened.
+   */
+  media?: LinkedInMediaAsset[];
+}
+
+/** What a successful publish hands back. Provider-neutral by design. */
+export interface LinkedInPublishResult {
+  /** LinkedIn's own id, e.g. `urn:li:share:6844785523593134080`. */
+  urn: string;
+  /**
+   * A permalink built from the URN, or null when the URN's shape is one we
+   * cannot construct a URL for. Null means the UI hides "View on LinkedIn"
+   * rather than offering a link that goes nowhere.
+   */
+  url: string | null;
+  /** Which of LinkedIn's two publishing endpoints actually created the post. */
+  endpoint: 'posts' | 'ugcPosts';
+  /** URNs of any media attached, in post order. Empty for a text post. */
+  mediaUrns: string[];
+}
+
 /** What a completed token exchange hands back to the callback. */
 export interface LinkedInAccessToken {
   /** Plaintext. Encrypted by the repository before it reaches the database. */

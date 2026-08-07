@@ -16,6 +16,13 @@ export const env = {
   LINKEDIN_CLIENT_ID: process.env.LINKEDIN_CLIENT_ID || '',
   LINKEDIN_CLIENT_SECRET: process.env.LINKEDIN_CLIENT_SECRET || '',
   LINKEDIN_REDIRECT_URI: process.env.LINKEDIN_REDIRECT_URI || '',
+  // The versioned REST surface LinkedIn's publishing API lives on, YYYYMM.
+  //
+  // In the environment because it *expires*: LinkedIn supports each monthly
+  // version for a minimum of one year and then sunsets it, at which point
+  // every publish starts failing with a deprecated-version error. Bumping a
+  // deployed backend must not require a code change and a redeploy.
+  LINKEDIN_API_VERSION: process.env.LINKEDIN_API_VERSION || '202607',
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY || '',
 
   // AI generation (Sprint 4.1). The Gemini key is read here and used only by

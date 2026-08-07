@@ -43,6 +43,17 @@ const SUPPORTED_MIME_TYPES = new Set([
  */
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
+/**
+ * ─── Two callers, one fetcher ────────────────────────────────────────────────
+ *
+ * The guard below is the only vetted way this backend dials a user-supplied
+ * address, so publishing reuses it rather than growing a second downloader.
+ * The AI path wants base64 for a model part; the publish path wants a Buffer
+ * to PUT at LinkedIn. Both go through {@link fetchImageBytes}, which is where
+ * the SSRF protection lives — the format each caller needs is a detail layered
+ * on top, never a reason to fetch differently.
+ */
+
 /** The user is watching a spinner, and two model calls still have to happen. */
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -53,12 +64,28 @@ const MAX_REDIRECTS = 3;
 const IMAGE_FETCH_USER_AGENT =
   'SocialContentHub/1.0 (+image analysis for the post being composed)';
 
+/**
+ * Why a fetch failed.
+ *
+ * Callers act on these differently, which is the whole reason they are
+ * distinguished: `format` is the one a caller can sometimes *fix* by asking
+ * the host for different bytes, where `address` and `size` are final. Without
+ * this the publish path would have to pattern-match on message text to know
+ * whether a retry could possibly help.
+ */
+export type ImageFetchReason =
+  | 'address' // bad URL, wrong scheme, or an address we refuse to dial
+  | 'format' // fetched fine, but not a content type the caller accepts
+  | 'size' // empty, or past the byte ceiling
+  | 'network'; // timeout, DNS failure, 404, 5xx
+
 /** Raised when an image cannot be used. Always recoverable — see the caller. */
 export class ImageFetchError extends Error {
   constructor(
     message: string,
     /** For the log. Can quote a URL or a vendor message. */
     readonly detail?: string,
+    readonly reason: ImageFetchReason = 'network',
   ) {
     super(message);
     this.name = 'ImageFetchError';
@@ -138,6 +165,7 @@ function assertPublicHost(hostname: string): void {
     throw new ImageFetchError(
       'That image address is not reachable.',
       `refused literal address: ${host}`,
+      'address',
     );
   }
 }
@@ -204,25 +232,54 @@ function readMimeType(header: unknown): string {
     : '';
 }
 
+/** One downloaded image, still as bytes. */
+export interface FetchedImage {
+  /** e.g. `image/jpeg`, taken from the response and lowercased. */
+  mimeType: string;
+  buffer: Buffer;
+}
+
+export interface FetchImageOptions {
+  /**
+   * What the *caller* can handle. Gemini and LinkedIn accept overlapping but
+   * different sets — LinkedIn takes no webp or heic — so the allow-list is the
+   * caller's to state rather than a constant in here.
+   */
+  allowedMimeTypes?: ReadonlySet<string>;
+  /** Hard ceiling in bytes. Enforced by axios mid-download and again after. */
+  maxBytes?: number;
+}
+
 /**
- * Downloads one image and returns it base64 encoded.
+ * Downloads one image and returns the raw bytes.
  *
- * Throws {@link ImageFetchError} for anything that means "we cannot show this
- * to the model": a bad scheme, an internal address, the wrong content type, an
- * oversized file, a timeout, a 404.
+ * Throws {@link ImageFetchError} for anything that means "we cannot use this":
+ * a bad scheme, an internal address, the wrong content type, an oversized
+ * file, a timeout, a 404.
  */
-export async function fetchInlineImage(url: string): Promise<InlineImage> {
+export async function fetchImageBytes(
+  url: string,
+  options: FetchImageOptions = {},
+): Promise<FetchedImage> {
+  const allowedMimeTypes = options.allowedMimeTypes ?? SUPPORTED_MIME_TYPES;
+  const maxBytes = options.maxBytes ?? MAX_IMAGE_BYTES;
+
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    throw new ImageFetchError('The image address could not be read.', url);
+    throw new ImageFetchError(
+      'The image address could not be read.',
+      url,
+      'address',
+    );
   }
 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     throw new ImageFetchError(
-      'Only http and https images can be analysed.',
+      'Only http and https images can be used.',
       parsed.protocol,
+      'address',
     );
   }
 
@@ -235,7 +292,7 @@ export async function fetchInlineImage(url: string): Promise<InlineImage> {
       maxRedirects: MAX_REDIRECTS,
       // Axios aborts the download once the declared or actual length passes
       // this, so an enormous file costs us a few packets rather than memory.
-      maxContentLength: MAX_IMAGE_BYTES,
+      maxContentLength: maxBytes,
       httpAgent,
       httpsAgent,
       // Every hop is a fresh chance to be pointed somewhere internal, and a
@@ -259,29 +316,33 @@ export async function fetchInlineImage(url: string): Promise<InlineImage> {
     });
 
     const mimeType = readMimeType(response.headers['content-type']);
-    if (!SUPPORTED_MIME_TYPES.has(mimeType)) {
+    if (!allowedMimeTypes.has(mimeType)) {
       throw new ImageFetchError(
-        'That file is not an image format the AI can read.',
+        `That file is not a supported image format${
+          mimeType ? ` (${mimeType})` : ''
+        }.`,
         `content-type: ${mimeType || 'none'}`,
+        'format',
       );
     }
 
     const buffer = Buffer.from(response.data);
     if (buffer.byteLength === 0) {
-      throw new ImageFetchError('The image was empty.', parsed.hostname);
-    }
-    if (buffer.byteLength > MAX_IMAGE_BYTES) {
       throw new ImageFetchError(
-        'The image is too large to analyse.',
+        'The image was empty.',
+        parsed.hostname,
+        'size',
+      );
+    }
+    if (buffer.byteLength > maxBytes) {
+      throw new ImageFetchError(
+        'The image is too large.',
         `${buffer.byteLength} bytes`,
+        'size',
       );
     }
 
-    return {
-      mimeType,
-      data: buffer.toString('base64'),
-      sizeBytes: buffer.byteLength,
-    };
+    return { mimeType, buffer };
   } catch (error) {
     if (error instanceof ImageFetchError) throw error;
 
@@ -292,6 +353,21 @@ export async function fetchInlineImage(url: string): Promise<InlineImage> {
       axiosError.message,
     ]
       .filter(Boolean)
-      .join(' · '));
+      .join(' · '), 'network');
   }
+}
+
+/**
+ * The same download, base64 encoded for a model part.
+ *
+ * Kept as its own export because every AI caller wants exactly this shape and
+ * none of them want to think about buffers.
+ */
+export async function fetchInlineImage(url: string): Promise<InlineImage> {
+  const { mimeType, buffer } = await fetchImageBytes(url);
+  return {
+    mimeType,
+    data: buffer.toString('base64'),
+    sizeBytes: buffer.byteLength,
+  };
 }

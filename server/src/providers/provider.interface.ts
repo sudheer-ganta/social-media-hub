@@ -49,6 +49,97 @@ export interface Provider {
    * decide whether an error is fatal.
    */
   verify?(accessToken: string): Promise<ProviderVerification>;
+
+  /**
+   * Optional. Publishes a post — text, or text with media — and returns the
+   * network's own id for it.
+   *
+   * Deliberately *one* method rather than `publishText` plus `publishImage`.
+   * Whether a post carries media is a property of the post, not a different
+   * operation, and a caller that has to pick the right method is a caller that
+   * has to learn each network's media rules. Providers branch internally; the
+   * publish service hands over a draft and gets back a result.
+   *
+   * Like {@link Provider.verify}, this is *not* an HTTP handler: it is called
+   * from the publish service with an already-decrypted token, never from a
+   * browser navigation. That is what lets one publish service drive every
+   * network — it assembles this input from a draft and a connection and does
+   * not care which implementation answers.
+   *
+   * Unlike `verify`, this **does** throw on failure. The distinction is
+   * deliberate: a failed verification is a routine answer about a token's
+   * health, whereas a failed publish is an exception the caller must record
+   * against the post and surface to the member.
+   */
+  publish?(input: ProviderPublishInput): Promise<ProviderPublishResult>;
+}
+
+/**
+ * The kinds of media a post can carry, across every network.
+ *
+ * Provider-neutral on purpose. LinkedIn, Instagram and X disagree about what
+ * they accept and how it is uploaded; they agree that an image is an image.
+ */
+export type ProviderMediaKind = 'image' | 'video' | 'document';
+
+/**
+ * One piece of media, already fetched, on its way to a network.
+ *
+ * Bytes rather than a URL, deliberately. Downloading a member-supplied address
+ * is a server-side request forgery primitive and this backend has exactly one
+ * vetted way to do it; handing providers a URL would make every provider a
+ * second place that has to get that right. Resolving a draft's media into this
+ * shape is the publish service's job — see `publish/services/media.service.ts`.
+ */
+export interface ProviderMediaAsset {
+  kind: ProviderMediaKind;
+  /** From the response that produced these bytes. Lowercased, no charset. */
+  mimeType: string;
+  data: Buffer;
+  byteLength: number;
+  /** Null when the format's header could not be read. Providers may still send it. */
+  width: number | null;
+  height: number | null;
+  /** Accessibility text, or null to omit it. Never an empty string. */
+  altText: string | null;
+}
+
+/**
+ * The provider-neutral publish request.
+ *
+ * Primitives only — no `Post`, no `SocialAccount`. A provider that could be
+ * handed a database row would be a provider that could reach into the
+ * database, and the layering here is the only thing stopping that.
+ */
+export interface ProviderPublishInput {
+  /**
+   * Plaintext, decrypted by the caller immediately before the call. Providers
+   * must never log, store or echo it.
+   */
+  accessToken: string;
+  /** The network's own id for the account, as stored on the connection. */
+  providerAccountId: string;
+  /** The member's text, unescaped. Per-network formatting is the provider's job. */
+  caption: string;
+  /**
+   * Attached media, in the order it should appear. Absent or empty publishes a
+   * text post. Providers reject what they cannot carry rather than dropping it
+   * silently — a post that quietly loses its image is a worse answer than one
+   * that fails with a reason.
+   */
+  media?: ProviderMediaAsset[];
+}
+
+/** What a successful publish reports back. */
+export interface ProviderPublishResult {
+  /** The network's id for the created post. Stored on `post_platforms`. */
+  urn: string;
+  /** A permalink, or null when the network gives us no way to build one. */
+  url: string | null;
+  /** Which endpoint served the request, for support and debugging. */
+  endpoint?: string;
+  /** The network's ids for any media attached, in post order. */
+  mediaUrns?: string[];
 }
 
 /** The provider-neutral profile shape a verification hands back. */

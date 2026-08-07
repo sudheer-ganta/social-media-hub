@@ -1,4 +1,5 @@
 import type { ProviderId } from './provider.interface';
+import { LINKEDIN_API_VERSION } from './linkedin/config';
 
 /**
  * Everything the Integrations UI needs to *describe* a network, whether or not
@@ -121,10 +122,16 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     brandColor: '#0A66C2',
     available: true,
     connectPath: '/auth/linkedin/connect',
-    // LinkedIn versions its REST surface by month. Recorded per connection as
-    // well (`social_accounts.provider_version`), so an account connected under
-    // an older version is identifiable after we move.
-    apiVersion: '202401',
+    // LinkedIn versions its REST surface by month, and sunsets each version
+    // after about a year — 202401, which this was pinned to until Sprint 4.2,
+    // is one of LinkedIn's own examples of a *deprecated* version header.
+    // Reading it from the provider config means the value that publishing
+    // actually sends and the value we display can never drift apart, and
+    // bumping it is an environment variable rather than an edit here.
+    //
+    // Recorded per connection as well (`social_accounts.provider_version`), so
+    // an account connected under an older version stays identifiable.
+    apiVersion: LINKEDIN_API_VERSION,
     permissions: LINKEDIN_PERMISSIONS,
   },
   {

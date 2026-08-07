@@ -20,8 +20,10 @@ import { PlatformSelector } from "./PlatformSelector";
 import { SchedulePicker } from "./SchedulePicker";
 import { AiPanel } from "./AiPanel";
 import { AiCaptionPanel } from "./AiCaptionPanel";
+import { PublishStatus } from "./PublishStatus";
 import { useCreatePost, useUpdatePost } from "@/hooks/usePosts";
 import { useAiCaption } from "@/hooks/useAiCaption";
+import { usePublishPostToProvider, usePublishState } from "@/hooks/usePublish";
 import { postsService } from "@/services";
 import { currentTime, today } from "@/utils/date";
 import type { AudienceRegister } from "@/ai/caption";
@@ -46,6 +48,8 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
   const createPost = useCreatePost();
   const updatePost = useUpdatePost();
   const ai = useAiCaption();
+  const publish = usePublishPostToProvider();
+  const { data: publishState } = usePublishState(post?.id);
 
   const defaultValues = useMemo<PostFormValues>(
     () => ({
@@ -143,6 +147,47 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
     timezone: watch("timezone"),
   };
 
+  /**
+   * Saves the form's current values and resolves with the stored post.
+   *
+   * Shared by Save Draft, Schedule and Publish so there is one definition of
+   * what "the post as it stands" means. Publishing in particular *must* go
+   * through here first: the backend sends what is stored on the row, not what
+   * the browser puts in the request, so an unsaved caption edit would silently
+   * publish the previous version.
+   */
+  const persist = async (values: PostFormValues, status: PostStatus) => {
+    const input = {
+      title: values.title,
+      caption: values.caption,
+      image_url: values.image_url,
+      platforms: values.platforms,
+      status,
+      publish_date: values.publish_date,
+      publish_time: values.publish_time,
+    };
+
+    const saved = post
+      ? await updatePost.mutateAsync({ id: post.id, input })
+      : await createPost.mutateAsync(input);
+
+    // A generation from this session belongs to the row now that one exists.
+    // Storing it keeps the AI panels populated on reload and preserves which
+    // model wrote what — the caption itself is already in `input`, edits and
+    // all, because the editor is the source of truth for that.
+    if (ai.result) {
+      try {
+        await postsService.applyAiResult(saved.id, ai.result, saved);
+      } catch (cause) {
+        // The post is saved; only its AI provenance failed to attach. Worth
+        // saying, not worth turning a successful save into an error.
+        console.error("[ai] could not attach generation to post", cause);
+      }
+    }
+
+    return saved;
+  };
+
   const submitWithStatus = (status: PostStatus) =>
     handleSubmit(async (values) => {
       if (status === "scheduled") {
@@ -154,42 +199,70 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         }
       }
 
-      const input = {
-        title: values.title,
-        caption: values.caption,
-        image_url: values.image_url,
-        platforms: values.platforms,
-        status,
-        publish_date: values.publish_date,
-        publish_time: values.publish_time,
-      };
-
-      const saved = post
-        ? await updatePost.mutateAsync({ id: post.id, input })
-        : await createPost.mutateAsync(input);
-
-      // A generation from this session belongs to the row now that one exists.
-      // Storing it keeps the AI panels populated on reload and preserves which
-      // model wrote what — the caption itself is already in `input`, edits and
-      // all, because the editor is the source of truth for that.
-      if (ai.result) {
-        try {
-          await postsService.applyAiResult(saved.id, ai.result, saved);
-        } catch (cause) {
-          // The post is saved; only its AI provenance failed to attach. Worth
-          // saying, not worth turning a successful save into an error.
-          console.error("[ai] could not attach generation to post", cause);
-        }
+      // Same reasoning as handlePublish: the save mutations toast their own
+      // failures, so this only has to stop — not navigate away from a form
+      // whose contents were never stored.
+      try {
+        await persist(values, status);
+      } catch {
+        return;
       }
 
       const messages: Partial<Record<PostStatus, string>> = {
         draft: "Draft saved",
         scheduled: "Post scheduled 🎉",
-        published: "Post published 🚀",
       };
       toast.success(messages[status] ?? "Post saved");
       navigate(status === "scheduled" ? "/calendar" : "/posts");
     });
+
+  /**
+   * Publish for real: save what is on screen, then ask the backend to send it
+   * to LinkedIn.
+   *
+   * This replaces the old Publish button, which only wrote `status:
+   * 'published'` to our own table — the post said "Published" and had never
+   * left the app. The row's status is now set by the publisher on the strength
+   * of what LinkedIn actually did, so it is saved as a draft here and moves on
+   * its own.
+   *
+   * Deliberately does *not* navigate away. The whole point of the change is
+   * that the member can see it land and click through to the live post, which
+   * they cannot do from the posts list.
+   */
+  const handlePublish = handleSubmit(async (values) => {
+    if (!values.platforms.includes("linkedin")) {
+      toast.error("Turn on LinkedIn under Platforms to publish there.");
+      return;
+    }
+
+    // Never save as "published" — that is the publisher's word to say, and
+    // saying it here is what made the old flow dishonest when LinkedIn failed.
+    //
+    // `mutateAsync` rejects on failure, and the rejection has to be caught
+    // here. Both mutations already report failures through their own `onError`
+    // toasts, so there is nothing left to *handle* — but an uncaught rejection
+    // is still a console error and, worse, skips the navigate below by
+    // unwinding rather than by decision. Catching makes the control flow say
+    // what it means: on failure, stop, and leave the member on the form with
+    // their work and the reason it did not go out.
+    try {
+      const saved = await persist(
+        values,
+        post?.status === "published" ? "published" : "draft",
+      );
+
+      await publish.mutateAsync({ postId: saved.id, provider: "linkedin" });
+
+      // A brand-new post published from /posts/new has no route of its own
+      // yet. Move to its edit URL so the publish state, and the link to the
+      // live post, survive a refresh.
+      if (!post) navigate(`/posts/${saved.id}/edit`, { replace: true });
+    } catch {
+      // Already surfaced by the mutation's onError. The post is saved either
+      // way, so retrying costs the member nothing but the click.
+    }
+  });
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
@@ -300,6 +373,13 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         onAppendHashtags={handleAppendHashtags}
       />
 
+      {/* Where this post stands on each network. Hides itself entirely until
+          there is something to report. */}
+      <PublishStatus
+        platforms={publishState?.platforms ?? []}
+        publishingProvider={publish.isPending ? "linkedin" : null}
+      />
+
       {/* The saved post's own AI content and the approval gate. Only on an
           existing post — there is nothing stored to review before that. */}
       {post && (
@@ -358,14 +438,20 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
             <CalendarClock />
             Schedule
           </Button>
+          {/* The only button that leaves the app. `loading` covers the save
+              *and* the LinkedIn round trip, and the Button component disables
+              itself while loading — which is the first of the three duplicate
+              guards. The other two are the mutation's own in-flight check and
+              the backend's conditional claim; only the last one is a
+              guarantee. See hooks/usePublish.ts. */}
           <Button
             type="button"
-            loading={isSubmitting}
-            onClick={submitWithStatus("published")}
+            loading={isSubmitting || publish.isPending}
+            onClick={handlePublish}
             className="shadow-glow"
           >
             <Send />
-            Publish
+            {publish.isPending ? "Publishing…" : "Publish"}
           </Button>
         </div>
       </div>

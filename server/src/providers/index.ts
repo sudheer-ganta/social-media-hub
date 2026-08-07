@@ -6,6 +6,10 @@ export type {
   ProviderId,
   ProviderAccountSnapshot,
   ProviderVerification,
+  ProviderPublishInput,
+  ProviderPublishResult,
+  ProviderMediaAsset,
+  ProviderMediaKind,
 } from './provider.interface';
 export { ProviderError, notImplemented } from './provider.interface';
 export { linkedinProvider } from './linkedin/oauth';

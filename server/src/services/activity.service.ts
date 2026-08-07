@@ -23,7 +23,15 @@ export const ActivityAction = {
   SOCIAL_CONNECT: 'social.connect',
   SOCIAL_DISCONNECT: 'social.disconnect',
   SOCIAL_REFRESH: 'social.refresh',
+  /**
+   * The publish lifecycle, one row per transition. Three actions rather than
+   * one because the interesting question when a publish goes wrong is *how
+   * far it got* — a started-with-no-outcome row is the signature of a crash
+   * mid-flight, which a single success/failure pair cannot express.
+   */
+  POST_PUBLISH_STARTED: 'post.publish_started',
   POST_PUBLISH: 'post.publish',
+  POST_PUBLISH_FAILED: 'post.publish_failed',
   FAILURE: 'failure',
 } as const;
 
@@ -132,6 +140,20 @@ export function logRefresh(
   });
 }
 
+/** A publish attempt was claimed and is about to be sent. */
+export function logPublishStarted(
+  userId: string,
+  provider: string,
+  details: { postId: string } & ActivityDetails,
+) {
+  return log({
+    userId,
+    action: ActivityAction.POST_PUBLISH_STARTED,
+    provider,
+    details,
+  });
+}
+
 /** A post went out to a network. */
 export function logPublish(
   userId: string,
@@ -141,6 +163,27 @@ export function logPublish(
   return log({
     userId,
     action: ActivityAction.POST_PUBLISH,
+    provider,
+    details,
+  });
+}
+
+/**
+ * A publish attempt failed.
+ *
+ * `reason` is the member-facing message, not the provider's — the audit trail
+ * is something a member reads on the Integrations page, and LinkedIn's own
+ * error strings quote our request back at us. The diagnostic version stays in
+ * the server log.
+ */
+export function logPublishFailed(
+  userId: string,
+  provider: string,
+  details: { postId: string; reason: string } & ActivityDetails,
+) {
+  return log({
+    userId,
+    action: ActivityAction.POST_PUBLISH_FAILED,
     provider,
     details,
   });
@@ -180,7 +223,9 @@ export const activityService = {
   logConnection,
   logDisconnection,
   logRefresh,
+  logPublishStarted,
   logPublish,
+  logPublishFailed,
   logFailure,
   listForUser,
 };
