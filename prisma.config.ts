@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
 // Prisma is used as the migration tool only — the app itself talks to
