@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { getSupabase } from "./lib/supabase";
+import { API_BASE_URL } from "./constants/api";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -19,7 +20,7 @@ createRoot(document.getElementById("root")!).render(
     
     const token = session?.access_token;
     
-    const res = await fetch("http://localhost:5000/me", {
+    const res = await fetch(`${API_BASE_URL}/me`, {
       headers: token ? {
         Authorization: `Bearer ${token}`,
       } : {},

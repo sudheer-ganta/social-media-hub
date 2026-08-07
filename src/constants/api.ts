@@ -6,4 +6,7 @@
  * re-exports it so nothing that already imported it from there had to change.
  */
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.PROD
+    ? "https://social-media-hub-2pdl.onrender.com"
+    : "http://localhost:5000");
