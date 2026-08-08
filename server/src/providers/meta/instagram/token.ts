@@ -45,12 +45,42 @@ export async function exchangeAuthorizationCode(
     // presenting itself. See the note on InstagramAccessToken.
     refreshToken: null,
     expiresAt: longLived.expiresAt,
-    scope: shortLived.permissions ?? null,
+    scope: toScopeString(shortLived.permissions),
     userId:
       shortLived.user_id !== undefined && shortLived.user_id !== null
         ? String(shortLived.user_id)
         : null,
   };
+}
+
+/**
+ * Meta's `permissions` as the delimited `scope` string the service layer is
+ * typed for.
+ *
+ * Business Login answers with an array; OAuth 2.0 and LinkedIn answer with one
+ * space-delimited string. That disagreement is a Meta detail and it stops here —
+ * everything downstream of {@link InstagramAccessToken} is provider-neutral, so
+ * translating the network's shape into the shared contract is this layer's job.
+ * Letting the array through is what produced `scope.split is not a function` in
+ * the callback.
+ *
+ * Comma-delimited out because that is Meta's own convention for these lists, and
+ * `parseScopes` accepts commas and spaces alike. Non-string entries are dropped
+ * rather than coerced: a `["a", null]` would otherwise stringify to `"a,null"`
+ * and record a permission nobody granted.
+ */
+export function toScopeString(
+  permissions: string | string[] | undefined,
+): string | null {
+  if (typeof permissions === 'string') return permissions || null;
+  if (!Array.isArray(permissions)) return null;
+
+  const granted = permissions.filter(
+    (permission): permission is string =>
+      typeof permission === 'string' && permission.length > 0,
+  );
+
+  return granted.length > 0 ? granted.join(',') : null;
 }
 
 /** Leg 1 — the one-hour token, plus the granted permissions and user id. */

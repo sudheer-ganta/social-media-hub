@@ -11,6 +11,8 @@ import {
   INSTAGRAM_MAX_HASHTAGS,
 } from '../providers/meta/instagram/validator';
 import { createOAuthStateStore } from '../providers/oauth-state';
+import { toScopeString } from '../providers/meta/instagram/token';
+import { parseScopes } from '../services/social-connection.service';
 import { getCatalogEntry, getProvider } from '../providers';
 import { ProviderError } from '../providers/provider.interface';
 import type { InstagramMediaAsset } from '../providers/meta/instagram/types';
@@ -275,7 +277,66 @@ console.log('\n[7] Registry and catalogue');
   ok('LinkedIn still catalogued as available');
 }
 
-console.log('\n[8] Connect hands back a URL instead of redirecting');
+console.log('\n[8] Granted scopes: Meta sends an array, LinkedIn a string');
+{
+  // The production callback failure: Business Login answers `permissions` as a
+  // JSON array, `InstagramAccessToken.scope` is typed `string | null`, and the
+  // array reached parseScopes' `.split()` as `scope.split is not a function`.
+  assert.strictEqual(
+    toScopeString(['instagram_business_basic', 'instagram_business_content_publish']),
+    'instagram_business_basic,instagram_business_content_publish',
+  );
+  ok("Meta's permissions array becomes one delimited string");
+
+  // Both scopes must survive the round trip — this is the pair the product
+  // depends on, and canPublish reads the publish one off the stored list.
+  const scopes = parseScopes(
+    toScopeString(['instagram_business_basic', 'instagram_business_content_publish']),
+  );
+  assert.deepStrictEqual(scopes, [
+    'instagram_business_basic',
+    'instagram_business_content_publish',
+  ]);
+  assert.strictEqual(getProvider('instagram')!.canPublish!(scopes), true);
+  ok('both Instagram scopes survive and still satisfy canPublish');
+
+  // The flat legacy response shape has been seen with a plain string.
+  assert.strictEqual(toScopeString('a,b'), 'a,b');
+  assert.strictEqual(toScopeString(undefined), null);
+  assert.strictEqual(toScopeString([]), null);
+  ok('a string passes through; nothing granted reads as null');
+
+  // A stray non-string must not become a permission called "null".
+  assert.strictEqual(
+    toScopeString(['instagram_business_basic', null as any, '']),
+    'instagram_business_basic',
+  );
+  ok('non-string entries are dropped, not coerced');
+
+  // parseScopes is the choke point every provider passes through, so it takes
+  // an array directly too — Facebook and Threads arrive with the same shape.
+  assert.deepStrictEqual(parseScopes(['a', 'b', 'a']), ['a', 'b']);
+  assert.deepStrictEqual(parseScopes(['a b', 'c,d']), ['a', 'b', 'c', 'd']);
+  assert.deepStrictEqual(parseScopes([]), []);
+  assert.deepStrictEqual(parseScopes(['a', null as any]), ['a']);
+  ok('parseScopes accepts an array, splits within entries, dedupes');
+
+  // LinkedIn's space-delimited string must behave exactly as it did before.
+  assert.deepStrictEqual(parseScopes('openid profile w_member_social'), [
+    'openid',
+    'profile',
+    'w_member_social',
+  ]);
+  assert.strictEqual(
+    getProvider('linkedin')!.canPublish!(parseScopes('openid profile w_member_social')),
+    true,
+  );
+  assert.deepStrictEqual(parseScopes(null), []);
+  assert.deepStrictEqual(parseScopes(undefined), []);
+  ok('LinkedIn string scopes are unchanged, and still satisfy canPublish');
+}
+
+console.log('\n[9] Connect hands back a URL instead of redirecting');
 void (async () => {
   // The regression that broke Instagram on Render: connect used to 302, which
   // meant the SPA had to reach it by navigation, which meant the session had to

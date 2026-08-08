@@ -45,8 +45,21 @@ export interface InstagramTokenPayload {
   access_token: string;
   /** The Instagram User's own id. Becomes `provider_account_id`. */
   user_id?: string | number;
-  /** Comma-delimited list of what the member actually granted. */
-  permissions?: string;
+  /**
+   * What the member actually granted.
+   *
+   * A JSON **array** — `["instagram_business_basic", …]` — on Business Login,
+   * where OAuth 2.0 and every other provider we integrate send one delimited
+   * string. This was declared as `string` alone, which typechecked cleanly and
+   * was simply untrue of the wire, so the array reached a `.split()` downstream
+   * and the callback died with `scope.split is not a function`.
+   *
+   * The string form is kept because the older flat response shape has been seen
+   * with one, and the same `readTokenPayload` accepts both shapes already.
+   * `toScopeString` in `token.ts` collapses either into the provider-neutral
+   * value the service layer is typed for.
+   */
+  permissions?: string | string[];
 }
 
 export interface InstagramTokenResponse extends Partial<InstagramTokenPayload> {

@@ -58,13 +58,31 @@ export interface ConnectAccountInput {
 }
 
 /**
- * Providers are inconsistent about the delimiter — LinkedIn uses spaces, some
- * others commas — so both are accepted and empties dropped. An absent `scope`
- * yields an empty list, which reads downstream as "unknown", not "none".
+ * Providers are inconsistent about the *shape*, not just the delimiter:
+ * LinkedIn sends one space-delimited string, Meta sends a JSON array. Both are
+ * accepted, both delimiters are accepted, and empties are dropped. An absent
+ * `scope` yields an empty list, which reads downstream as "unknown", not "none".
+ *
+ * Each provider is still expected to hand over the delimited string its
+ * `ConnectAccountInput` declares — Instagram's `toScopeString` does exactly
+ * that. Accepting an array here too is the backstop, because this is the single
+ * choke point every provider's scopes pass through, and Facebook and Threads
+ * will arrive with the same array shape that produced
+ * `scope.split is not a function`. Non-string entries are dropped rather than
+ * coerced, so a stray null cannot become a granted permission named "null".
  */
-export function parseScopes(scope: string | null | undefined): string[] {
+export function parseScopes(
+  scope: string | string[] | null | undefined,
+): string[] {
   if (!scope) return [];
-  return [...new Set(scope.split(/[\s,]+/).filter(Boolean))];
+
+  const raw = Array.isArray(scope)
+    ? scope.filter((entry): entry is string => typeof entry === 'string')
+    : [scope];
+
+  return [
+    ...new Set(raw.flatMap((entry) => entry.split(/[\s,]+/)).filter(Boolean)),
+  ];
 }
 
 /**
