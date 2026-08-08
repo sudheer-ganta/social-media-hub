@@ -52,13 +52,13 @@ export const env = {
   // endpoint and never reaches the browser.
   AI_PROVIDER: process.env.AI_PROVIDER || 'gemini',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.1-pro',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
   
-  // Per-service model mapping (defaults to GEMINI_MODEL / gemini-3.1-pro)
-  GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
-  GEMINI_CAPTION_MODEL: process.env.GEMINI_CAPTION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
-  GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
-  GEMINI_BRAND_MODEL: process.env.GEMINI_BRAND_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
+  // Per-service model mapping (defaults to GEMINI_MODEL / gemini-3.1-pro-preview)
+  GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
+  GEMINI_CAPTION_MODEL: process.env.GEMINI_CAPTION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
+  GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
+  GEMINI_BRAND_MODEL: process.env.GEMINI_BRAND_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
   GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'imagen-3.0-generate-002',
   
   // Thinking tokens for Gemini 2.5+/3.x models. Default 0 — captions are a writing task,
