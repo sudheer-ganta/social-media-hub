@@ -2,6 +2,7 @@ import {
   AiProviderError,
   analyseCaption,
   generateCaption,
+  improveCaption,
   providerForRole,
   type AnalysisRequest,
   type AudienceRegister,
@@ -11,7 +12,10 @@ import {
   type CaptionResult,
   type FunnelStage,
   type ImageAnalysis,
+  type ImprovementRequest,
+  type ImprovementTarget,
   type MarketingGoal,
+  type TargetedImprovement,
 } from '../ai';
 
 /**
@@ -454,6 +458,80 @@ export function parseAnalysisRequest(body: unknown): AnalysisRequest {
   };
 }
 
+// ─── Improvement request ─────────────────────────────────────────────────────
+
+/**
+ * The targets a client may ask to have regenerated.
+ *
+ * An allow-list rather than a pass-through, for the same reason `readPlatforms`
+ * filters to a slug: the value selects a prompt and a response schema, so a
+ * value we do not recognise must never reach the builder.
+ */
+const IMPROVEMENT_TARGETS: ImprovementTarget[] = [
+  'hook',
+  'readability',
+  'cta',
+  'hashtags',
+];
+
+/** What the analysis said, bounded — it is quoted into the prompt verbatim. */
+const MAX_FLAGGED_TEXT_LENGTH = 400;
+
+/**
+ * Turns an unknown body into an {@link ImprovementRequest}.
+ *
+ * Two fields can fail it: the target, because there is no sensible default for
+ * "which part of the post did you mean", and the caption, because there is
+ * nothing to improve without one. Everything else defaults exactly as the
+ * analysis request does.
+ */
+export function parseImprovementRequest(body: unknown): ImprovementRequest {
+  if (!body || typeof body !== 'object') {
+    throw new AiError('Send a JSON body describing what to improve.');
+  }
+
+  const input = body as Record<string, unknown>;
+
+  if (!IMPROVEMENT_TARGETS.includes(input.target as ImprovementTarget)) {
+    throw new AiError(
+      `Unknown improvement target. Expected one of: ${IMPROVEMENT_TARGETS.join(', ')}.`,
+    );
+  }
+
+  const caption = readString(input.caption, MAX_CAPTION_LENGTH);
+  if (!caption || caption.length < MIN_CAPTION_LENGTH) {
+    throw new AiError(
+      'There is not enough caption here to improve yet. Write a line or two first.',
+      422,
+    );
+  }
+
+  const imageAnalysis = readImageAnalysis(input.imageAnalysis);
+
+  return {
+    target: input.target as ImprovementTarget,
+    caption,
+    hashtags: readStringArray(input.hashtags, MAX_ANALYSED_HASHTAGS).map((tag) =>
+      tag.replace(/^#+/, ''),
+    ),
+    platforms: readPlatforms(input.platforms),
+    audience: readEnum(input.audience, AUDIENCE_REGISTERS, DEFAULT_AUDIENCE),
+    language: readString(input.language, MAX_FREE_TEXT_LENGTH) ?? 'English',
+    ...(readString(input.music, MAX_MUSIC_LENGTH) && {
+      music: readString(input.music, MAX_MUSIC_LENGTH),
+    }),
+    ...(readString(input.issue, MAX_FLAGGED_TEXT_LENGTH) && {
+      issue: readString(input.issue, MAX_FLAGGED_TEXT_LENGTH),
+    }),
+    ...(readString(input.recommendation, MAX_FLAGGED_TEXT_LENGTH) && {
+      recommendation: readString(input.recommendation, MAX_FLAGGED_TEXT_LENGTH),
+    }),
+    ...(imageAnalysis && { imageAnalysis }),
+    hasImage:
+      typeof input.hasImage === 'boolean' ? input.hasImage : Boolean(imageAnalysis),
+  };
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export const aiService = {
@@ -536,6 +614,42 @@ export const aiService = {
     });
 
     return analysis;
+  },
+
+  /**
+   * Regenerates one flagged part of a post.
+   *
+   * Uses the `caption` role's provider: this writes copy, so it belongs with
+   * the writer rather than with the analyst — the marketing role is tuned to
+   * judge, and asking a judge to draft returns judge-flavoured prose.
+   *
+   * Returns a proposal. Nothing is saved and nothing is applied; the browser
+   * shows it, and the member decides.
+   */
+  async improveCaption(
+    userId: string,
+    body: unknown,
+  ): Promise<TargetedImprovement> {
+    const request = parseImprovementRequest(body);
+    const provider = providerForRole('caption');
+
+    if (!provider.isConfigured()) {
+      throw new AiError('AI generation is not set up on this server yet.', 503);
+    }
+
+    const improvement = await improveCaption(request, { provider });
+
+    console.info('[ai] improvement generated', {
+      userId,
+      target: improvement.target,
+      kind: improvement.kind,
+      model: improvement.meta.model,
+      durationMs: improvement.meta.durationMs,
+      platforms: request.platforms,
+      hasImage: request.hasImage,
+    });
+
+    return improvement;
   },
 
   /**

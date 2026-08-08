@@ -2,6 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { API_BASE_URL } from "@/constants/api";
 import type { CaptionBrief, CaptionResult } from "@/ai/caption";
 import type { AnalysisBrief, CaptionAnalysis } from "@/ai/analysis";
+import type { ImprovementBrief, TargetedImprovement } from "@/ai/improve";
 
 /**
  * The browser's side of the AI API.
@@ -133,6 +134,22 @@ export async function analyzeCaption(
   );
 }
 
+/**
+ * Regenerates one flagged part of a post — the Reach & Visibility "Regenerate".
+ *
+ * Returns a *proposal*. Unlike `/caption`, whose result the composer may adopt
+ * wholesale, nothing here reaches the caption until the member accepts it.
+ */
+export async function improveCaption(
+  brief: ImprovementBrief,
+): Promise<TargetedImprovement> {
+  return request<TargetedImprovement>(
+    "/improve",
+    { method: "POST", body: JSON.stringify(brief) },
+    "Could not generate an improvement. Please try again.",
+  );
+}
+
 /** Whether this server can generate at all, and with which model. */
 export async function fetchAiStatus(): Promise<{
   configured: boolean;
@@ -149,5 +166,6 @@ export async function fetchAiStatus(): Promise<{
 export const aiService = {
   generateCaption,
   analyzeCaption,
+  improveCaption,
   fetchAiStatus,
 };

@@ -10,8 +10,20 @@
  */
 import { withHashtags } from "../src/utils/hashtags.ts";
 import { withLine } from "../src/utils/caption.ts";
-import { applyAll, outstanding, statusFor } from "../src/ai/reach-fixes.ts";
+import {
+  applyAll,
+  applyFixes,
+  fixFor,
+  fixFromProposal,
+  isFixPresent,
+  isVerified,
+  outstanding,
+  rowState,
+  statusFor,
+  type ReachFix,
+} from "../src/ai/reach-fixes.ts";
 import type { CaptionAnalysis, Improvement } from "../src/ai/analysis.ts";
+import type { TargetedImprovement } from "../src/ai/improve.ts";
 
 let passed = 0;
 let failed = 0;
@@ -189,6 +201,112 @@ check(
     WRITTEN,
     ["instagram"],
   ).ok,
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Regenerate → propose → apply → verify.
+//
+// The rule under test is the one the whole feature rests on: applying an
+// improvement must NOT turn a row green. Only an analysis of the caption that
+// now exists can do that.
+// ─────────────────────────────────────────────────────────────────────────────
+
+console.log("\n9. A proposal is not a change until it is applied");
+const proposal: TargetedImprovement = {
+  target: "hook",
+  kind: "lead",
+  line: "She was born in exile.",
+  note: "Shorter opening",
+  meta: { provider: "test", model: "test", durationMs: 1 },
+};
+const proposalFix = fixFromProposal(proposal);
+check("the proposal maps onto the row that asked for it", proposalFix.dimension === "hook");
+check("holding a proposal changes nothing", applyFixes([], WRITTEN, ["instagram"]) === WRITTEN);
+
+const afterProposal = applyFixes([proposalFix], WRITTEN, ["instagram"]);
+check("applying it adds the line", afterProposal.startsWith("She was born in exile."));
+check("the member's caption survives", afterProposal.includes("She walked into the fire"));
+check("applying twice is a no-op", applyFixes([proposalFix], afterProposal, ["instagram"]) === afterProposal);
+check("the fix reads as present", isFixPresent(proposalFix, afterProposal, ["instagram"]));
+check("and as absent from the original", !isFixPresent(proposalFix, WRITTEN, ["instagram"]));
+
+console.log("\n10. Applying never turns a row green on its own");
+// The analysis still flags the hook — it has not seen the new caption yet.
+const beforeRecheck = statusFor(first, "hook", afterProposal, ["instagram"]);
+check(
+  "unverified, a passing verdict shows as checking, never as a pass",
+  rowState({ ok: true, source: "verified" }, false) === "checking",
+);
+check(
+  "a failing verdict does not wait for a re-check",
+  rowState({ ok: false, source: "score" }, false) === "warn",
+);
+check(
+  "only a verified pass is green",
+  rowState({ ok: true, source: "score" }, true) === "pass",
+);
+check(
+  "while the re-check runs, the row is checking rather than a stale verdict",
+  rowState(beforeRecheck, isVerified(afterProposal, WRITTEN), true) === "checking",
+);
+check(
+  "an unverified pass is never green, even with nothing running",
+  rowState({ ok: true, source: "verified" }, false, false) === "checking",
+);
+check(
+  "an unverified failure still warns immediately — the undo case",
+  rowState({ ok: false, source: "verified" }, false, false) === "warn",
+);
+
+console.log("\n11. The re-analysis decides, in both directions");
+const passedRecheck = analysisWith({ hook: 8, readability: 5, cta: 3 }, []);
+check(
+  "green when the re-analysis of the ACTUAL caption passes",
+  rowState(
+    statusFor(passedRecheck, "hook", afterProposal, ["instagram"]),
+    isVerified(afterProposal, afterProposal),
+  ) === "pass",
+);
+
+const failedRecheck = analysisWith({ hook: 4 }, [
+  { dimension: "hook", suggestedLine: "Another attempt entirely." },
+]);
+check(
+  "still a warning when the re-analysis still fails",
+  rowState(
+    statusFor(failedRecheck, "hook", afterProposal, ["instagram"]),
+    isVerified(afterProposal, afterProposal),
+  ) === "warn",
+);
+// The fix IS in the caption, so the deterministic layer passes it — and it
+// still must not go green, because no analysis has read the new text.
+const appliedCanned = applyFixes(
+  [fixFor(first.improvements[0]!)!],
+  WRITTEN,
+  ["instagram"],
+);
+check(
+  "a re-analysis that never arrives leaves the row checking, not green",
+  rowState(
+    statusFor(first, "hook", appliedCanned, ["instagram"]),
+    isVerified(appliedCanned, WRITTEN),
+  ) === "checking",
+);
+
+console.log("\n12. A whole-caption rewrite only ever arrives as a proposal");
+const rewrite: ReachFix = {
+  dimension: "readability",
+  kind: "replace",
+  caption: "She walked into the fire.\n\nShe came out a queen.",
+};
+const rewritten = applyFixes([rewrite], WRITTEN, ["instagram"]);
+check("the caption is replaced with exactly what was shown", rewritten === rewrite.caption);
+check("applying the rewrite twice is a no-op", applyFixes([rewrite], rewritten, ["instagram"]) === rewritten);
+check("an empty rewrite is refused", applyFixes([{ dimension: "readability", kind: "replace", caption: "  " }], WRITTEN) === WRITTEN);
+check(
+  "a rewrite runs before additions, so the added line is not discarded",
+  applyFixes([proposalFix, rewrite], WRITTEN, ["instagram"]).includes("She was born in exile."),
+  applyFixes([proposalFix, rewrite], WRITTEN, ["instagram"]),
 );
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

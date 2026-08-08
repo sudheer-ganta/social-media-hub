@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AlertTriangle, RefreshCw, Sparkles, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,14 +20,23 @@ import { scoreBand } from "@/ai/analysis";
 // Deterministic verification against the caption on screen. The panel holds no
 // memory of what was applied — see `ai/reach-fixes.ts`.
 import {
-  applyAll,
+  applyFixes,
+  fixFor,
+  fixFromProposal,
   isActionable,
   isApplied,
+  isVerified,
   outstanding,
+  rowState,
   statusFor,
+  type ReachFix,
+  type RowState,
 } from "@/ai/reach-fixes";
+import { aiService } from "@/services/ai.service";
+import { TARGET_ACTION_LABEL } from "@/ai/improve";
 import { cn } from "@/lib/utils";
-import type { CaptionAnalysis, Improvement, ScoreDimension } from "@/ai/analysis";
+import type { CaptionAnalysis, ScoreDimension } from "@/ai/analysis";
+import type { ImprovementTarget, TargetedImprovement } from "@/ai/improve";
 import type { ImageAnalysis } from "@/ai/types";
 import type { Platform } from "@/types";
 
@@ -93,57 +103,229 @@ const SCORE_LABEL: Record<ReturnType<typeof scoreBand>, string> = {
   weak: "needs work",
 };
 
+/**
+ * A regeneration in progress, ready, or failed — per row.
+ *
+ * Held per dimension rather than one at a time, so regenerating the hook leaves
+ * the engagement row usable, and a failure on one never blanks the others.
+ */
+type Proposal =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; improvement: TargetedImprovement };
+
 /** A row of the pre-publish checklist. */
 interface Row {
   key: string;
   icon: string;
   label: string;
-  ok: boolean;
+  state: RowState;
   /** One short line. Never a paragraph. */
   detail: string;
   /** Behind "Why?", when there is more worth reading. */
   why?: string;
   action?: { label: string; run: () => void };
+  /** Present when AI can regenerate this part of the post. */
+  regenerate?: { label: string; run: () => void };
+  proposal?: Proposal;
+  /** Accept the proposal on screen. Writes to the composer, then re-analyses. */
+  onUseProposal?: () => void;
+  onDismissProposal?: () => void;
 }
 
-function ChecklistRow({ row }: { row: Row }) {
+const STATE_MARK: Record<RowState, string> = {
+  pass: "✓",
+  warn: "⚠",
+  checking: "…",
+};
+
+const STATE_TONE: Record<RowState, string> = {
+  pass: "text-emerald-500",
+  warn: "text-amber-500",
+  checking: "text-muted-foreground",
+};
+
+/**
+ * What a proposal will do to the caption, in the member's own terms.
+ *
+ * Shown in full before anything is applied. A preview that hides the text is
+ * just a differently worded "trust me".
+ */
+function ProposalPreview({
+  proposal,
+  onUse,
+  onRegenerate,
+  onDismiss,
+}: {
+  proposal: TargetedImprovement;
+  onUse: () => void;
+  onRegenerate: () => void;
+  onDismiss: () => void;
+}) {
+  const body =
+    proposal.kind === "hashtags"
+      ? (proposal.hashtags ?? []).map((tag) => `#${tag}`).join(" ")
+      : (proposal.line ?? proposal.caption ?? "");
+
   return (
-    <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5 border-b py-2.5 last:border-b-0">
-      <span aria-hidden className="w-5 text-center text-sm leading-6">
-        {row.icon}
-      </span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <p className="text-sm font-medium">{row.label}</p>
-        <p
-          className={cn(
-            "text-[11px] leading-relaxed",
-            row.ok ? "text-emerald-500" : "text-amber-500",
-          )}
-        >
-          {row.ok ? "✓" : "⚠"} {row.detail}
-        </p>
-        {row.why && (
-          <details className="group">
-            <summary className="cursor-pointer list-none text-[11px] text-muted-foreground underline-offset-2 hover:underline">
-              Why? <span className="inline-block group-open:rotate-180">▾</span>
-            </summary>
-            <p className="whitespace-pre-line pt-1 text-[11px] leading-relaxed text-muted-foreground">
-              {row.why}
-            </p>
-          </details>
-        )}
-      </div>
-      {row.action && (
+    <div className="mt-2 space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+        Proposed{" "}
+        {proposal.kind === "lead"
+          ? "opening line"
+          : proposal.kind === "line"
+            ? "closing line"
+            : proposal.kind === "hashtags"
+              ? "hashtags to add"
+              : "caption"}
+      </p>
+      <p className="whitespace-pre-line text-[12px] leading-relaxed">{body}</p>
+      {proposal.note && (
+        <p className="text-[10px] text-muted-foreground">{proposal.note}</p>
+      )}
+      <div className="flex flex-wrap gap-2 pt-0.5">
+        <Button type="button" size="sm" className="h-7 text-[11px]" onClick={onUse}>
+          Use this improvement
+        </Button>
         <Button
           type="button"
           size="sm"
           variant="outline"
-          className="h-7 shrink-0 text-[11px]"
-          onClick={row.action.run}
+          className="h-7 text-[11px]"
+          onClick={onRegenerate}
         >
-          {row.action.label}
+          Regenerate again
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 text-[11px]"
+          onClick={onDismiss}
+        >
+          Keep current
+        </Button>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Nothing changes until you choose. Your caption is untouched.
+      </p>
+    </div>
+  );
+}
+
+function ChecklistRow({ row }: { row: Row }) {
+  const loading = row.proposal?.status === "loading";
+
+  return (
+    <div className="border-b py-2.5 last:border-b-0">
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
+        <span aria-hidden className="w-5 text-center text-sm leading-6">
+          {row.icon}
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-sm font-medium">{row.label}</p>
+          <p
+            className={cn("text-[11px] leading-relaxed", STATE_TONE[row.state])}
+          >
+            {STATE_MARK[row.state]}{" "}
+            {row.state === "checking"
+              ? "Re-checking your updated post…"
+              : row.detail}
+          </p>
+          {row.why && row.state !== "checking" && (
+            <details className="group">
+              <summary className="cursor-pointer list-none text-[11px] text-muted-foreground underline-offset-2 hover:underline">
+                Why? <span className="inline-block group-open:rotate-180">▾</span>
+              </summary>
+              <p className="whitespace-pre-line pt-1 text-[11px] leading-relaxed text-muted-foreground">
+                {row.why}
+              </p>
+            </details>
+          )}
+        </div>
+
+        {/* Regenerate never appears on a row that has already passed — there is
+            nothing to fix, and offering to change it would invite the member to
+            break something that works. */}
+        {row.regenerate && row.state === "warn" && (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7 text-[11px]"
+                loading={loading}
+                disabled={loading}
+                onClick={row.regenerate.run}
+              >
+                {!loading && <Sparkles />}
+                {loading ? "Regenerating…" : "Regenerate"}
+              </Button>
+              {row.action && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px]"
+                  onClick={row.action.run}
+                >
+                  {row.action.label}
+                </Button>
+              )}
+            </div>
+            <span className="text-[10px] text-muted-foreground">
+              {row.regenerate.label}
+            </span>
+          </div>
+        )}
+
+        {/* Rows with no AI repair path — Timing, chiefly — keep the plain
+            action they always had, passing or not. */}
+        {!row.regenerate && row.action && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 text-[11px]"
+            onClick={row.action.run}
+          >
+            {row.action.label}
+          </Button>
+        )}
+      </div>
+
+      {row.proposal?.status === "error" && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2">
+          <p className="text-[11px] text-muted-foreground">
+            Couldn&apos;t generate an improvement. Your post hasn&apos;t been
+            changed.
+          </p>
+          {row.regenerate && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px]"
+              onClick={row.regenerate.run}
+            >
+              Try again
+            </Button>
+          )}
+        </div>
       )}
+
+      {row.proposal?.status === "ready" &&
+        row.onUseProposal &&
+        row.onDismissProposal &&
+        row.regenerate && (
+          <ProposalPreview
+            proposal={row.proposal.improvement}
+            onUse={row.onUseProposal}
+            onRegenerate={row.regenerate.run}
+            onDismiss={row.onDismissProposal}
+          />
+        )}
     </div>
   );
 }
@@ -160,6 +342,15 @@ export function ReachPanel({
   const { analysis, isAnalysing, error, analysedCaption, analyse } =
     useCaptionAnalysis();
 
+  /**
+   * Regenerations, per dimension. Cleared whenever a new analysis is requested:
+   * a proposal is an answer to one reading of the post, and the reading it
+   * answered is gone.
+   */
+  const [proposals, setProposals] = useState<
+    Partial<Record<ScoreDimension, Proposal>>
+  >({});
+
   const trimmed = caption.trim();
   const tooShort = trimmed.length < 12;
 
@@ -168,14 +359,86 @@ export function ReachPanel({
   // matches what is on screen.
   const stale = Boolean(analysedCaption && analysedCaption !== trimmed);
 
-  const run = () => {
+  /**
+   * Analyses a caption — by default whatever is on screen.
+   *
+   * `override` exists for the one case where the caption on screen is not yet
+   * the caption in props: applying an improvement writes through
+   * `onApplyCaption` and the re-render has not happened when the re-analysis is
+   * queued. Passing the new text explicitly is what makes "verify the actual
+   * modified post" true rather than nearly true.
+   */
+  const run = (override?: string) => {
+    const target = (override ?? caption).trim();
+    setProposals({});
     void analyse({
-      caption: trimmed,
-      hashtags: hashtagsIn(trimmed),
+      caption: target,
+      hashtags: hashtagsIn(target),
       platforms,
       hasImage,
       ...(imageAnalysis && { imageAnalysis }),
     });
+  };
+
+  /**
+   * Asks for a targeted improvement to one flagged part of the post.
+   *
+   * Only this row goes into a loading state, and a failure is recorded against
+   * this row — the rest of the panel stays usable, which matters because a
+   * member fixing four things should not be blocked by one that failed.
+   */
+  const regenerate = async (
+    dimension: ScoreDimension,
+    target: ImprovementTarget,
+    issue?: string,
+    recommendation?: string,
+  ) => {
+    setProposals((current) => ({ ...current, [dimension]: { status: "loading" } }));
+
+    try {
+      const improvement = await aiService.improveCaption({
+        target,
+        caption,
+        hashtags: hashtagsIn(caption),
+        platforms,
+        hasImage,
+        ...(imageAnalysis && { imageAnalysis }),
+        ...(music?.trim() && { music: music.trim() }),
+        ...(issue && { issue }),
+        ...(recommendation && { recommendation }),
+      });
+      setProposals((current) => ({
+        ...current,
+        [dimension]: { status: "ready", improvement },
+      }));
+    } catch (cause) {
+      // The caption is deliberately untouched on this path. A failed
+      // regeneration must cost the member nothing.
+      setProposals((current) => ({
+        ...current,
+        [dimension]: {
+          status: "error",
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "Could not generate an improvement.",
+        },
+      }));
+    }
+  };
+
+  /**
+   * Applies one or more fixes and immediately re-checks the result.
+   *
+   * The re-analysis is the point. Applying tells us what the caption now says;
+   * only the analysis tells us whether it now passes, and until it comes back
+   * the affected rows sit at "checking" rather than green. See `rowState`.
+   */
+  const applyAndVerify = (fixes: ReachFix[]) => {
+    const next = applyFixes(fixes, caption, platforms);
+    if (next === caption) return;
+    onApplyCaption(next);
+    run(next);
   };
 
   return (
@@ -203,7 +466,7 @@ export function ReachPanel({
               ? "Write a line or two first — there's nothing to read yet."
               : undefined
           }
-          onClick={run}
+          onClick={() => run()}
         >
           {analysis ? <RefreshCw /> : <TrendingUp />}
           {analysis ? "Check again" : "Check this post"}
@@ -229,11 +492,17 @@ export function ReachPanel({
               analysis={analysis}
               caption={caption}
               analysedCaption={analysedCaption ?? ""}
+              rechecking={isAnalysing}
               platforms={platforms}
               hasImage={hasImage}
               music={music}
               stale={stale}
-              onApplyCaption={onApplyCaption}
+              proposals={proposals}
+              onRegenerate={regenerate}
+              onDismissProposal={(dimension) =>
+                setProposals((current) => ({ ...current, [dimension]: undefined }))
+              }
+              onApply={applyAndVerify}
               {...(suggestedTime && { suggestedTime })}
             />
           )}
@@ -253,24 +522,46 @@ function Report({
   analysis,
   caption,
   analysedCaption,
+  rechecking,
   platforms,
   hasImage,
   music,
   stale,
-  onApplyCaption,
+  proposals,
+  onRegenerate,
+  onDismissProposal,
+  onApply,
   suggestedTime,
 }: {
   analysis: CaptionAnalysis;
   caption: string;
   /** The caption this analysis was run against — the "before" of any fix. */
   analysedCaption: string;
+  /** True while a fresh reading is in flight, which is a state of its own. */
+  rechecking: boolean;
   platforms: Platform[];
   hasImage: boolean;
   music?: string;
   stale: boolean;
-  onApplyCaption: (caption: string) => void;
+  proposals: Partial<Record<ScoreDimension, Proposal>>;
+  onRegenerate: (
+    dimension: ScoreDimension,
+    target: ImprovementTarget,
+    issue?: string,
+    recommendation?: string,
+  ) => void;
+  onDismissProposal: (dimension: ScoreDimension) => void;
+  onApply: (fixes: ReachFix[]) => void;
   suggestedTime?: { name: string; time: string; label: string; use: () => void };
 }) {
+  /**
+   * Whether this analysis describes the caption on screen.
+   *
+   * The gate on every tick below. While it is false the post has moved on from
+   * the reading, so a passing verdict is unproven rather than green.
+   */
+  const verified = isVerified(caption, analysedCaption);
+
   /**
    * The recommendations still missing from the caption on screen.
    *
@@ -281,13 +572,13 @@ function Report({
    */
   const actionable = outstanding(analysis, caption, platforms);
 
-  const apply = (items: Improvement[]) =>
-    onApplyCaption(applyAll(items, caption, platforms));
-
   /** One row per part of the post, built from whatever the analysis covered. */
   const rows: Row[] = [];
 
   /**
+   * @param target the part of the post AI can regenerate for this row, when
+   *   there is one. `visual` has none on purpose: no sentence fixes a crop, and
+   *   a Regenerate button there would be offering a fix that cannot exist.
    * @param unscored what to say when this dimension was not scored — a caption
    *   with no tags is not graded on tags, but it is still the case worth
    *   flagging, and the backend can still recommend some.
@@ -297,14 +588,48 @@ function Report({
     icon: string,
     label: string,
     dimension: ScoreDimension,
+    target?: ImprovementTarget,
     unscored?: string,
   ) => {
     const score = analysis.scores[dimension];
     const verdict = statusFor(analysis, dimension, caption, platforms);
+    const state = rowState(verdict, verified, rechecking);
+    const proposal = proposals[dimension];
+
+    /** The Regenerate affordance, identical wherever this row ends up. */
+    const regenerate = target
+      ? {
+          label: TARGET_ACTION_LABEL[target],
+          run: () =>
+            onRegenerate(
+              dimension,
+              target,
+              verdict.improvement?.issue ?? score?.reason,
+              verdict.improvement?.suggestion,
+            ),
+        }
+      : undefined;
+
+    const proposalHandlers = proposal?.status === "ready"
+      ? {
+          onUseProposal: () =>
+            onApply([fixFromProposal(proposal.improvement)]),
+          onDismissProposal: () => onDismissProposal(dimension),
+        }
+      : {};
 
     if (!score && verdict.source === "unscored" && !verdict.improvement) {
       if (unscored) {
-        rows.push({ key, icon, label, ok: verdict.ok, detail: unscored });
+        rows.push({
+          key,
+          icon,
+          label,
+          state,
+          detail: unscored,
+          ...(regenerate && { regenerate }),
+          ...(proposal && { proposal }),
+          ...proposalHandlers,
+        });
       }
       return;
     }
@@ -338,37 +663,55 @@ function Report({
           .filter(Boolean)
           .join("\n");
 
+    const suggestionFix = suggestion ? fixFor(suggestion) : null;
+
     rows.push({
       key,
       icon,
       label,
-      ok: verdict.ok,
+      state,
       detail: verifiedFix
         ? `Fixed — found in your caption now.`
         : ((verdict.ok ? score?.reason : suggestion?.issue || score?.reason) ??
           unscored ??
           ""),
       ...(why && { why }),
+      ...(regenerate && { regenerate }),
+      ...(proposal && { proposal }),
+      ...proposalHandlers,
+      // The analysis's own ready-made fix, kept beside Regenerate: it is
+      // instant and free where a regeneration is a model call, so a member who
+      // is happy with the suggested tags should not have to wait for new ones.
       ...(suggestion &&
-        isActionable(suggestion) && {
+        isActionable(suggestion) &&
+        suggestionFix && {
           action: {
-            label: tags.length > 0 ? "Apply" : line && dimension === "hook" ? "Add opening line" : "Add to caption",
-            run: () => apply([suggestion]),
+            label:
+              tags.length > 0
+                ? "Apply"
+                : line && dimension === "hook"
+                  ? "Add opening line"
+                  : "Add to caption",
+            run: () => onApply([suggestionFix]),
           },
         }),
     });
   };
 
-  scoreRow("hook", "🪝", "Hook", "hook");
-  scoreRow("caption", "📝", "Caption", "readability");
-  scoreRow("engagement", "💬", "Engagement", "cta");
+  scoreRow("hook", "🪝", "Hook", "hook", "hook");
+  scoreRow("caption", "📝", "Caption", "readability", "readability");
+  scoreRow("engagement", "💬", "Engagement", "cta", "cta");
   scoreRow(
     "hashtags",
     "#️⃣",
     "Discoverability",
     "hashtags",
+    "hashtags",
     "No hashtags yet — they are how people who don't already follow you find this.",
   );
+  // No `target`: a visual problem is a media problem. The row reports what the
+  // analysis saw and leaves the fix to the image tools above, rather than
+  // pretending a sentence can re-crop a photograph.
   if (hasImage) scoreRow("visual", "🖼", "Visual", "visual");
 
   // Audio is the member's decision, full stop. A chosen song is reported, never
@@ -380,8 +723,9 @@ function Report({
     label: "Audio",
     // Never a warning. A post without a song is not a worse post, and counting
     // it as something to fix would be pressure to use a feature nobody asked
-    // for — the row is here to report the choice, not to grade it.
-    ok: true,
+    // for — the row is here to report the choice, not to grade it. Read
+    // straight from the composer, so it needs no re-analysis to be true.
+    state: "pass",
     detail: music?.trim()
       ? `Your song: ${music.trim()}`
       : "No song chosen — optional.",
@@ -396,14 +740,15 @@ function Report({
       key: "timing",
       icon: "🕐",
       label: "Timing",
-      ok: true,
+      state: "pass",
       detail: `Suggested ${suggestedTime.label} for ${suggestedTime.name}.`,
       why: "A general posting-window convention for this network. It is not based on when your own audience is active — we do not have that data yet.",
       action: { label: `Schedule ${suggestedTime.label}`, run: suggestedTime.use },
     });
   }
 
-  const warnings = rows.filter((row) => !row.ok).length;
+  const warnings = rows.filter((row) => row.state === "warn").length;
+  const checking = rows.some((row) => row.state === "checking");
 
   /** The deterministic checks that failed and are worth stopping for. */
   const blockers = analysis.checklist.items.filter(
@@ -435,8 +780,9 @@ function Report({
       fixedSince.reduce((total, item) => total + item.estimatedGain, 0),
   );
 
-  const headline =
-    warnings === 0
+  const headline = checking
+    ? "Checking your updated post"
+    : warnings === 0
       ? "This post looks ready"
       : fixedSince.length > 0
         ? "Post improved"
@@ -447,9 +793,11 @@ function Report({
       <div className="space-y-1 rounded-md border bg-muted/30 p-4">
         <p className="text-base font-semibold">{headline}</p>
         <p className="text-sm text-muted-foreground">
-          {warnings === 0
-            ? "Nothing here is holding it back."
-            : `${warnings} thing${warnings === 1 ? "" : "s"} could improve its reach.`}
+          {checking
+            ? "Re-reading what is in your editor now — nothing turns green until it passes."
+            : warnings === 0
+              ? "Nothing here is holding it back."
+              : `${warnings} thing${warnings === 1 ? "" : "s"} could improve its reach.`}
         </p>
         <p className="pt-1 text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">
@@ -480,10 +828,21 @@ function Report({
       {actionable.length > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
           <p className="text-xs text-muted-foreground">
-            {actionable.length} improvements can be applied for you. Your
-            caption, image, platforms, song and schedule are left as they are.
+            {actionable.length} improvements can be applied for you, then
+            re-checked. Your image, platforms, song and schedule are left as
+            they are, and nothing you wrote is removed.
           </p>
-          <Button type="button" size="sm" onClick={() => apply(actionable)}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() =>
+              onApply(
+                actionable
+                  .map(fixFor)
+                  .filter((fix): fix is ReachFix => fix !== null),
+              )
+            }
+          >
             <Sparkles />
             Apply all improvements
           </Button>

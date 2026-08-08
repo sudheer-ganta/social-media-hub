@@ -91,6 +91,21 @@ router.post(
   }),
 );
 
+// POST /api/ai/improve → one targeted fix for one check the analysis flagged.
+//
+// Separate from /caption because it answers a much narrower question: /caption
+// writes a post, this repairs a named part of one and leaves the rest alone.
+// Nothing is stored and nothing is applied — the browser shows the proposal and
+// the member chooses whether their caption changes.
+router.post(
+  '/improve',
+  requireAuth,
+  handle(async (req, res) => {
+    const improvement = await aiService.improveCaption(req.user.id, req.body);
+    res.json(improvement);
+  }),
+);
+
 // The American spelling, for the same handler. Every other identifier in this
 // codebase is British ("analyse", "normalise"), and a client that guesses the
 // other spelling should get an analysis rather than a 404.

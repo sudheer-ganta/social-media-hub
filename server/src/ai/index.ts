@@ -65,6 +65,12 @@ export {
   buildAnalysisPrompt,
   buildAnalysisResponseSchema,
 } from './prompts/analysis.prompt';
+export {
+  buildImprovePrompt,
+  buildImproveResponseSchema,
+  IMPROVE_PROMPT_VERSION,
+  TARGET_KIND,
+} from './prompts/improve.prompt';
 
 // ─── Brand Intelligence ──────────────────────────────────────────────────────
 export {
@@ -77,6 +83,9 @@ export {
 export { generateCaption } from './generators/creative-intelligence.generator';
 export { analyseCaption } from './generators/marketing-intelligence.generator';
 export { analyseImage } from './generators/image-analysis.generator';
+// Not a third engine — a repair pass over one named part of a post that the
+// second engine already flagged. See the header of the generator.
+export { improveCaption } from './generators/targeted-improvement.generator';
 
 // ─── Deterministic scoring ───────────────────────────────────────────────────
 export { measureCaption, looksLikeCta, hookLine } from './analysis/metrics';

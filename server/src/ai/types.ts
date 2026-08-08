@@ -578,6 +578,74 @@ export interface Improvement {
   suggestedLine?: string;
 }
 
+// ─── Targeted improvement ────────────────────────────────────────────────────
+
+/**
+ * The parts of a post a targeted regeneration can rewrite.
+ *
+ * A strict subset of {@link ScoreDimension}, and the omissions are the point.
+ * `visual` and `platformFit` are not here because no amount of copy fixes a
+ * badly cropped image or an unselected network — offering to "regenerate" them
+ * would be inventing a fix for a problem text cannot reach. `audienceFit` is
+ * out because it is a property of the whole post rather than of one passage.
+ */
+export type ImprovementTarget = 'hook' | 'readability' | 'cta' | 'hashtags';
+
+/**
+ * Where a generated improvement goes in the caption.
+ *
+ * Derived from the target on our side, never chosen by the model: a hook is
+ * always added in front, an engagement prompt always at the end, hashtags
+ * always through the existing append-and-dedupe path, and only `readability`
+ * produces a whole replacement caption — which is why that one, and only that
+ * one, requires the member to confirm a visible before/after.
+ */
+export type ImprovementKind = 'lead' | 'line' | 'hashtags' | 'replace';
+
+export interface ImprovementRequest {
+  target: ImprovementTarget;
+  /** The caption as it stands right now. The thing being improved. */
+  caption: string;
+  hashtags: string[];
+  platforms: string[];
+  audience: AudienceRegister;
+  language: string;
+  hasImage: boolean;
+  imageAnalysis?: ImageAnalysis;
+  /** The member's chosen song, as context for tone. Never changed here. */
+  music?: string;
+  /** What the analysis said was wrong, so the fix answers that and not a guess. */
+  issue?: string;
+  /** What the analysis recommended doing about it. */
+  recommendation?: string;
+}
+
+export interface TargetedImprovement {
+  target: ImprovementTarget;
+  kind: ImprovementKind;
+  /** For `lead` and `line`. */
+  line?: string;
+  /** For `replace` — a whole caption, offered, never applied on its own. */
+  caption?: string;
+  /** For `hashtags`, without the leading `#`. */
+  hashtags?: string[];
+  /** One short line naming what changed, shown above the preview. */
+  note: string;
+  meta: {
+    provider: string;
+    model: string;
+    durationMs: number;
+  };
+}
+
+/** What the improvement model is asked for, before we normalise it. */
+export interface RawImprovementPayload {
+  line?: unknown;
+  caption?: unknown;
+  hashtags?: unknown;
+  note?: unknown;
+}
+
 /**
  * `blocker` — do not publish. `important` — publish worse without it.
  * `polish` — nice to have. Severity drives the readiness percentage, so ten
