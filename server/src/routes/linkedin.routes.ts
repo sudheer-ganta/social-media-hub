@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { linkedinProvider } from '../providers';
-import { attachUserIfPresent } from '../middleware/auth.middleware';
+import { requireAuth } from '../middleware/auth.middleware';
 import { buildIntegrationsRedirect } from '../services/oauth-redirect';
 
 /**
@@ -13,13 +13,13 @@ import { buildIntegrationsRedirect } from '../services/oauth-redirect';
 const router = Router();
 
 /**
- * Both routes here are *browser navigations*, so both must end in a redirect.
+ * `/callback` is a *browser navigation*, so it must end in a redirect.
  *
- * The handlers already redirect on every branch they know about; this is the
- * backstop for anything they do not — a member mid-navigation can never end up
- * staring at a JSON error body or Express's default 500 page. The reason stays
- * in the server log, where a misconfiguration message naming missing
- * credentials is safe.
+ * The handler already redirects on every branch it knows about; this is the
+ * backstop for anything it does not — a member mid-navigation from
+ * linkedin.com can never end up staring at a JSON error body or Express's
+ * default 500 page. The reason stays in the server log, where a
+ * misconfiguration message naming missing credentials is safe.
  */
 function handleRedirect(fn: (req: Request, res: Response) => Promise<void>) {
   return async (req: Request, res: Response) => {
@@ -37,14 +37,37 @@ function handleRedirect(fn: (req: Request, res: Response) => Promise<void>) {
   };
 }
 
-// GET /auth/linkedin/connect → 302 to LinkedIn's consent screen.
-// A top-level browser navigation, so auth is optional at the middleware level:
-// the user is resolved from the handoff cookie and the handler redirects to
-// `status=failed` when there is no session to bind.
+/**
+ * `/connect` is a `fetch` from the SPA, so its failures must be JSON too — a
+ * redirect here would be followed cross-origin and collapse into an opaque CORS
+ * error in the browser, telling the member nothing. The reason stays in the
+ * server log; what crosses the wire is a line they can act on.
+ */
+function handleJson(fn: (req: Request, res: Response) => Promise<void>) {
+  return async (req: Request, res: Response) => {
+    try {
+      await fn(req, res);
+    } catch (error) {
+      console.error('[linkedin] connect failed', {
+        error: error instanceof Error ? error.message : error,
+      });
+      if (!res.headersSent) {
+        res
+          .status(500)
+          .json({ error: 'LinkedIn connections are unavailable right now.' });
+      }
+    }
+  };
+}
+
+// GET /auth/linkedin/connect → { url } for the SPA to navigate to.
+// `requireAuth`, not an optional check: this is a fetch carrying the member's
+// Supabase token, and a request without one has no account to connect to, so a
+// 401 is the honest answer rather than an anonymous path to handle downstream.
 router.get(
   '/connect',
-  attachUserIfPresent,
-  handleRedirect((req, res) => linkedinProvider.connect(req, res)),
+  requireAuth,
+  handleJson((req, res) => linkedinProvider.connect(req, res)),
 );
 
 // GET /auth/linkedin/callback → 302 back to the Integrations page.

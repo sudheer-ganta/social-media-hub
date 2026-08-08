@@ -18,7 +18,6 @@ import {
 } from './validator';
 import { socialConnectionService } from '../../../services/social-connection.service';
 import { buildIntegrationsRedirect } from '../../../services/oauth-redirect';
-import { clearOAuthSessionCookie } from '../../../middleware/auth.middleware';
 import type { InstagramAuthorizationParams } from './types';
 
 /**
@@ -59,29 +58,27 @@ export function buildAuthorizationUrl(state: string): string {
 }
 
 /**
- * `GET /auth/instagram/connect` — 302 to Instagram's consent screen.
+ * `GET /auth/instagram/connect` — answers `{ url }`, Instagram's consent
+ * screen, for the SPA to navigate to.
  *
  * Identical in shape to LinkedIn's, which is the point: the frontend only ever
- * needs `window.location = {API}/auth/{provider}/connect`, and the catalogue
+ * needs one authenticated `fetch` to `{API}{connectPath}`, and the catalogue
  * entry's `connectPath` is what tells it which.
+ *
+ * JSON rather than a 302 because the caller is a `fetch`, and it has to be:
+ * this route must know *whose* account is being connected, a top-level
+ * navigation cannot carry an `Authorization` header, and the cookie that used
+ * to stand in for one cannot cross from the app's host to this API's. See
+ * `middleware/auth.middleware.ts`.
+ *
+ * `requireAuth` on the route guarantees `req.user`, so the state is always
+ * bound to a real member — Instagram's redirect back carries no identity of
+ * ours, and that binding is the only thing the callback has to go on.
  */
 async function connect(req: Request, res: Response): Promise<void> {
   assertInstagramConfigured();
 
-  const userId: string | undefined = req.user?.id;
-
-  // The handoff cookie has done its job the moment we've read a user out of it.
-  clearOAuthSessionCookie(res);
-
-  if (!userId) {
-    // No session to attach the connection to. Fail before the member authorizes
-    // anything at Instagram — and fail the way the rest of the flow does.
-    console.error('[instagram] connect attempted without a FlowPost session');
-    res.redirect(302, buildIntegrationsRedirect('instagram', 'failed'));
-    return;
-  }
-
-  const state = states.create(userId);
+  const state = states.create(req.user.id);
 
   // Scopes are safe to log; the state, the app secret and any token are not.
   console.log('[instagram] OAuth started', {
@@ -89,7 +86,7 @@ async function connect(req: Request, res: Response): Promise<void> {
     redirectUri: instagramConfig.redirectUri,
   });
 
-  res.redirect(302, buildAuthorizationUrl(state));
+  res.json({ url: buildAuthorizationUrl(state) });
 }
 
 /**

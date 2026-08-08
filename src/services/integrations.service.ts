@@ -18,10 +18,6 @@ import {
  * There is no `connectLinkedIn`, and there never should be.
  */
 
-/** Name and lifetime of the OAuth handoff cookie. Mirrors the backend constant. */
-const OAUTH_SESSION_COOKIE = "fp_oauth_session";
-const OAUTH_SESSION_COOKIE_MAX_AGE_SECONDS = 120;
-
 /**
  * The current Supabase access token. Throws when there is no session — every
  * route here is user-scoped, and a request without an identity has no
@@ -72,31 +68,66 @@ async function request<T>(
 }
 
 /**
- * Starts the OAuth flow: a plain top-level navigation to the backend, which
- * 302s on to the provider. That is the flow every OAuth provider expects, and
- * it is identical for every network we add.
+ * Starts the OAuth flow: one authenticated request for the provider's
+ * authorization URL, then a plain navigation to it. Identical for every network
+ * we add — `connectPath` is the only thing that differs, and it comes from the
+ * API.
  *
- * The one thing a navigation cannot carry is an `Authorization` header, and the
- * backend has to know *whose* account this will be. So the session token is
- * handed over in a short-lived cookie set immediately before the jump — cookies
- * ignore port, so `:5173` and `:5000` share a jar, and in production a
- * `Domain=` cookie spans the app and API subdomains.
+ * The request is what carries the identity, and it has to be a request rather
+ * than a navigation: the backend must know *whose* account this will be, and it
+ * binds that user into the OAuth `state` it mints here — the provider's
+ * redirect back carries no identity of ours, so `state` is the only thread
+ * connecting the two halves.
  *
- * Deliberately not a `?token=` query parameter: that would put the JWT in the
- * backend's access log, the browser's history, and the `Referer` sent to the
- * provider. The backend expires the cookie the moment it reads it.
+ * This used to navigate straight to `connectPath` with the token in a
+ * short-lived cookie, which worked only while the API shared a host with the
+ * app (`localhost`, where cookies ignore port). A cookie set on the app's
+ * origin is never sent to the API's, and `onrender.com` is a public suffix so
+ * no `Domain=` can span the two — the backend saw an anonymous request and
+ * logged "connect attempted without a FlowPost session".
+ *
+ * Still deliberately not a `?token=` query parameter: that would put the JWT in
+ * the backend's access log, the browser's history, and the `Referer` sent to
+ * the provider.
  */
 export async function startConnect(integration: Integration): Promise<void> {
   if (!integration.connectPath) {
     throw new Error(`${integration.displayName} is not available yet.`);
   }
 
-  const token = await getAccessToken();
-  document.cookie =
-    `${OAUTH_SESSION_COOKIE}=${encodeURIComponent(token)}` +
-    `; Path=/; Max-Age=${OAUTH_SESSION_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
+  const response = await fetch(`${API_BASE_URL}${integration.connectPath}`, {
+    headers: { Authorization: `Bearer ${await getAccessToken()}` },
+    // The provider's authorization URL must never be *fetched*, only navigated
+    // to — instagram.com and linkedin.com send no CORS headers, so a followed
+    // redirect fails as an opaque network error that names neither the backend
+    // nor the real problem. `manual` stops the browser at the 302 instead, and
+    // the check below turns it into a sentence someone can act on. This is the
+    // only thing standing between a backend still serving the old redirect and
+    // an unreadable console error.
+    redirect: "manual",
+  });
 
-  window.location.href = `${API_BASE_URL}${integration.connectPath}`;
+  if (response.type === "opaqueredirect") {
+    throw new Error(
+      `The API redirected instead of returning a ${integration.displayName} ` +
+        "authorization URL — it is running an older build. Redeploy the backend.",
+    );
+  }
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok || typeof body?.url !== "string") {
+    throw new Error(
+      typeof body?.error === "string"
+        ? body.error
+        : `Could not start the ${integration.displayName} connection.`,
+    );
+  }
+
+  // A top-level navigation, not `window.open` and not a fetch: the consent
+  // screen has to replace the tab so the provider's redirect back lands on the
+  // Integrations page the member is already looking at.
+  window.location.assign(body.url);
 }
 
 /**

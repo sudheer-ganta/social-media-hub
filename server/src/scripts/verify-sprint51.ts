@@ -275,4 +275,49 @@ console.log('\n[7] Registry and catalogue');
   ok('LinkedIn still catalogued as available');
 }
 
-console.log('\nAll Sprint 5.1 checks passed.\n');
+console.log('\n[8] Connect hands back a URL instead of redirecting');
+void (async () => {
+  // The regression that broke Instagram on Render: connect used to 302, which
+  // meant the SPA had to reach it by navigation, which meant the session had to
+  // travel in a cookie the API's host could never receive. It now answers JSON
+  // to an authenticated fetch. A 302 here would put that cookie back.
+  for (const id of ['instagram', 'linkedin'] as const) {
+    let body: any = null;
+    let redirectedTo: string | null = null;
+    const res = {
+      json(value: any) {
+        body = value;
+        return this;
+      },
+      status() {
+        return this;
+      },
+      redirect(_status: number, url: string) {
+        redirectedTo = url;
+      },
+    };
+
+    await getProvider(id)!.connect(
+      { user: { id: 'user-1' } } as any,
+      res as any,
+    );
+
+    assert.strictEqual(
+      redirectedTo,
+      null,
+      `${id}: connect must not redirect — the SPA fetches it and navigates itself`,
+    );
+    assert(
+      typeof body?.url === 'string',
+      `${id}: connect must answer { url }, got ${JSON.stringify(body)}`,
+    );
+    assert.strictEqual(
+      new URL(body.url).searchParams.get('state')?.length,
+      43,
+      `${id}: the URL must carry a 32-byte base64url state bound to the user`,
+    );
+    ok(`${id} answers { url } with a state bound to the caller`);
+  }
+
+  console.log('\nAll Sprint 5.1 checks passed.\n');
+})();

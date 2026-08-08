@@ -13,7 +13,6 @@ import { publish } from './publisher';
 import { getCatalogEntry } from '../catalog';
 import { socialConnectionService } from '../../services/social-connection.service';
 import { buildIntegrationsRedirect } from '../../services/oauth-redirect';
-import { clearOAuthSessionCookie } from '../../middleware/auth.middleware';
 import { LINKEDIN_IMAGE_MIME_TYPES, LINKEDIN_MAX_IMAGE_BYTES, canPublish } from './validator';
 import type { LinkedInAuthorizationParams } from './types';
 
@@ -62,37 +61,25 @@ export function buildAuthorizationUrl(state: string): string {
 }
 
 /**
- * `GET /auth/linkedin/connect` — 302 to LinkedIn's consent screen.
+ * `GET /auth/linkedin/connect` — answers `{ url }`, LinkedIn's consent screen,
+ * for the SPA to navigate to.
  *
- * A plain top-level navigation in, a plain redirect out. That is what every
- * OAuth provider expects, and it is what keeps Instagram, Facebook, X and
- * YouTube identical to this: the frontend only ever needs
- * `window.location = {API}/auth/{provider}/connect`.
+ * One authenticated `fetch` in, a URL out, and the browser navigates itself.
+ * That is what keeps Instagram, Facebook, X and YouTube identical to this: the
+ * frontend only ever needs `fetch({API}{connectPath})` with its bearer token.
  *
- * The FlowPost user is resolved by `attachUserIfPresent` — from the handoff
- * cookie on a navigation, or an `Authorization` header if something calls this
- * with fetch — and bound into the state, because LinkedIn's redirect back
- * carries no identity of ours.
+ * JSON rather than a 302 because this route must know *whose* account is being
+ * connected: a top-level navigation cannot carry an `Authorization` header, and
+ * the handoff cookie that used to stand in for one only ever worked while the
+ * API shared a host with the app. See `middleware/auth.middleware.ts`.
+ *
+ * `requireAuth` on the route guarantees `req.user`, and that user is bound into
+ * the state because LinkedIn's redirect back carries no identity of ours.
  */
 async function connect(req: Request, res: Response): Promise<void> {
   assertLinkedInConfigured();
 
-  const userId: string | undefined = req.user?.id;
-
-  // The handoff cookie has done its job the moment we've read a user out of it.
-  // Expiring it here means it does not sit in the browser for its full TTL.
-  clearOAuthSessionCookie(res);
-
-  if (!userId) {
-    // No session to attach the connection to. Nothing the callback could
-    // persist, so fail before the member authorizes anything at LinkedIn —
-    // and fail the way the rest of the flow does, with a redirect.
-    console.error('[linkedin] connect attempted without a FlowPost session');
-    res.redirect(302, buildIntegrationsRedirect('linkedin', 'failed'));
-    return;
-  }
-
-  const state = states.create(userId);
+  const state = states.create(req.user.id);
   const authorizationUrl = buildAuthorizationUrl(state);
 
   // Scopes are safe to log; the state, the client secret and any token are not.
@@ -101,7 +88,7 @@ async function connect(req: Request, res: Response): Promise<void> {
     redirectUri: linkedinConfig.redirectUri,
   });
 
-  res.redirect(302, authorizationUrl);
+  res.json({ url: authorizationUrl });
 }
 
 /**
