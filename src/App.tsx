@@ -16,19 +16,23 @@ import Settings from "@/pages/Settings";
 import StudioPreview from "@/pages/dev/StudioPreview";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
+import DataDeletion from "@/pages/DataDeletion";
 
 export default function App() {
   return (
     <AppProviders>
       <BrowserRouter>
         <Routes>
-          {/* Public auth routes */}
+          {/* Public auth & legal routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="/data-deletion" element={<DataDeletion />} />
+          <Route path="/data-deletion-instructions" element={<Navigate to="/data-deletion" replace />} />
+          <Route path="/privacy/data-deletion" element={<Navigate to="/data-deletion" replace />} />
 
           {/* Protected app routes */}
           <Route
