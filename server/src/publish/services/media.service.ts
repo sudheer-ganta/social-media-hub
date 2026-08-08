@@ -87,17 +87,83 @@ export class MediaResolutionError extends Error {
  */
 export async function resolvePostMedia(
   post: Post,
-  options: { caption?: string; requirements?: ProviderMediaRequirements } = {},
+  options: {
+    caption?: string;
+    requirements?: ProviderMediaRequirements;
+    /** Which network's framing to deliver. Omitted means the whole image. */
+    providerId?: string;
+  } = {},
 ): Promise<ProviderMediaAsset[]> {
   const imageUrl = post.image_url?.trim();
   if (!imageUrl) return [];
 
+  // The member's per-network framing, applied as a delivery transformation.
+  // The stored asset is untouched: this derives a rendition of it.
+  const framed = options.providerId
+    ? applyStoredCrop(imageUrl, post.platform_media, options.providerId)
+    : imageUrl;
+
   const asset = await resolveImage(
-    imageUrl,
+    framed,
     options.requirements ?? DEFAULT_REQUIREMENTS,
     options.caption,
   );
   return [asset];
+}
+
+/**
+ * One platform's crop from `posts.platform_media`, as a Cloudinary directive.
+ *
+ * **Every field is re-validated here.** That column is written by the browser
+ * under RLS, so its contents are a member-supplied value like any other, and
+ * this function is what stands between it and a URL we hand to Meta. A crop
+ * that is not four finite fractions inside the unit square is dropped entirely
+ * and the image is delivered whole — the safe answer, and the same one a post
+ * written before this feature existed gets.
+ *
+ * Mirrors `src/utils/crop.ts#withCrop`, deliberately rather than by sharing:
+ * the frontend copy runs in the composer's preview, this one runs against
+ * untrusted stored JSON, and only this one is a trust boundary.
+ */
+export function applyStoredCrop(
+  url: string,
+  platformMedia: unknown,
+  providerId: string,
+): string {
+  if (!platformMedia || typeof platformMedia !== 'object') return url;
+
+  const entry = (platformMedia as Record<string, unknown>)[providerId];
+  if (!entry || typeof entry !== 'object') return url;
+
+  const crop = entry as Record<string, unknown>;
+  const read = (key: string): number | null => {
+    const value = crop[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  };
+
+  const x = read('x');
+  const y = read('y');
+  const w = read('w');
+  const h = read('h');
+  if (x === null || y === null || w === null || h === null) return url;
+
+  // Fractions only, and the window has to sit inside the image. A rectangle
+  // that runs off the edge is the one shape that could make Cloudinary pad —
+  // which would be an upscale by another name.
+  const inRange =
+    w > 0 && h > 0 && w <= 1 && h <= 1 && x >= 0 && y >= 0 && x + w <= 1.0001 && y + h <= 1.0001;
+  if (!inRange) return url;
+
+  // A window covering the whole frame needs no transformation at all. Rule:
+  // transform only when the destination actually requires it.
+  if (x <= 0.001 && y <= 0.001 && w >= 0.999 && h >= 0.999) return url;
+
+  const at = url.indexOf('/image/upload/');
+  if (at === -1) return url;
+
+  const head = url.slice(0, at + '/image/upload/'.length);
+  const directive = `c_crop,w_${w},h_${h},x_${x},y_${y}`;
+  return `${head}${directive}/${url.slice(at + '/image/upload/'.length)}`;
 }
 
 /**
@@ -138,19 +204,44 @@ async function resolveImage(
     //
     // This path carries more weight now than it did with LinkedIn alone:
     // Instagram takes JPEG *only*, so every PNG in the library reaches it.
-    const converted = toJpegDeliveryUrl(url);
-    if (!converted) throw toMediaError(error);
+    //
+    // Quality first, then fit. Transcoding is a second lossy generation on top
+    // of an already-lossy source, so the first ask is the one that keeps the
+    // most detail; the plain fallback exists only so an image that was
+    // publishable before cannot become unpublishable now. See QUALITY_LADDER.
+    const ladder = QUALITY_LADDER.map((t) => toDeliveryUrl(url, t)).filter(
+      (candidate): candidate is string => candidate !== null,
+    );
+    if (ladder.length === 0) throw toMediaError(error);
 
     console.info('[publish] converting image to a format this network accepts', {
       detail: error.detail,
     });
 
-    try {
-      fetched = await download(converted, requirements);
-      resolvedUrl = converted;
-    } catch (retryError) {
-      throw toMediaError(retryError);
+    let converted: { mimeType: string; buffer: Buffer } | null = null;
+    let lastError: unknown = error;
+
+    for (const candidate of ladder) {
+      try {
+        converted = await download(candidate, requirements);
+        resolvedUrl = candidate;
+        break;
+      } catch (retryError) {
+        lastError = retryError;
+        // Only a size failure is worth stepping down the ladder — a lower
+        // quality setting cannot fix a bad address, a dead host or a format
+        // the network still will not take.
+        const isSize =
+          retryError instanceof ImageFetchError && retryError.reason === 'size';
+        if (!isSize) break;
+        console.info('[publish] transcode too large for this network, stepping down', {
+          detail: retryError.detail,
+        });
+      }
     }
+
+    if (!converted) throw toMediaError(lastError);
+    fetched = converted;
   }
 
   const { mimeType, buffer } = fetched;
@@ -202,22 +293,64 @@ function toMediaError(error: unknown): MediaResolutionError {
 }
 
 /**
- * Rewrites a Cloudinary delivery URL to ask for JPEG.
+ * Transcoding a stored image for a network that will not take its format.
  *
  * Every image in this app is uploaded to Cloudinary, and the uploader accepts
- * WEBP — which LinkedIn does not take. Cloudinary will transcode on delivery if
- * asked, so the fix is a URL parameter rather than a decoder in this process:
+ * WEBP — which neither LinkedIn nor Instagram takes. Cloudinary will transcode
+ * on delivery if asked, so the fix is a URL parameter rather than a decoder in
+ * this process:
  *
- *   …/image/upload/v123/photo.webp  →  …/image/upload/f_jpg/v123/photo.webp
+ *   …/image/upload/v123/photo.webp
+ *     → …/image/upload/f_jpg,q_auto:best/v123/photo.webp
  *
  * `f_jpg` and not `f_auto`: auto negotiates against the `Accept` header, and we
  * send `image/*`, so it could hand back the very webp we are trying to escape.
  *
- * Returns null when the URL is not a Cloudinary delivery URL, or already
+ * These return null when the URL is not a Cloudinary delivery URL, or already
  * carries a format directive someone chose deliberately. Null means "no second
  * attempt is possible" and the original failure stands.
+ *
+ * **The stored asset is never touched.** A Cloudinary delivery transformation
+ * is a read: it derives a new representation at request time and leaves the
+ * uploaded original byte-for-byte as it was, which is what keeps the member's
+ * source image available at full quality for every later use.
+ */
+
+/**
+ * The transcode attempts, best first.
+ *
+ * `q_auto:best` rather than a bare `f_jpg`, because a bare `f_jpg` re-encodes
+ * at Cloudinary's default quality — a second lossy generation stacked on an
+ * already-lossy source. Measured against a real uploaded WEBP: 70KB in,
+ * 61KB out at the default and 108KB at `q_auto:best`, at identical pixel
+ * dimensions. That missing third of the data is visible detail, and it is the
+ * quality drop members were seeing on published Instagram posts.
+ *
+ * Note what is deliberately *absent*: no `w_`, no `c_`, no dimension directive
+ * of any kind. This ladder only ever changes the encoding, never the pixels —
+ * so it cannot upscale, cannot downscale and cannot crop, and an image that
+ * already satisfies the network is passed through untouched (Cloudinary
+ * returns the stored bytes when the requested format already matches).
+ *
+ * The second rung is the old behaviour, reached only when `q_auto:best` blows
+ * the network's byte ceiling. It guarantees this change can never turn a
+ * publishable image into a failure.
+ */
+const QUALITY_LADDER = ['f_jpg,q_auto:best', 'f_jpg'] as const;
+
+/**
+ * Rewrites a Cloudinary delivery URL to ask for JPEG at the best quality.
+ *
+ * Kept as the named export because the publish verification suite and any
+ * future caller mean "give me the JPEG version of this" — the ladder above is
+ * an implementation detail of the retry.
  */
 export function toJpegDeliveryUrl(url: string): string | null {
+  return toDeliveryUrl(url, QUALITY_LADDER[0]);
+}
+
+/** Inserts one transformation into a Cloudinary delivery URL. */
+function toDeliveryUrl(url: string, transformation: string): string | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -236,7 +369,7 @@ export function toJpegDeliveryUrl(url: string): string | null {
   // second-guessing an explicit choice, and we would still not know better.
   if (/(^|\/)f_[^/]+/.test(transformations)) return null;
 
-  parsed.pathname = `${parsed.pathname.slice(0, at + marker.length)}f_jpg/${transformations}`;
+  parsed.pathname = `${parsed.pathname.slice(0, at + marker.length)}${transformation}/${transformations}`;
   return parsed.toString();
 }
 
@@ -402,4 +535,5 @@ export const mediaService = {
   resolvePostMedia,
   probeImageSize,
   toJpegDeliveryUrl,
+  applyStoredCrop,
 };

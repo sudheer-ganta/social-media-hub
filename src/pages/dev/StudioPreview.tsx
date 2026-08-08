@@ -21,6 +21,7 @@ import type { Post } from "@/types";
 const MOCK_POST: Post = {
   id: "00000000-0000-0000-0000-000000000000",
   title: "Aurora Serum — launch",
+  platform_media: null,
   caption: "",
   image_url: "https://placehold.co/600x600/1A1A2E/E94560?text=Aurora",
   platforms: ["instagram", "linkedin", "x"],

@@ -16,6 +16,10 @@ import {
 } from "@/components/ui/card";
 import { PlatformIcon } from "@/components/shared/PlatformIcon";
 import { useCaptionAnalysis } from "@/hooks/useCaptionAnalysis";
+// Read from the caption text, never from the last generation: the tags that
+// matter are the ones that will be published, and those are whatever survived
+// the member's editing.
+import { hashtagsIn } from "@/utils/hashtags";
 import { PLATFORM_MAP } from "@/constants";
 import { SCORE_BAND_LABEL, scoreBand } from "@/ai/analysis";
 import { cn } from "@/lib/utils";
@@ -43,18 +47,6 @@ import type { Platform } from "@/types";
  * "could improve", "may help visibility". Nothing in this app can know whether
  * a post will go viral, so nothing in this app says so.
  */
-
-/**
- * The hashtags actually in the caption, without their `#`.
- *
- * Read from the text rather than taken from the last generation: the tags that
- * matter are the ones that will be published, and those are whatever survived
- * the user's editing. Handing the analyser a generated list the user never
- * applied — or deleted — scores a post nobody is going to post.
- */
-function hashtagsIn(caption: string): string[] {
-  return [...caption.matchAll(/#([\p{L}\p{N}_]+)/gu)].map((match) => match[1]);
-}
 
 interface ReachPanelProps {
   caption: string;

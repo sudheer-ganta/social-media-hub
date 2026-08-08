@@ -37,6 +37,10 @@ import { PLATFORM_MAP } from "@/constants";
 import { usePublishPostToProvider, usePublishState } from "@/hooks/usePublish";
 import { postsService } from "@/services";
 import { currentTime, today } from "@/utils/date";
+import { withHashtags } from "@/utils/hashtags";
+import { withCrop } from "@/utils/crop";
+import { MediaFormatPanel } from "./MediaFormatPanel";
+import { PlatformPreview } from "./PlatformPreview";
 import type { AudienceRegister } from "@/ai/caption";
 import {
   postSchema,
@@ -107,6 +111,8 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
       music: post?.music ?? "",
       cta: post?.cta ?? "",
       link_url: post?.link_url ?? "",
+      // Reopening a draft or a scheduled post restores its framing exactly.
+      platform_media: post?.platform_media ?? {},
       publish_date: post?.publish_date ?? today(),
       publish_time: post?.publish_time ?? currentTime(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -290,9 +296,28 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     // already written or chosen is left alone; the panel's "Use as caption"
     // buttons are how it gets replaced.
     if (generated && !values.caption.trim()) {
-      setValue("caption", generated.caption, { shouldValidate: true });
+      setValue("caption", applyCaption(generated.caption, generated.hashtags), {
+        shouldValidate: true,
+      });
     }
   };
+
+  /**
+   * An AI caption as it should land in the editor.
+   *
+   * Personal gets the hashtags folded in; Brand gets the caption exactly as it
+   * did before, because Brand's hashtags are reviewed in the Marketing Studio
+   * and appended deliberately from there.
+   *
+   * This is the fix for hashtags never reaching Instagram. They were only ever
+   * in `result.hashtags` — a metadata array beside the caption — and reached
+   * the published post only if someone happened to press "Add to caption".
+   * The publisher sends `post.caption` and nothing else, so an untouched
+   * generation published with zero hashtags. The caption field is the single
+   * source of truth, so that is where they have to be.
+   */
+  const applyCaption = (caption: string, hashtags: string[]) =>
+    isBrand ? caption : withHashtags(caption, hashtags, watch("platforms"));
 
   /** Appends the generated hashtags to whatever is in the editor. */
   const handleAppendHashtags = (hashtags: string[]) => {
@@ -342,6 +367,12 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
       music: values.music.trim() || null,
       cta: values.cta.trim() || null,
       link_url: values.link_url.trim() || null,
+      // Stored on every save — draft, schedule and publish alike — so framing
+      // survives a reload and is still there when the backend publishes a
+      // scheduled post hours later.
+      platform_media: Object.keys(values.platform_media ?? {}).length
+        ? values.platform_media
+        : null,
     };
 
     const saved = post
@@ -434,6 +465,75 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
    * that the member can see it land and click through to the live post, which
    * they cannot do from the posts list.
    */
+  /**
+   * Sends one saved post to each network in turn and reports what happened.
+   *
+   * One request per network, in sequence, and a failure on one does not stop
+   * the others: LinkedIn accepting a post is not a reason to skip Instagram,
+   * and the reverse is just as true. Each attempt reports its own outcome
+   * through the mutation's toasts, and `post_platforms` records them
+   * separately — so "published to LinkedIn, failed on Instagram" is a state the
+   * app can show rather than one it has to flatten.
+   *
+   * Extracted so retrying a single failed network is the same code path as the
+   * first attempt, rather than a second implementation that can drift from it.
+   */
+  const sendTo = async (
+    postId: string,
+    providers: Platform[],
+  ): Promise<PostPlatformState[]> => {
+    const outcomes: PostPlatformState[] = [];
+
+    for (const provider of providers) {
+      setPublishingProvider(provider);
+      outcomes.push(
+        await publish
+          .mutateAsync({ postId, provider })
+          .then<PostPlatformState>((result) => ({
+            provider,
+            providerName: PLATFORM_MAP[provider]?.name ?? provider,
+            status: "PUBLISHED",
+            publishedId: result.publishedId,
+            url: result.url,
+            errorMessage: null,
+          }))
+          .catch<PostPlatformState>((cause) => ({
+            provider,
+            providerName: PLATFORM_MAP[provider]?.name ?? provider,
+            status: "FAILED",
+            publishedId: null,
+            url: null,
+            // Already written for a member by the backend — the mutation's
+            // own toast renders the same string.
+            errorMessage:
+              cause instanceof Error ? cause.message : "Publishing failed.",
+          })),
+      );
+    }
+
+    setPublishingProvider(null);
+    return outcomes;
+  };
+
+  /**
+   * Retries one network that failed, from the published summary.
+   *
+   * Only the named network is contacted — the ones that succeeded are already
+   * live and must not be sent again, which is the whole reason this takes a
+   * provider rather than re-running the publish.
+   */
+  const retryProvider = async (provider: Platform) => {
+    if (!published) return;
+    const [outcome] = await sendTo(published.id, [provider]);
+    if (!outcome) return;
+    setPublished({
+      ...published,
+      platforms: published.platforms.map((row) =>
+        row.provider === provider ? outcome : row,
+      ),
+    });
+  };
+
   const handlePublish = handleSubmit(async (values) => {
     const targets = values.platforms.filter((p) => publishableProviders.has(p));
 
@@ -468,34 +568,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
       // own outcome through the mutation's toasts, and `post_platforms` records
       // them separately — so "published to LinkedIn, failed on Instagram" is a
       // state the app can actually show rather than one it has to flatten.
-      const outcomes: PostPlatformState[] = [];
-
-      for (const provider of targets) {
-        setPublishingProvider(provider);
-        outcomes.push(
-          await publish
-            .mutateAsync({ postId: saved.id, provider })
-            .then<PostPlatformState>((result) => ({
-              provider,
-              providerName: PLATFORM_MAP[provider]?.name ?? provider,
-              status: "PUBLISHED",
-              publishedId: result.publishedId,
-              url: result.url,
-              errorMessage: null,
-            }))
-            .catch<PostPlatformState>((cause) => ({
-              provider,
-              providerName: PLATFORM_MAP[provider]?.name ?? provider,
-              status: "FAILED",
-              publishedId: null,
-              url: null,
-              // Already written for a member by the backend — the mutation's
-              // own toast renders the same string.
-              errorMessage:
-                cause instanceof Error ? cause.message : "Publishing failed.",
-            })),
-        );
-      }
+      const outcomes = await sendTo(saved.id, targets);
 
       // Personal, and something actually went out: the work is finished, so
       // the form gives way to the result rather than leaving someone staring
@@ -531,10 +604,21 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   if (published) {
     return (
       <PublishedSummary
-        imageUrl={getValues("image_url")}
+        // The Instagram crop is the closest thing to "the published image"
+        // this app has — a per-network rendition, derived from the untouched
+        // original. Falls back to the original when nothing was cropped.
+        imageUrl={withCrop(
+          getValues("image_url"),
+          getValues("platform_media")?.[
+            published.platforms.find((p) => p.status === "PUBLISHED")?.provider ??
+              ""
+          ],
+        )}
         caption={getValues("caption")}
         music={getValues("music")}
         platforms={published.platforms}
+        onRetry={retryProvider}
+        retrying={publish.isPending ? publishingProvider : null}
         onEdit={() => {
           setPublished(null);
           if (!post) navigate(`/posts/${published.id}/edit`, { replace: true });
@@ -659,6 +743,33 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         </CardContent>
       </Card>
 
+      {/* Personal's Preview & Adjust workflow. Brand keeps the composer it
+          has — its media rules are a separate piece of work. */}
+      {!isBrand && imageUrl?.trim() && (
+        <Controller
+          control={control}
+          name="platform_media"
+          render={({ field }) => (
+            <MediaFormatPanel
+              imageUrl={imageUrl}
+              platforms={selectedPlatforms}
+              value={field.value ?? {}}
+              onChange={field.onChange}
+            />
+          )}
+        />
+      )}
+
+      {!isBrand && (
+        <PlatformPreview
+          platforms={selectedPlatforms}
+          imageUrl={imageUrl ?? ""}
+          caption={watch("caption")}
+          music={watch("music")}
+          media={watch("platform_media") ?? {}}
+        />
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Schedule</CardTitle>
@@ -720,7 +831,12 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         hasImage={Boolean(imageUrl?.trim())}
         onGenerate={handleGenerate}
         onUseCaption={(caption) =>
-          setValue("caption", caption, { shouldValidate: true })
+          // Personal folds the hashtags in with the caption — one click, and
+          // what is in the editor is what Instagram receives. Brand keeps the
+          // caption alone and appends tags from the Marketing Studio.
+          setValue("caption", applyCaption(caption, ai.result?.hashtags ?? []), {
+            shouldValidate: true,
+          })
         }
         onAppendHashtags={handleAppendHashtags}
         {...(!isBrand && {

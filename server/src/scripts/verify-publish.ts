@@ -37,8 +37,11 @@ import {
   validateMedia,
   canPublish,
   LINKEDIN_MAX_CAPTION_LENGTH,
+  LINKEDIN_IMAGE_MIME_TYPES,
 } from '../providers/linkedin/validator';
+import { INSTAGRAM_IMAGE_MIME_TYPES } from '../providers/meta/instagram/validator';
 import {
+  applyStoredCrop,
   probeImageSize,
   toJpegDeliveryUrl,
 } from '../publish/services/media.service';
@@ -542,17 +545,134 @@ async function verifyMedia() {
   // again as JPEG rather than failing the publish.
   section('Media — Cloudinary format conversion');
 
+  const WEBP =
+    'https://res.cloudinary.com/demo/image/upload/v1712345678/posts/shot.webp';
+
   check(
     'asks Cloudinary for JPEG when the stored image is webp',
-    toJpegDeliveryUrl(
-      'https://res.cloudinary.com/demo/image/upload/v1712345678/posts/shot.webp',
+    toJpegDeliveryUrl(WEBP) ===
+      'https://res.cloudinary.com/demo/image/upload/f_jpg,q_auto:best/v1712345678/posts/shot.webp',
+    String(toJpegDeliveryUrl(WEBP)),
+  );
+
+  // B. An oversized image is transformed only when necessary — and the
+  //    transform that runs is an *encoding* change, never a pixel one.
+  //
+  // The regression this guards: a bare `f_jpg` re-encodes at Cloudinary's
+  // default quality, a second lossy generation on top of an already-lossy
+  // source. Measured on a real member upload: 70KB webp → 61KB at the default,
+  // 108KB at q_auto:best, identical dimensions. The missing third was the
+  // visible quality drop on published Instagram posts.
+  check(
+    'transcodes at best quality rather than the lossy default',
+    toJpegDeliveryUrl(WEBP)?.includes('q_auto:best') === true,
+  );
+
+  // A + C + D. The three properties that keep the member's picture intact.
+  const derived = toJpegDeliveryUrl(WEBP) ?? '';
+  check(
+    'A. no resize directive — an HD image is never recompressed to fit a box',
+    !/[,/]w_\d/.test(derived) && !/[,/]h_\d/.test(derived),
+    derived,
+  );
+  check(
+    'C. no crop or scale directive — nothing can upscale or crop',
+    !/[,/]c_/.test(derived),
+    derived,
+  );
+  check(
+    'D. the stored original is addressed unchanged beneath the transform',
+    derived.endsWith('/v1712345678/posts/shot.webp'),
+    derived,
+  );
+  check(
+    'E. a JPEG already acceptable to the network is never transformed at all',
+    // The transcode branch is only reachable from an ImageFetchError with
+    // reason 'format'. A JPEG satisfies both LinkedIn and Instagram, so the
+    // first download succeeds and no derived URL is ever built — which is what
+    // makes this change invisible to every existing Brand and Personal publish
+    // whose image is already a JPEG.
+    INSTAGRAM_IMAGE_MIME_TYPES.has('image/jpeg') &&
+      LINKEDIN_IMAGE_MIME_TYPES.has('image/jpeg'),
+  );
+
+  // ─── Per-platform framing ──────────────────────────────────────────────────
+  //
+  // `posts.platform_media` is written by the browser under RLS, so everything
+  // below is a trust-boundary check, not a formatting one: the question is not
+  // "does this produce a nice URL" but "can a hand-written value make us hand
+  // Meta something we did not intend".
+  section('Media — per-platform crop');
+
+  const JPG = 'https://res.cloudinary.com/demo/image/upload/v1/posts/shot.jpg';
+  const CROP = { instagram: { ratio: '4:5', x: 0.1, y: 0, w: 0.8, h: 1, zoom: 1 } };
+
+  check(
+    "delivers this network's framing as a crop transformation",
+    applyStoredCrop(JPG, CROP, 'instagram') ===
+      'https://res.cloudinary.com/demo/image/upload/c_crop,w_0.8,h_1,x_0.1,y_0/v1/posts/shot.jpg',
+    applyStoredCrop(JPG, CROP, 'instagram'),
+  );
+  check(
+    'the stored original is still addressed underneath',
+    applyStoredCrop(JPG, CROP, 'instagram').endsWith('/v1/posts/shot.jpg'),
+  );
+  check(
+    'a network with no framing of its own gets the whole image',
+    applyStoredCrop(JPG, CROP, 'linkedin') === JPG,
+  );
+  check('a post with no framing at all is untouched', applyStoredCrop(JPG, null, 'instagram') === JPG);
+  check(
+    'a full-frame crop emits no transformation',
+    applyStoredCrop(JPG, { instagram: { x: 0, y: 0, w: 1, h: 1 } }, 'instagram') === JPG,
+  );
+
+  // The rejections. Each of these would otherwise reach a delivery URL.
+  const REJECT: Array<[string, unknown]> = [
+    ['a window running off the right edge', { x: 0.5, y: 0, w: 0.8, h: 1 }],
+    ['a window running off the bottom', { x: 0, y: 0.5, w: 1, h: 0.8 }],
+    ['a negative origin', { x: -0.2, y: 0, w: 0.5, h: 0.5 }],
+    ['a width above the whole image', { x: 0, y: 0, w: 1.5, h: 1 }],
+    ['a zero-width window', { x: 0, y: 0, w: 0, h: 1 }],
+    ['NaN', { x: Number.NaN, y: 0, w: 0.5, h: 0.5 }],
+    ['Infinity', { x: 0, y: 0, w: Number.POSITIVE_INFINITY, h: 1 }],
+    ['strings instead of numbers', { x: '0', y: '0', w: '0.5', h: '0.5' }],
+    ['a missing field', { x: 0, y: 0, w: 0.5 }],
+  ];
+  for (const [label, crop] of REJECT) {
+    check(
+      `rejects ${label} and delivers the image whole`,
+      applyStoredCrop(JPG, { instagram: crop }, 'instagram') === JPG,
+      applyStoredCrop(JPG, { instagram: crop }, 'instagram'),
+    );
+  }
+
+  check(
+    'a non-Cloudinary host is never rewritten',
+    applyStoredCrop('https://example.com/a.jpg', CROP, 'instagram') ===
+      'https://example.com/a.jpg',
+  );
+
+  // Only the four numbers are ever read. A hand-written column can carry any
+  // other key it likes — `ratio` included, which the composer writes and the
+  // publisher deliberately ignores — and none of it can reach the URL.
+  check(
+    'no field other than x/y/w/h can influence the delivered URL',
+    applyStoredCrop(
+      JPG,
+      {
+        instagram: {
+          x: 0,
+          y: 0,
+          w: 0.5,
+          h: 0.5,
+          ratio: 'f_auto/a_90/../../evil',
+          zoom: 'w_9999',
+        },
+      },
+      'instagram',
     ) ===
-      'https://res.cloudinary.com/demo/image/upload/f_jpg/v1712345678/posts/shot.webp',
-    String(
-      toJpegDeliveryUrl(
-        'https://res.cloudinary.com/demo/image/upload/v1712345678/posts/shot.webp',
-      ),
-    ),
+      'https://res.cloudinary.com/demo/image/upload/c_crop,w_0.5,h_0.5,x_0,y_0/v1/posts/shot.jpg',
   );
 
   check(

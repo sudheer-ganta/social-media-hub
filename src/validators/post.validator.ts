@@ -1,5 +1,6 @@
 import dayjs from "dayjs";
 import { z } from "zod";
+import type { PlatformMedia } from "@/utils/crop";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^\d{2}:\d{2}$/;
@@ -20,6 +21,14 @@ export const postSchema = z
     context_type: z.enum(["personal", "brand"]),
     brand_id: z.string().nullable(),
     music: z.string().trim().max(200, "Keep the song under 200 characters."),
+    /**
+     * Machine-written, never typed: the composer builds every value from
+     * `utils/crop.ts`, so there is no user input here to reject and no error
+     * message that would mean anything. The backend re-validates before it
+     * builds a delivery URL — a browser can write this column under RLS, so
+     * the publish path treats it as untrusted. See `publish/services/media`.
+     */
+    platform_media: z.custom<PlatformMedia>(() => true),
     cta: z.string().trim().max(200, "Keep the CTA under 200 characters."),
     link_url: z
       .string()

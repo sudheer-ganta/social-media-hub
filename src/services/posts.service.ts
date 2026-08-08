@@ -157,6 +157,10 @@ export const postsService = {
       music: source.music,
       cta: source.cta,
       link_url: source.link_url,
+      // A copy is framed like its source — the whole point of duplicating is
+      // to reuse the setup, and re-cropping for every network by hand is
+      // exactly the work this feature removes.
+      platform_media: source.platform_media,
     });
   },
 

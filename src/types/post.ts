@@ -1,4 +1,7 @@
 import type { AiStudioInput, AiStudioOutput } from "@/ai/types";
+import type { PlatformMedia } from "@/utils/crop";
+
+export type { PlatformCrop, PlatformMedia } from "@/utils/crop";
 
 /**
  * Mirrors the `post_status` enum in the database (see prisma/schema.prisma).
@@ -117,6 +120,12 @@ export interface Post {
   music: string | null;
   cta: string | null;
   link_url: string | null;
+  /**
+   * Per-network framing of the single uploaded image, keyed by platform id.
+   * Null on every post written before Preview & Adjust existed, and on any
+   * post delivered whole. See `utils/crop.ts`.
+   */
+  platform_media: PlatformMedia | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -149,6 +158,7 @@ export type PostInsert = Pick<
   | "music"
   | "cta"
   | "link_url"
+  | "platform_media"
 >;
 
 export type PostUpdate = Partial<

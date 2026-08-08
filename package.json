@@ -11,7 +11,9 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:new": "prisma migrate dev --create-only",
     "db:status": "prisma migrate status",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "verify:hashtags": "node --experimental-strip-types scripts/verify-hashtags.ts",
+    "verify:crop": "node --experimental-strip-types scripts/verify-crop.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",

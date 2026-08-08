@@ -63,6 +63,14 @@ model Post {
   cta      String?
   link_url String?
 
+  /// How each selected network frames the one uploaded image, as fractions of
+  /// the original: {"instagram":{"ratio":"4:5","x":0.1,"y":0,"w":0.8,"h":1,
+  /// "zoom":1}, …}. Null means "deliver the asset whole", which is what every
+  /// post did before this existed. The upload itself is never rewritten — the
+  /// crop becomes a Cloudinary delivery transformation at publish time.
+  /// See src/utils/crop.ts.
+  platform_media Json?
+
   // AI pipeline. Written by the backend AI module via the posts API —
   // see server/src/ai/ and src/services/posts.service.ts.
   ai_status           String    @default("pending")

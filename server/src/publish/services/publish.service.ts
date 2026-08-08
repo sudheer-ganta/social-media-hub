@@ -313,6 +313,9 @@ async function resolveMedia(post: Post, caption: string, provider: Provider) {
     return await resolvePostMedia(post, {
       caption,
       requirements: provider.mediaRequirements,
+      // Which network is being published to, so this network's stored framing
+      // is the one delivered. A post with no framing is unaffected.
+      providerId: provider.id,
     });
   } catch (error) {
     if (error instanceof MediaResolutionError) {
