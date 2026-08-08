@@ -31,6 +31,12 @@ export interface ConnectAccountInput {
   provider: ProviderId;
   providerAccountId: string;
   displayName?: string | null;
+  /**
+   * The member's handle where the network has one. LinkedIn does not; Instagram
+   * does, and it is what people recognise their own account by — "@flowpost"
+   * rather than a display name they may never have set.
+   */
+  username?: string | null;
   profileImage?: string | null;
   /** Plaintext. Encrypted by the repository on the way into the database. */
   accessToken: string;
@@ -76,6 +82,7 @@ export async function connectAccount(
     provider: input.provider,
     providerAccountId: input.providerAccountId,
     displayName: input.displayName ?? null,
+    username: input.username ?? null,
     profileImage: input.profileImage ?? null,
     accessToken: input.accessToken,
     refreshToken: input.refreshToken ?? null,

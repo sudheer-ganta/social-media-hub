@@ -251,11 +251,9 @@ export function MarketingStudio({ post, onUseCaption }: MarketingStudioProps) {
           <Wand2 className="h-3.5 w-3.5 text-primary shrink-0" />
           <p className="text-xs text-muted-foreground flex-1">
             <span className="font-medium text-foreground">Upgrade available:</span>{" "}
-            Configure brand voice on the{" "}
-            <a href="/ai-studio" className="text-primary underline underline-offset-2">
-              AI Studio page
-            </a>{" "}
-            and regenerate for 9 tone variations, CTAs, hashtag groups and image analysis.
+            Open <span className="font-medium text-foreground">Build with AI</span>{" "}
+            above to set a brand voice, then regenerate for 9 tone variations,
+            CTAs, hashtag groups and image analysis.
           </p>
         </div>
       )}

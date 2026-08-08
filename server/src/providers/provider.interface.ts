@@ -72,6 +72,45 @@ export interface Provider {
    * against the post and surface to the member.
    */
   publish?(input: ProviderPublishInput): Promise<ProviderPublishResult>;
+
+  /**
+   * Optional. What this network will accept as media, so the *fetcher* can
+   * enforce it.
+   *
+   * Networks disagree, and the disagreement has to be known before the bytes
+   * are downloaded: LinkedIn takes JPEG, PNG and GIF, Instagram takes JPEG and
+   * nothing else. Without this the media service would hardcode one network's
+   * rules for all of them, which is what it did when LinkedIn was the only one.
+   *
+   * Absent means "no opinion" and the service falls back to its own defaults.
+   */
+  readonly mediaRequirements?: ProviderMediaRequirements;
+
+  /**
+   * Optional. Whether a connection's *granted* scopes allow publishing.
+   *
+   * A member can decline a permission on the consent screen and still complete
+   * the connection, producing an account that looks healthy and cannot publish.
+   * The check is per-network because the scope name is — `w_member_social` on
+   * LinkedIn, `instagram_business_content_publish` on Instagram — and it lives
+   * here so the publish service never grows a chain of provider ifs.
+   *
+   * Absent means "cannot be determined from scopes"; the network is then the
+   * only authority and a rejection is handled as a publish failure.
+   */
+  canPublish?(scopes: string[]): boolean;
+}
+
+/** A network's media rules, applied before anything is downloaded. */
+export interface ProviderMediaRequirements {
+  /** MIME types this network's upload or fetch will accept. Lowercased. */
+  imageMimeTypes: ReadonlySet<string>;
+  /**
+   * Byte ceiling for one image. Ours as much as the network's — the bytes pass
+   * through this process' memory, and an unbounded download is a way to run the
+   * API out of heap.
+   */
+  maxImageBytes: number;
 }
 
 /**
@@ -97,6 +136,23 @@ export interface ProviderMediaAsset {
   mimeType: string;
   data: Buffer;
   byteLength: number;
+  /**
+   * The public URL these exact bytes were fetched from.
+   *
+   * Present because not every network takes an upload. LinkedIn wants the
+   * bytes; Instagram's Content Publishing API takes an `image_url` and fetches
+   * it from Meta's own servers — there is no byte-upload endpoint for it at
+   * all. A provider that needs a URL uses this one rather than reaching for
+   * `post.image_url`, which is the raw member-supplied value and may not be
+   * what was actually downloaded (see the Cloudinary JPEG rewrite in
+   * `publish/services/media.service.ts`).
+   *
+   * Fetching it is still the media service's job, and the bytes above are still
+   * what proves the URL resolves to an image this network accepts — so a
+   * URL-fetching provider gets the same format and size guarantees as an
+   * uploading one, for free.
+   */
+  sourceUrl: string;
   /** Null when the format's header could not be read. Providers may still send it. */
   width: number | null;
   height: number | null;
@@ -134,7 +190,15 @@ export interface ProviderPublishInput {
 export interface ProviderPublishResult {
   /** The network's id for the created post. Stored on `post_platforms`. */
   urn: string;
-  /** A permalink, or null when the network gives us no way to build one. */
+  /**
+   * A permalink, or null when the network gives us no way to build one.
+   *
+   * Two kinds of network here, and the difference is why this is stored rather
+   * than rebuilt on read. LinkedIn's permalink is a pure function of the URN,
+   * so it can be derived any time. Instagram's is an opaque shortcode only the
+   * API knows, so if it is not captured now it is gone — see
+   * `post_platforms.permalink`.
+   */
   url: string | null;
   /** Which endpoint served the request, for support and debugging. */
   endpoint?: string;

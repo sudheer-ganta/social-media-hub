@@ -1,10 +1,10 @@
-import crypto from 'crypto';
 import type { Request, Response } from 'express';
 import {
   notImplemented,
   ProviderError,
   type Provider,
 } from '../provider.interface';
+import { createOAuthStateStore, firstQueryValue } from '../oauth-state';
 import { assertLinkedInConfigured, linkedinConfig } from './config';
 import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode } from './token';
@@ -14,7 +14,8 @@ import { getCatalogEntry } from '../catalog';
 import { socialConnectionService } from '../../services/social-connection.service';
 import { buildIntegrationsRedirect } from '../../services/oauth-redirect';
 import { clearOAuthSessionCookie } from '../../middleware/auth.middleware';
-import type { LinkedInAuthorizationParams, LinkedInPendingState } from './types';
+import { LINKEDIN_IMAGE_MIME_TYPES, LINKEDIN_MAX_IMAGE_BYTES, canPublish } from './validator';
+import type { LinkedInAuthorizationParams } from './types';
 
 /**
  * LinkedIn OAuth — both legs of the authorization-code flow.
@@ -29,59 +30,15 @@ import type { LinkedInAuthorizationParams, LinkedInPendingState } from './types'
  */
 
 /**
- * Pending OAuth states, keyed by the state value itself.
+ * Pending OAuth states for LinkedIn.
  *
- * Still in-memory: a restart or a second instance drops in-flight connects,
- * which the member recovers from by pressing Connect again. Moving this to a
- * signed cookie or Redis is the change that makes the flow survive both, and it
- * is a swap of these three functions with no caller changes.
+ * The store itself moved to `providers/oauth-state.ts` when Instagram arrived —
+ * behaviour unchanged, but there is now one implementation of single-use,
+ * expiry and entropy rather than one per network. This instance is LinkedIn's
+ * alone, so a state minted for another provider can never satisfy a callback
+ * here.
  */
-const pendingStates = new Map<string, LinkedInPendingState>();
-
-/** Drops entries past their TTL. Cheap enough to run on every mint. */
-function evictExpiredStates(now: number): void {
-  for (const [state, entry] of pendingStates) {
-    if (entry.expiresAt <= now) pendingStates.delete(state);
-  }
-}
-
-/**
- * A 32-byte CSPRNG value, base64url so it survives a query string untouched.
- * This is the CSRF defence for the whole flow — the callback rejects any
- * `state` it did not mint here — and it doubles as the only carrier of *which
- * FlowPost user* is connecting, since LinkedIn's redirect tells us nothing
- * about our own session.
- */
-function createState(userId: string): string {
-  const now = Date.now();
-  evictExpiredStates(now);
-
-  const state = crypto.randomBytes(32).toString('base64url');
-  pendingStates.set(state, {
-    expiresAt: now + linkedinConfig.stateTtlMs,
-    userId,
-  });
-
-  return state;
-}
-
-/**
- * Looks up an incoming state and deletes it in the same step.
- *
- * Single-use by construction: consuming on lookup is what stops a replayed
- * callback URL from writing the account a second time, and it satisfies the
- * "delete state after successful validation" rule without a second call the
- * error paths could skip. Returns null for unknown, expired or already-used
- * values — the caller cannot tell those apart, and neither should an attacker.
- */
-function consumeState(state: string): LinkedInPendingState | null {
-  const entry = pendingStates.get(state);
-  if (!entry) return null;
-
-  pendingStates.delete(state);
-
-  return entry.expiresAt <= Date.now() ? null : entry;
-}
+const states = createOAuthStateStore(linkedinConfig.stateTtlMs);
 
 /**
  * Builds the full authorization URL. Kept exported and pure so it can be
@@ -135,7 +92,7 @@ async function connect(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const state = createState(userId);
+  const state = states.create(userId);
   const authorizationUrl = buildAuthorizationUrl(state);
 
   // Scopes are safe to log; the state, the client secret and any token are not.
@@ -162,7 +119,7 @@ async function callback(req: Request, res: Response): Promise<void> {
 
   // Resolved before anything can throw, so the catch block can attribute the
   // failure to a user in the audit trail.
-  const pending = state ? consumeState(state) : null;
+  const pending = state ? states.consume(state) : null;
 
   try {
     // The member pressed Cancel, or LinkedIn refused the request outright.
@@ -243,15 +200,6 @@ async function disconnect(_req: Request, _res: Response): Promise<void> {
   notImplemented('linkedin', 'disconnect');
 }
 
-/**
- * Express types a query value as string | string[] | ParsedQs. A repeated
- * `?code=a&code=b` is not something a legitimate LinkedIn redirect does, so
- * anything that is not a plain string is discarded rather than coerced.
- */
-function firstQueryValue(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
 export const linkedinProvider: Provider = {
   id: 'linkedin',
   displayName: 'LinkedIn',
@@ -265,4 +213,14 @@ export const linkedinProvider: Provider = {
   // publish service with a decrypted token, never wired to a route. Text and
   // image posts go through this one method; see publisher.ts.
   publish,
+  // Moved here from `publish/services/media.service.ts`, which used to apply
+  // these to every network because LinkedIn was the only one. Instagram takes
+  // JPEG only, so the rules had to belong to whoever owns them.
+  mediaRequirements: {
+    imageMimeTypes: LINKEDIN_IMAGE_MIME_TYPES,
+    maxImageBytes: LINKEDIN_MAX_IMAGE_BYTES,
+  },
+  // Was a `providerId === 'linkedin'` branch in the publish service. Same
+  // check, asked of the provider instead of hardcoded against it.
+  canPublish,
 };

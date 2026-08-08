@@ -12,7 +12,6 @@ import {
   Plug,
   Settings,
   Sun,
-  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FlowPostIcon } from "@/components/brand/Logo";
@@ -39,8 +38,9 @@ import type { Theme } from "@/types";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/ai-studio", label: "AI Studio", icon: Wand2 },
-  { to: "/posts", label: "Posts", icon: FileText },
+  // One answer to "where do I create content?" — AI Studio folded into
+  // Create Post, so there is no second destination to choose between.
+  { to: "/posts", label: "Content Studio", icon: FileText },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/integrations", label: "Integrations", icon: Plug },

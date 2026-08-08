@@ -26,8 +26,10 @@ app.get('/me', requireAuth, (req, res) => {
 
 // OAuth connect routes, one router per provider
 import linkedinRoutes from './routes/linkedin.routes';
+import instagramRoutes from './routes/instagram.routes';
 
 app.use('/auth/linkedin', linkedinRoutes);
+app.use('/auth/instagram', instagramRoutes);
 
 // Provider-agnostic read API for the Integrations page
 import integrationsRoutes from './routes/integrations.routes';

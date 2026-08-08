@@ -1,5 +1,6 @@
 import type { ProviderId } from './provider.interface';
 import { LINKEDIN_API_VERSION } from './linkedin/config';
+import { META_API_VERSION } from './meta/config';
 
 /**
  * Everything the Integrations UI needs to *describe* a network, whether or not
@@ -90,6 +91,46 @@ const LINKEDIN_PERMISSIONS: ProviderPermission[] = [
   },
 ];
 
+/**
+ * Permissions Business Login for Instagram grants. Mirrors
+ * `meta/instagram/config.ts` — that file decides what to *ask* for, this one
+ * explains what each one means to a member.
+ *
+ * The planned entries are honest about the two real limits of this API surface:
+ * Stories cannot be published through it at all, and Reels need the video
+ * pipeline FlowPost has not built yet.
+ */
+const INSTAGRAM_PERMISSIONS: ProviderPermission[] = [
+  {
+    scope: 'instagram_business_content_publish',
+    label: 'Publish Posts',
+    description: 'Publish images with captions to your Instagram feed.',
+    required: true,
+  },
+  {
+    scope: 'instagram_business_basic',
+    label: 'Read Profile',
+    description:
+      'Read your username and photo so FlowPost can show the account.',
+    required: true,
+  },
+  {
+    scope: null,
+    label: 'Publish Reels',
+    description: 'Upload short-form video. Arriving with video support.',
+    required: false,
+    planned: true,
+  },
+  {
+    scope: null,
+    label: 'Publish Stories',
+    description:
+      'Stories cannot be published through the Instagram API — Meta does not offer an endpoint for it.',
+    required: false,
+    planned: true,
+  },
+];
+
 /** Capabilities a video-first network will grant once it is implemented. */
 const VIDEO_PERMISSIONS: ProviderPermission[] = [
   {
@@ -139,32 +180,13 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     displayName: 'Instagram',
     description: 'Visual storytelling & reels',
     brandColor: '#E4405F',
-    available: false,
-    connectPath: null,
-    apiVersion: null,
-    permissions: [
-      {
-        scope: null,
-        label: 'Publish Posts',
-        description: 'Share images and carousels to your feed.',
-        required: false,
-        planned: true,
-      },
-      {
-        scope: null,
-        label: 'Publish Stories',
-        description: 'Post to Stories.',
-        required: false,
-        planned: true,
-      },
-      {
-        scope: null,
-        label: 'Publish Reels',
-        description: 'Upload short-form video.',
-        required: false,
-        planned: true,
-      },
-    ],
+    available: true,
+    connectPath: '/auth/instagram/connect',
+    // The Graph API version every Meta call is pinned to. Read from the
+    // provider config for the same reason LinkedIn's is: the value publishing
+    // sends and the value we display can never drift apart.
+    apiVersion: META_API_VERSION,
+    permissions: INSTAGRAM_PERMISSIONS,
   },
   {
     id: 'facebook',

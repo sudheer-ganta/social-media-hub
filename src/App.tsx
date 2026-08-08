@@ -13,7 +13,6 @@ import Calendar from "@/pages/Calendar";
 import Analytics from "@/pages/Analytics";
 import Integrations from "@/pages/Integrations";
 import Settings from "@/pages/Settings";
-import AiStudio from "@/pages/AiStudio";
 import StudioPreview from "@/pages/dev/StudioPreview";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
@@ -47,7 +46,12 @@ export default function App() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="integrations" element={<Integrations />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="ai-studio" element={<AiStudio />} />
+            {/* AI Studio is now a mode inside Create Post. Kept so bookmarks
+                and the old "Open in AI Studio" links still land somewhere. */}
+            <Route
+              path="ai-studio"
+              element={<Navigate to="/posts/new" replace />}
+            />
           </Route>
 
           {/* Dev-only: mock-data preview of the studio output panels.

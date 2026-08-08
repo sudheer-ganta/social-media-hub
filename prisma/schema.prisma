@@ -182,6 +182,17 @@ model PostPlatform {
   provider     String
   status       PublishStatus @default(PENDING)
   publishedId  String?       @map("published_id")
+
+  /// The live post's URL on the network, captured at publish time.
+  ///
+  /// Stored rather than derived because not every network's permalink can be
+  /// rebuilt from `publishedId`. LinkedIn's can — it is the URN on the end of a
+  /// fixed prefix. Instagram's cannot: it carries an opaque shortcode that only
+  /// Meta knows, returned by a follow-up read that needs a live access token.
+  /// Null for rows published before this column existed, and for any publish
+  /// where the permalink lookup failed; the UI hides the link in both cases.
+  permalink String? @map("permalink")
+
   errorMessage String?       @map("error_message")
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 

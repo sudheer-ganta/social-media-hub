@@ -23,16 +23,45 @@ export const env = {
   // every publish starts failing with a deprecated-version error. Bumping a
   // deployed backend must not require a code change and a redeploy.
   LINKEDIN_API_VERSION: process.env.LINKEDIN_API_VERSION || '202607',
+
+  // ── Meta / Instagram ───────────────────────────────────────────────────────
+  //
+  // These are the **Instagram** App ID and Secret from the Meta App Dashboard,
+  // not the Meta app's own App ID and Secret. They are different values, and
+  // FlowPost uses the "Instagram API with Instagram Login" model, which is the
+  // one authenticated by the Instagram pair. Using the Meta App ID here fails
+  // with a generic authorization error that names nothing — see
+  // `providers/meta/config.ts`.
+  //
+  // Named after the dashboard's own labels rather than following LinkedIn's
+  // CLIENT_ID/CLIENT_SECRET convention, precisely so the value being pasted and
+  // the field it comes from have the same name.
+  INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID || '',
+  INSTAGRAM_APP_SECRET: process.env.INSTAGRAM_APP_SECRET || '',
+  INSTAGRAM_REDIRECT_URI: process.env.INSTAGRAM_REDIRECT_URI || '',
+  // Shared by every Meta surface (Instagram now, Facebook Pages and Threads
+  // later). In the environment for the same reason LINKEDIN_API_VERSION is:
+  // Meta sunsets each version after roughly two years, and bumping a deployed
+  // backend must not require a redeploy.
+  META_API_VERSION: process.env.META_API_VERSION || 'v25.0',
+
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY || '',
 
-  // AI generation (Sprint 4.1). The Gemini key is read here and used only by
+  // AI generation. The Gemini key is read here and used only by
   // `src/ai/providers/gemini.provider.ts` — it is never returned by an
-  // endpoint and never reaches the browser, which is the whole point of the
-  // backend AI module replacing the Make.com scenario.
+  // endpoint and never reaches the browser.
   AI_PROVIDER: process.env.AI_PROVIDER || 'gemini',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-  // Thinking tokens for Gemini 2.5+. Default 0 — captions are a writing task,
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.1-pro',
+  
+  // Per-service model mapping (defaults to GEMINI_MODEL / gemini-3.1-pro)
+  GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
+  GEMINI_CAPTION_MODEL: process.env.GEMINI_CAPTION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
+  GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
+  GEMINI_BRAND_MODEL: process.env.GEMINI_BRAND_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro',
+  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'imagen-3.0-generate-002',
+  
+  // Thinking tokens for Gemini 2.5+/3.x models. Default 0 — captions are a writing task,
   // and the reasoning pass triples latency for no gain. -1 lets the model
   // decide. Ignored by models that don't support it.
   GEMINI_THINKING_BUDGET: process.env.GEMINI_THINKING_BUDGET || '0',

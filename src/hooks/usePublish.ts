@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { publishService } from "@/services";
+import { PLATFORM_MAP } from "@/constants";
 import { postKeys, dashboardKeys } from "./usePosts";
-import type { PublishResult, PublishState } from "@/types";
+import type { Platform, PublishResult, PublishState } from "@/types";
 
 export const publishKeys = {
   state: (postId: string) => ["publish", "state", postId] as const,
@@ -63,9 +64,11 @@ export function usePublishPostToProvider() {
         (current) => {
           const updated = {
             provider: result.provider,
-            providerName: current?.platforms.find(
-              (p) => p.provider === result.provider,
-            )?.providerName ?? "LinkedIn",
+            providerName:
+              current?.platforms.find((p) => p.provider === result.provider)
+                ?.providerName ??
+              PLATFORM_MAP[result.provider as Platform]?.name ??
+              result.provider,
             status: "PUBLISHED" as const,
             publishedId: result.publishedId,
             url: result.url,
@@ -88,10 +91,16 @@ export function usePublishPostToProvider() {
         },
       );
 
-      toast.success("Published to LinkedIn 🚀", {
+      // Named from the result rather than hardcoded: the same mutation now
+      // publishes to LinkedIn and Instagram, and a toast that says the wrong
+      // network is worse than one that says none.
+      const network =
+        PLATFORM_MAP[result.provider as Platform]?.name ?? result.provider;
+
+      toast.success(`Published to ${network} 🚀`, {
         description: result.url
-          ? "Your post is live. Use View on LinkedIn to see it."
-          : "Your post is live on LinkedIn.",
+          ? `Your post is live. Use View on ${network} to see it.`
+          : `Your post is live on ${network}.`,
       });
     },
 

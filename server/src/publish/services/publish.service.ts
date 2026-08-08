@@ -2,10 +2,9 @@ import { postRepository } from '../../repositories/post.repository';
 import { socialAccountRepository } from '../../repositories/social-account.repository';
 import { activityService } from '../../services/activity.service';
 import { getProvider, isKnownProvider, getCatalogEntry } from '../../providers';
-import { ProviderError, type ProviderId } from '../../providers';
-import { canPublish } from '../../providers/linkedin/validator';
-// Reused rather than reimplemented: `post_platforms.published_id` holds the
-// same URN the publisher returned, so the same function builds the link.
+import { ProviderError, type Provider, type ProviderId } from '../../providers';
+// LinkedIn's permalink is a pure function of its URN, so it can be rebuilt on
+// every read. Instagram's cannot — see `resolvePlatformUrl`.
 import { toPostUrl } from '../../providers/linkedin/formatter';
 import { resolvePostMedia, MediaResolutionError } from './media.service';
 import { PostStatus, SocialAccountStatus } from '../../generated/prisma/enums';
@@ -111,7 +110,12 @@ export async function publishPost(
   }
 
   try {
-    const account = await loadPublishableAccount(userId, providerId, networkName);
+    const account = await loadPublishableAccount(
+      userId,
+      providerId,
+      networkName,
+      provider,
+    );
 
     // 5. Decrypted here and nowhere earlier — as late as it can be and still
     // be handed to the provider. Never assigned to anything that outlives this
@@ -139,7 +143,7 @@ export async function publishPost(
     // provider: fetching a member-supplied URL is a security-sensitive step
     // that must have one implementation across every network, and providers
     // take bytes. See `media.service.ts`.
-    const media = await resolveMedia(post, caption);
+    const media = await resolveMedia(post, caption, provider);
 
     // 7–8. One call whether or not there is media — the provider branches, and
     // this layer never learns which of LinkedIn's endpoints answered. Validation
@@ -152,8 +156,15 @@ export async function publishPost(
       media,
     });
 
-    // 9–10. The two writes that make the publish real.
-    await postRepository.markPlatformPublished(postId, providerId, result.urn);
+    // 9–10. The two writes that make the publish real. The permalink is stored
+    // alongside the id because some networks — Instagram among them — return a
+    // URL that cannot be reconstructed from the id afterwards.
+    await postRepository.markPlatformPublished(
+      postId,
+      providerId,
+      result.urn,
+      result.url,
+    );
     const publishedAt = new Date();
     await postRepository.updateStatus(postId, PostStatus.PUBLISHED, {
       publishedAt,
@@ -205,6 +216,7 @@ async function loadPublishableAccount(
   userId: string,
   providerId: ProviderId,
   networkName: string,
+  provider: Provider,
 ) {
   const account = await socialAccountRepository.findByUserAndProvider(
     userId,
@@ -240,7 +252,11 @@ async function loadPublishableAccount(
   // Scope check. A member can decline a permission on the consent screen and
   // still complete the connection, which produces an account that looks
   // healthy and cannot publish.
-  if (providerId === 'linkedin' && !canPublish(account.scopes)) {
+  //
+  // Asked of the provider rather than branched on its id: the scope name
+  // differs per network (`w_member_social`, `instagram_business_content_publish`)
+  // and a chain of ifs here is how this layer stops being provider-neutral.
+  if (provider.canPublish && !provider.canPublish(account.scopes)) {
     throw new PublishError(
       `FlowPost isn't allowed to post to your ${networkName} account. ` +
         'Reconnect it and approve publishing permission.',
@@ -278,9 +294,14 @@ function resolveCaption(post: Post): string {
  * called, so LinkedIn has seen nothing and the claim is handed back for a retry
  * rather than the post being marked FAILED.
  */
-async function resolveMedia(post: Post, caption: string) {
+async function resolveMedia(post: Post, caption: string, provider: Provider) {
   try {
-    return await resolvePostMedia(post, { caption });
+    // The format and size rules are the *network's*, taken from the provider —
+    // LinkedIn accepts JPEG, PNG and GIF, Instagram JPEG only.
+    return await resolvePostMedia(post, {
+      caption,
+      requirements: provider.mediaRequirements,
+    });
   } catch (error) {
     if (error instanceof MediaResolutionError) {
       console.error('[publish] media could not be prepared', {
@@ -438,11 +459,37 @@ export async function getPublishState(
         getCatalogEntry(platform.provider)?.displayName ?? platform.provider,
       status: platform.status,
       publishedId: platform.publishedId,
-      url: platform.publishedId ? toPostUrl(platform.publishedId) : null,
+      url: resolvePlatformUrl(platform),
       // Already member-facing: only translated messages are ever stored here.
       errorMessage: platform.errorMessage,
     })),
   };
+}
+
+/**
+ * The "View on …" link for one published platform row.
+ *
+ * Two kinds of network, and the difference is why the stored value wins:
+ *
+ *  • **Derivable.** A LinkedIn permalink is its URN on the end of a fixed
+ *    prefix, so it can be rebuilt on any read — including for the rows that
+ *    were published before `permalink` existed as a column.
+ *  • **Opaque.** An Instagram permalink contains a shortcode only Meta knows.
+ *    It is captured once, at publish time, and if it were not stored it would
+ *    cost an API call and a live token to recover.
+ *
+ * So: use what was stored, and fall back to reconstructing a LinkedIn URL.
+ * A row with neither yields null, and the UI hides the link rather than
+ * offering one that goes nowhere.
+ */
+function resolvePlatformUrl(platform: {
+  provider: string;
+  publishedId: string | null;
+  permalink: string | null;
+}): string | null {
+  if (platform.permalink) return platform.permalink;
+  if (platform.provider !== 'linkedin' || !platform.publishedId) return null;
+  return toPostUrl(platform.publishedId);
 }
 
 export const publishService = { publishPost, getPublishState };

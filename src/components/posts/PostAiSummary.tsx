@@ -76,9 +76,7 @@ export function PostAiSummary({ post, onApplyCaption }: PostAiSummaryProps) {
   };
 
   const handleOpenStudio = () => {
-    navigate(
-      `/ai-studio?image=${encodeURIComponent(post.image_url)}${post.id ? `&postId=${post.id}` : ""}`
-    );
+    navigate(`/posts/${post.id}/edit`);
   };
 
   if (!isReady && !isGenerating && !isFailed) {

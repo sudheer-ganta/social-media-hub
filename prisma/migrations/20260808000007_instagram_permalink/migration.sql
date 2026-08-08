@@ -1,0 +1,13 @@
+-- Sprint 5.1 — Instagram publishing.
+--
+-- The network's own URL for a published post, captured at publish time.
+--
+-- Needed because Instagram permalinks are not derivable. LinkedIn's is its URN
+-- appended to a fixed prefix, so it can be rebuilt on any read; Instagram's
+-- carries an opaque shortcode returned by a separate Graph call that requires a
+-- live access token. If it is not stored at publish time it is effectively lost.
+--
+-- Nullable with no default and no backfill: existing LinkedIn rows keep working
+-- because the read path falls back to reconstructing their URL from
+-- published_id. See resolvePlatformUrl() in publish/services/publish.service.ts.
+ALTER TABLE "post_platforms" ADD COLUMN "permalink" TEXT;

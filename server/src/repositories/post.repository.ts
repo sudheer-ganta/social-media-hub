@@ -206,12 +206,21 @@ export async function markPlatformPublished(
   postId: string,
   provider: string,
   publishedId: string,
+  /**
+   * The network's own URL for the post, where it gave us one.
+   *
+   * Optional because not every network does, and null-safe because a failed
+   * permalink lookup must not undo a publish that succeeded — see
+   * `publish.service.ts`.
+   */
+  permalink: string | null = null,
 ): Promise<PostPlatform> {
   return prisma.postPlatform.update({
     where: { postId_provider: { postId, provider } },
     data: {
       status: PublishStatus.PUBLISHED,
       publishedId,
+      permalink,
       errorMessage: null,
     },
   });

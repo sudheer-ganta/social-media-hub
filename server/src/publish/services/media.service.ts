@@ -2,11 +2,10 @@ import { activeProvider } from '../../ai/providers';
 import { generateAltText } from '../../ai/generators/alt-text.generator';
 import { fetchImageBytes, ImageFetchError } from '../../ai/vision/image-source';
 import { env } from '../../config/env';
-import {
-  LINKEDIN_IMAGE_MIME_TYPES,
-  LINKEDIN_MAX_IMAGE_BYTES,
-} from '../../providers/linkedin/validator';
-import type { ProviderMediaAsset } from '../../providers';
+import type {
+  ProviderMediaAsset,
+  ProviderMediaRequirements,
+} from '../../providers';
 import type { Post } from '../../generated/prisma/client';
 
 /**
@@ -16,12 +15,26 @@ import type { Post } from '../../generated/prisma/client';
  * receive bytes; deciding which bytes, fetching them safely, and describing
  * them for a screen reader all happen here, once, for every network.
  *
- * ─── Why the provider does not take a URL ────────────────────────────────────
+ * ─── Why the provider does not fetch the URL itself ──────────────────────────
  * `post.image_url` is a member-supplied address, and fetching one of those is a
  * server-side request forgery primitive. The backend has exactly one vetted
  * fetcher for it — `ai/vision/image-source.ts`, which pins DNS results to
  * public addresses at the socket level — and routing every provider through
  * this service is what keeps that one implementation the only one.
+ *
+ * Providers that *send* a URL rather than bytes — Instagram's Content
+ * Publishing API takes an `image_url` and fetches it from Meta's servers, with
+ * no byte-upload endpoint at all — read {@link ProviderMediaAsset.sourceUrl},
+ * which is the URL these exact bytes came from. They still get the format and
+ * size guarantees, because the check ran against what was actually downloaded.
+ * What they do not get is permission to fetch an arbitrary address themselves.
+ *
+ * ─── Whose rules ─────────────────────────────────────────────────────────────
+ * The format allow-list and byte ceiling come from the *provider*, not from
+ * this file. They used to be LinkedIn's constants applied to everything, which
+ * was invisible while LinkedIn was the only network and wrong the moment
+ * Instagram arrived: LinkedIn takes JPEG, PNG and GIF, Instagram takes JPEG and
+ * nothing else. See `Provider.mediaRequirements`.
  *
  * ─── Today's shape, and tomorrow's ───────────────────────────────────────────
  * A post has a single `image_url` column, so this returns an array of zero or
@@ -75,24 +88,45 @@ export class MediaResolutionError extends Error {
  */
 export async function resolvePostMedia(
   post: Post,
-  options: { caption?: string } = {},
+  options: { caption?: string; requirements?: ProviderMediaRequirements } = {},
 ): Promise<ProviderMediaAsset[]> {
   const imageUrl = post.image_url?.trim();
   if (!imageUrl) return [];
 
-  const asset = await resolveImage(imageUrl, options.caption);
+  const asset = await resolveImage(
+    imageUrl,
+    options.requirements ?? DEFAULT_REQUIREMENTS,
+    options.caption,
+  );
   return [asset];
 }
+
+/**
+ * What a network gets when it states no rules of its own.
+ *
+ * Intentionally the *narrowest* common set rather than the widest: JPEG is the
+ * only format every network in the catalogue accepts, so a provider that has
+ * not declared its requirements gets the one thing that cannot surprise it.
+ */
+const DEFAULT_REQUIREMENTS: ProviderMediaRequirements = {
+  imageMimeTypes: new Set(['image/jpeg']),
+  maxImageBytes: 8 * 1024 * 1024,
+};
 
 /** Downloads one image, measures it, and describes it. */
 async function resolveImage(
   url: string,
+  requirements: ProviderMediaRequirements,
   caption?: string,
 ): Promise<ProviderMediaAsset> {
   let fetched: { mimeType: string; buffer: Buffer };
+  // Which URL actually produced the bytes. The retry below can change it, and
+  // a URL-fetching provider must be handed the one that worked, not the one we
+  // started with.
+  let resolvedUrl = url;
 
   try {
-    fetched = await download(url);
+    fetched = await download(url, requirements);
   } catch (error) {
     if (!(error instanceof ImageFetchError) || error.reason !== 'format') {
       throw toMediaError(error);
@@ -102,15 +136,19 @@ async function resolveImage(
     // the host can hand us different bytes, that is a far better answer than
     // telling someone their perfectly good photo is unpublishable — the app
     // accepted the upload, so making it work is our problem, not theirs.
+    //
+    // This path carries more weight now than it did with LinkedIn alone:
+    // Instagram takes JPEG *only*, so every PNG in the library reaches it.
     const converted = toJpegDeliveryUrl(url);
     if (!converted) throw toMediaError(error);
 
-    console.info('[publish] converting image to a format LinkedIn accepts', {
+    console.info('[publish] converting image to a format this network accepts', {
       detail: error.detail,
     });
 
     try {
-      fetched = await download(converted);
+      fetched = await download(converted, requirements);
+      resolvedUrl = converted;
     } catch (retryError) {
       throw toMediaError(retryError);
     }
@@ -125,6 +163,7 @@ async function resolveImage(
     mimeType,
     data: buffer,
     byteLength: buffer.byteLength,
+    sourceUrl: resolvedUrl,
     width,
     height,
     altText: await describeImage(buffer, mimeType, caption),
@@ -135,13 +174,14 @@ async function resolveImage(
  * One guarded download, against the target network's rules.
  *
  * The allow-list is the *network's*, passed down rather than assumed: the AI
- * module happily reads webp and heic, and LinkedIn accepts neither.
+ * module happily reads webp and heic, LinkedIn accepts neither, and Instagram
+ * accepts neither those nor PNG.
  */
-function download(url: string) {
+function download(url: string, requirements: ProviderMediaRequirements) {
   return withTimeout(
     fetchImageBytes(url, {
-      allowedMimeTypes: LINKEDIN_IMAGE_MIME_TYPES,
-      maxBytes: LINKEDIN_MAX_IMAGE_BYTES,
+      allowedMimeTypes: requirements.imageMimeTypes,
+      maxBytes: requirements.maxImageBytes,
     }),
     FETCH_TIMEOUT_MS,
     'image download',

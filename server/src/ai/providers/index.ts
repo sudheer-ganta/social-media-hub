@@ -6,7 +6,14 @@ export {
   type AiTextProvider,
   type GenerateJsonOptions,
 } from './provider.interface';
-export { GeminiProvider, geminiProvider } from './gemini.provider';
+export {
+  GeminiProvider,
+  geminiProvider,
+  geminiVisionProvider,
+  geminiCaptionProvider,
+  geminiMarketingProvider,
+  geminiBrandProvider,
+} from './gemini.provider';
 
 export type AiProviderId = 'gemini';
 

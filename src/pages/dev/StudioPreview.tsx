@@ -11,7 +11,8 @@
  */
 
 import { MarketingStudio } from "@/components/marketing/MarketingStudio";
-import { AiPanel } from "@/components/posts/AiPanel";
+import { AiStrategyPanel } from "@/components/posts/AiStrategyPanel";
+import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
 import { STUDIO_SCHEMA_VERSION } from "@/ai/types";
 import type { Post } from "@/types";
 
@@ -570,6 +571,8 @@ const MOCK_LEGACY_PENDING_POST: Post = {
 };
 
 export default function StudioPreview() {
+  const studio = useMarketingStudio();
+
   return (
     <div className="mx-auto max-w-5xl space-y-10 p-6">
       <div>
@@ -579,6 +582,13 @@ export default function StudioPreview() {
           panels can be checked without spending a real generation.
         </p>
       </div>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">
+          Build with AI — the strategy inputs, collapsed by default
+        </h2>
+        <AiStrategyPanel studio={studio} hasImage />
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Complete run — all eight sections</h2>
@@ -602,19 +612,6 @@ export default function StudioPreview() {
         <MarketingStudio post={MOCK_LEGACY_PENDING_POST} />
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold">
-          Post editor AiPanel — legacy pending row
-        </h2>
-        <AiPanel post={MOCK_LEGACY_PENDING_POST} onUseCaption={() => {}} />
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold">
-          Post editor AiPanel — derived from the envelope, no flat columns set
-        </h2>
-        <AiPanel post={MOCK_POST} onUseCaption={() => {}} />
-      </section>
     </div>
   );
 }

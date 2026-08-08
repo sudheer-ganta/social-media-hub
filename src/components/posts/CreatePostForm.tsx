@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CalendarClock, ExternalLink, FileText, Send, Sparkles } from "lucide-react";
+import { CalendarClock, FileText, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,11 +18,19 @@ import { ImageUploader } from "./ImageUploader";
 import { CaptionEditor } from "./CaptionEditor";
 import { PlatformSelector } from "./PlatformSelector";
 import { SchedulePicker } from "./SchedulePicker";
-import { AiPanel } from "./AiPanel";
+import { AiStrategyPanel } from "./AiStrategyPanel";
 import { AiCaptionPanel } from "./AiCaptionPanel";
 import { PublishStatus } from "./PublishStatus";
-import { useCreatePost, useUpdatePost } from "@/hooks/usePosts";
+import { MarketingStudio } from "@/components/marketing/MarketingStudio";
+import {
+  useCreatePost,
+  useUpdatePost,
+  useGenerateWithSettings,
+} from "@/hooks/usePosts";
 import { useAiCaption } from "@/hooks/useAiCaption";
+import { useIntegrations } from "@/hooks/useIntegrations";
+import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
+import { PLATFORM_MAP } from "@/constants";
 import { usePublishPostToProvider, usePublishState } from "@/hooks/usePublish";
 import { postsService } from "@/services";
 import { currentTime, today } from "@/utils/date";
@@ -32,7 +40,7 @@ import {
   validateFutureSchedule,
   type PostFormValues,
 } from "@/validators";
-import type { Post, PostStatus } from "@/types";
+import type { Platform, Post, PostStatus } from "@/types";
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
@@ -48,8 +56,11 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
   const createPost = useCreatePost();
   const updatePost = useUpdatePost();
   const ai = useAiCaption();
+  const studio = useMarketingStudio();
+  const generateStrategy = useGenerateWithSettings();
   const publish = usePublishPostToProvider();
   const { data: publishState } = usePublishState(post?.id);
+  const { integrations } = useIntegrations();
 
   const defaultValues = useMemo<PostFormValues>(
     () => ({
@@ -89,6 +100,39 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
   const [audience, setAudience] = useState<AudienceRegister>("gen_z_millennial");
 
   /**
+   * Which network a publish is currently in flight for, or null.
+   *
+   * Needed now that Publish can hit more than one: the status panel shows a
+   * spinner against the network being contacted, and "LinkedIn" hardcoded there
+   * was fine only while LinkedIn was the sole target.
+   */
+  const [publishingProvider, setPublishingProvider] = useState<Platform | null>(
+    null,
+  );
+
+  /**
+   * The networks FlowPost can actually publish to, from the server's catalogue.
+   *
+   * Read rather than hardcoded — `available` is the same flag that decides
+   * whether a network's Integrations card offers a Connect button, so a network
+   * can never be publishable here and Coming Soon there. Bringing Facebook
+   * Pages online is a backend change and nothing in this file.
+   */
+  const publishableProviders = useMemo(
+    () =>
+      new Set(
+        integrations
+          .filter((integration) => integration.available)
+          .map((integration) => integration.provider as Platform),
+      ),
+    [integrations],
+  );
+
+  const publishableNames = [...publishableProviders]
+    .map((id) => PLATFORM_MAP[id]?.name ?? id)
+    .join(" or ");
+
+  /**
    * Why generation can't run yet, or null when it can.
    *
    * Only the title is required. The old Make-based flow also demanded an
@@ -102,18 +146,38 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       : null;
 
   /**
-   * "Generate AI" now calls the backend and puts the result on screen. It
-   * saves nothing: the post does not have to exist, no draft is created behind
-   * the user's back, and abandoning a caption they don't like leaves no trace.
+   * The one AI button.
+   *
+   * There used to be two — a caption generator here and a "Generate Strategy"
+   * inside the AI panel — and the split was never a choice worth making: the
+   * strategy pipeline does everything the caption generator does and more, it
+   * just needs an image to read. So the image decides, not the user:
+   *
+   *   image → the full pipeline (vision, hooks, platform versions, hashtags)
+   *   no image → caption, hashtags and CTAs from the brief alone
+   *
+   * The strategy path saves first because the pipeline reads the stored row;
+   * the caption path deliberately saves nothing, so abandoning a caption the
+   * user doesn't like leaves no draft behind.
    */
-  const handleGenerateAi = async () => {
-    const values = getValues();
+  /** Either path counts: one button, so one in-flight and one "done" flag. */
+  const generating = ai.isGenerating || generateStrategy.isPending;
+  const hasGenerated = Boolean(ai.result) || post?.ai_status === "ready";
 
+  const handleGenerate = () => {
     if (blockedReason) {
       setError("title", { message: "Give your post a title first." });
       toast.error(blockedReason);
       return;
     }
+
+    return getValues("image_url")?.trim()
+      ? runStrategy()
+      : runCaptionOnly();
+  };
+
+  const runCaptionOnly = async () => {
+    const values = getValues();
 
     const generated = await ai.generate({
       title: values.title,
@@ -217,6 +281,33 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
     });
 
   /**
+   * The image-backed half of {@link handleGenerate} — the old AI Studio run.
+   *
+   * The pipeline reads the stored row, so the post has to exist before it can
+   * run. Saving first is what makes that true, and it is the same `persist`
+   * every other button uses, so the strategy is generated against exactly what
+   * is on screen. A brand-new post moves to its own URL afterwards, or the
+   * results would be lost on the next refresh.
+   *
+   * Settings come from the AI Strategy panel, read at click time — whether the
+   * panel is open or shut. Shut means its defaults, which are a sane run.
+   */
+  const runStrategy = () =>
+    handleSubmit(async (values) => {
+      try {
+        const saved = await persist(values, post?.status ?? "draft");
+        await generateStrategy.mutateAsync({
+          id: saved.id,
+          settings: studio.buildRequest(),
+        });
+        if (!post) navigate(`/posts/${saved.id}/edit`, { replace: true });
+      } catch {
+        // Both mutations toast their own failures; the draft is saved either
+        // way, so the retry costs nothing but the click.
+      }
+    })();
+
+  /**
    * Publish for real: save what is on screen, then ask the backend to send it
    * to LinkedIn.
    *
@@ -231,8 +322,14 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
    * they cannot do from the posts list.
    */
   const handlePublish = handleSubmit(async (values) => {
-    if (!values.platforms.includes("linkedin")) {
-      toast.error("Turn on LinkedIn under Platforms to publish there.");
+    const targets = values.platforms.filter((p) => publishableProviders.has(p));
+
+    if (targets.length === 0) {
+      toast.error(
+        publishableProviders.size > 0
+          ? `Turn on ${publishableNames} under Platforms to publish.`
+          : "No network is available to publish to yet.",
+      );
       return;
     }
 
@@ -252,15 +349,29 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         post?.status === "published" ? "published" : "draft",
       );
 
-      await publish.mutateAsync({ postId: saved.id, provider: "linkedin" });
+      // One request per network, in sequence, and a failure on one does not
+      // stop the others: LinkedIn accepting a post is not a reason to skip
+      // Instagram, and the reverse is just as true. Each attempt reports its
+      // own outcome through the mutation's toasts, and `post_platforms` records
+      // them separately — so "published to LinkedIn, failed on Instagram" is a
+      // state the app can actually show rather than one it has to flatten.
+      for (const provider of targets) {
+        setPublishingProvider(provider);
+        await publish
+          .mutateAsync({ postId: saved.id, provider })
+          .catch(() => undefined);
+      }
 
       // A brand-new post published from /posts/new has no route of its own
       // yet. Move to its edit URL so the publish state, and the link to the
       // live post, survive a refresh.
       if (!post) navigate(`/posts/${saved.id}/edit`, { replace: true });
     } catch {
-      // Already surfaced by the mutation's onError. The post is saved either
-      // way, so retrying costs the member nothing but the click.
+      // The *save* failed — already surfaced by the mutation's onError, and
+      // nothing was sent to any network. The post is on screen either way, so
+      // retrying costs the member nothing but the click.
+    } finally {
+      setPublishingProvider(null);
     }
   });
 
@@ -358,15 +469,17 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         </CardContent>
       </Card>
 
+      <AiStrategyPanel studio={studio} hasImage={Boolean(imageUrl?.trim())} />
+
       <AiCaptionPanel
         result={ai.result}
-        isGenerating={ai.isGenerating}
+        isGenerating={generating}
         error={ai.error}
         blockedReason={blockedReason}
         audience={audience}
         onAudienceChange={setAudience}
         hasImage={Boolean(imageUrl?.trim())}
-        onGenerate={handleGenerateAi}
+        onGenerate={handleGenerate}
         onUseCaption={(caption) =>
           setValue("caption", caption, { shouldValidate: true })
         }
@@ -377,13 +490,14 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
           there is something to report. */}
       <PublishStatus
         platforms={publishState?.platforms ?? []}
-        publishingProvider={publish.isPending ? "linkedin" : null}
+        publishingProvider={publish.isPending ? publishingProvider : null}
       />
 
-      {/* The saved post's own AI content and the approval gate. Only on an
-          existing post — there is nothing stored to review before that. */}
+      {/* Everything the pipeline produced, plus the approval gate. Only on an
+          existing post — there is nothing stored to review before that. This is
+          the whole of the old AI Studio's right-hand panel. */}
       {post && (
-        <AiPanel
+        <MarketingStudio
           post={post}
           onUseCaption={(caption) =>
             setValue("caption", caption, { shouldValidate: true })
@@ -393,22 +507,6 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
 
       <div className="sticky bottom-4 z-10">
         <div className="glass flex flex-wrap items-center justify-end gap-2 rounded-lg border p-3 shadow-elevated">
-          {post?.image_url && (
-            <Button
-              type="button"
-              variant="ghost"
-              loading={false}
-              onClick={() =>
-                navigate(
-                  `/ai-studio?image=${encodeURIComponent(post.image_url)}${post?.id ? `&postId=${post.id}` : ""}`,
-                )
-              }
-              className="mr-auto text-xs"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open in AI Studio
-            </Button>
-          )}
           <Button
             type="button"
             variant="outline"
@@ -421,13 +519,13 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
           <Button
             type="button"
             variant="secondary"
-            loading={ai.isGenerating}
+            loading={generating}
             disabled={Boolean(blockedReason)}
             title={blockedReason ?? undefined}
-            onClick={handleGenerateAi}
+            onClick={handleGenerate}
           >
             <Sparkles />
-            {ai.result ? "Regenerate" : "Generate AI"}
+            {hasGenerated ? "Regenerate" : "Generate with AI"}
           </Button>
           <Button
             type="button"

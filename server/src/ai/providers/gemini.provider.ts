@@ -311,4 +311,8 @@ export class GeminiProvider implements AiTextProvider {
   }
 }
 
-export const geminiProvider = new GeminiProvider();
+export const geminiProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL);
+export const geminiVisionProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_VISION_MODEL);
+export const geminiCaptionProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_CAPTION_MODEL);
+export const geminiMarketingProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MARKETING_MODEL);
+export const geminiBrandProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_BRAND_MODEL);
