@@ -1,5 +1,5 @@
 import { resolveBrandProfile } from '../brand/brand-profile';
-import { buildAnalysisPrompt } from '../prompts/analysis.prompt';
+import { buildAnalysisPrompt, improvableDimensions } from '../prompts/analysis.prompt';
 import { AiProviderError, type AiTextProvider } from '../providers';
 import { buildChecklist } from '../analysis/checklist';
 import { looksLikeCta, measureCaption } from '../analysis/metrics';
@@ -150,9 +150,33 @@ function normaliseImprovements(
     .map((entry) => {
       const suggestion = asString(entry?.suggestion, 400);
       const dimension = asString(entry?.dimension, 40) as ScoreDimension;
-      if (!suggestion || !dimensions.includes(dimension)) return null;
+      // Improvements may name one dimension the scores do not — see
+      // `improvableDimensions`. Anything outside that set is the model
+      // inventing an axis, and is dropped as before.
+      if (!suggestion || !improvableDimensions(dimensions).includes(dimension)) {
+        return null;
+      }
 
       const gain = typeof entry?.estimatedGain === 'number' ? entry.estimatedGain : 0;
+
+      // The applyable half, kept to the dimension it belongs to. A `suggestedLine`
+      // attached to a `readability` improvement is the model wandering, and a
+      // client that applied it would be appending a question to a caption
+      // nobody asked to have one — so it is dropped rather than rendered.
+      const hashtags =
+        dimension === 'hashtags'
+          ? asStringArray(entry?.suggestedHashtags, 6, 60)
+              .map((tag) => tag.replace(/^#+/, '').trim())
+              .filter((tag) => /^[\p{L}\p{N}_]+$/u.test(tag))
+          : [];
+      // `hook` and `cta` are the two places a line can be *added* rather than
+      // swapped in — one in front of the caption, one after it. Anywhere else
+      // a "suggested line" could only mean replacing something already
+      // written, so it is dropped.
+      const line =
+        dimension === 'cta' || dimension === 'hook'
+          ? asString(entry?.suggestedLine, 200)
+          : '';
 
       return {
         dimension,
@@ -162,6 +186,8 @@ function normaliseImprovements(
         // points, which is not a thing any single change to a caption does, and
         // an inflated number here becomes an inflated promise in the UI.
         estimatedGain: Math.min(25, Math.max(0, Math.round(gain))),
+        ...(hashtags.length > 0 && { suggestedHashtags: hashtags }),
+        ...(line && { suggestedLine: line }),
       };
     })
     .filter((entry): entry is Improvement => entry !== null)

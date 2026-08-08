@@ -149,6 +149,14 @@ export interface Improvement {
   suggestion: string;
   /** Rough points on the 0–100 reach score if it were fixed. */
   estimatedGain: number;
+  /**
+   * The change itself, when the backend had a concrete one to offer. Both are
+   * additions — tags to add, a sentence to append — never a rewrite, which is
+   * what makes an Apply button safe to put next to them. Absent on most
+   * improvements; the Brand panel ignores them entirely.
+   */
+  suggestedHashtags?: string[];
+  suggestedLine?: string;
 }
 
 export type ChecklistSeverity = "blocker" | "important" | "polish";

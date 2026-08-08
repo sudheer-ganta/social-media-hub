@@ -561,6 +561,21 @@ export interface Improvement {
   suggestion: string;
   /** Rough points on the 0–100 reach score if it were fixed. */
   estimatedGain: number;
+  /**
+   * The concrete change, when there is one a client can apply verbatim.
+   *
+   * Optional and additive: an improvement without either field is exactly the
+   * prose recommendation this type has always carried, which is all the Brand
+   * panel reads. Personal's Reach panel turns these into an Apply button, so
+   * "your tags are broad" arrives with the specific tags it means instead of
+   * leaving the member to guess them.
+   *
+   * Never a rewrite. `suggestedHashtags` are tags to *add* to the caption and
+   * `suggestedLine` is one sentence to *append* — nothing here can replace a
+   * word somebody typed.
+   */
+  suggestedHashtags?: string[];
+  suggestedLine?: string;
 }
 
 /**
@@ -664,5 +679,7 @@ export interface RawAnalysisPayload {
     issue?: unknown;
     suggestion?: unknown;
     estimatedGain?: unknown;
+    suggestedHashtags?: unknown;
+    suggestedLine?: unknown;
   }>;
 }

@@ -852,8 +852,30 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
           caption={watch("caption")}
           platforms={selectedPlatforms}
           hasImage={Boolean(imageUrl?.trim())}
+          music={watch("music")}
+          // The one thing the panel is allowed to change, and it goes through
+          // the same `setValue` every other panel uses — so Save Draft,
+          // Schedule, Publish and a re-analysis all read the applied caption
+          // without a second copy of it existing anywhere.
+          onApplyCaption={(next) =>
+            setValue("caption", next, { shouldValidate: true })
+          }
           {...(ai.result?.imageAnalysis && {
             imageAnalysis: ai.result.imageAnalysis,
+          })}
+          {...(suggestion && {
+            suggestedTime: {
+              name: suggestion.name,
+              time: suggestion.time,
+              label: dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A"),
+              // Feeds the existing schedule field rather than scheduling
+              // anything itself. Nothing is saved, sent or scheduled until the
+              // member presses Schedule below.
+              use: () =>
+                setValue("publish_time", suggestion.time, {
+                  shouldValidate: true,
+                }),
+            },
           })}
         />
       )}

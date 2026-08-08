@@ -48,7 +48,7 @@ How you judge:
 - Every score needs a reason naming something specific in THIS caption — a clause, a word, a missing step. "Good hook" is not a reason. "Opens on a question the reader already knows the answer to" is.
 - Report your own certainty honestly. Some judgements rest on the text in front of you; others rest on assumptions about an audience you cannot see. Mark the second kind Medium or Low.
 - The measured facts you are given are correct. Do not recount them, do not contradict them, and do not spend your answer restating them.
-- Never rewrite the caption. You are assessing it. Improvements are described, not performed.
+- Never rewrite the caption. You are assessing it. Improvements are described, not performed. The two exceptions are additions the writer can take or leave: specific hashtags to add, and one sentence that could be appended to invite a reply. Both are optional, both are about this post specifically, and neither may restate or replace a line already written.
 - Return only the JSON object described. No commentary, no markdown fences.`;
 
 /** The axes, and what each one is actually asking. */
@@ -142,6 +142,21 @@ function imageSection(analysis: ImageAnalysis | undefined, hasImage: boolean): s
  * a `visual` key to fill in, which is what stops a model inventing a score for
  * an image that does not exist and the scorer weighting it.
  */
+/**
+ * The dimensions an *improvement* may name, which is the scored set plus
+ * `hashtags`.
+ *
+ * A post with no tags is not scored on tags — see `applicableDimensions` — but
+ * "you have no hashtags" is exactly the case where a suggestion is worth most,
+ * and restricting improvements to scored dimensions is what silenced it. Scores
+ * are unaffected: this widens what can be recommended, never what is graded.
+ */
+export function improvableDimensions(
+  dimensions: readonly ScoreDimension[],
+): ScoreDimension[] {
+  return [...new Set<ScoreDimension>([...dimensions, 'hashtags'])];
+}
+
 export function buildAnalysisResponseSchema(
   dimensions: readonly ScoreDimension[],
 ): Record<string, unknown> {
@@ -203,7 +218,7 @@ export function buildAnalysisResponseSchema(
         items: {
           type: 'object',
           properties: {
-            dimension: { type: 'string', enum: [...dimensions] },
+            dimension: { type: 'string', enum: improvableDimensions(dimensions) },
             issue: { type: 'string', description: 'What is wrong, in one line.' },
             suggestion: {
               type: 'string',
@@ -213,6 +228,18 @@ export function buildAnalysisResponseSchema(
             estimatedGain: {
               type: 'number',
               description: 'Rough points on the 0-100 reach score if fixed.',
+            },
+            suggestedHashtags: {
+              type: 'array',
+              maxItems: 6,
+              items: { type: 'string' },
+              description:
+                'Only for the `hashtags` dimension: specific tags to ADD, without the #, drawn from what this post is actually about. Omit unless you have specific tags in mind.',
+            },
+            suggestedLine: {
+              type: 'string',
+              description:
+                'Only for `cta` (one sentence APPENDED to the caption, giving the reader a reason to reply) or `hook` (one opening line ADDED IN FRONT of the caption, which keeps every existing line intact below it). Written about this post specifically. Omit unless it fits this post.',
             },
           },
           required: ['dimension', 'issue', 'suggestion', 'estimatedGain'],
@@ -277,7 +304,7 @@ export function buildAnalysisPrompt({
     section('## Also return', [
       '1. Up to four `strengths` and four `weaknesses`, each naming something specific in this caption.',
       '2. An `engagement` forecast: how likely this post is to earn saves, shares, comments and clicks — as Low, Medium or High, judged against each other rather than against some absolute. A post can be High saves and Low comments; say why in one sentence.',
-      '3. Between one and five `improvements`, highest impact first. Each names the dimension it lifts, what is wrong, what to do instead, and roughly how many points on the 0–100 score it would be worth. Describe the change; do not write the replacement copy.',
+      '3. Between one and five `improvements`, highest impact first. Each names the dimension it lifts, what is wrong, what to do instead, and roughly how many points on the 0–100 score it would be worth. Describe the change; do not write the replacement copy. Three additions may be supplied literally so the writer can apply them in one click: on a `hashtags` improvement, `suggestedHashtags` — specific tags naming what this post is actually about, no generic filler; on a `cta` improvement, `suggestedLine` — a single sentence appended to the end of the caption, giving this post\'s reader a real reason to reply; on a `hook` improvement, `suggestedLine` — a single opening line placed in front of the caption, which must read naturally as the new first line with the writer\'s existing opening directly beneath it. Leave either out rather than filling it with something that would fit any post. A post carrying no hashtags at all may take a `hashtags` improvement even though you were not asked to score that dimension.',
     ]),
 
     'Return a single JSON object matching the provided schema. Nothing else.',
