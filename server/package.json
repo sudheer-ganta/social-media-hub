@@ -15,6 +15,7 @@
     "verify:publish": "ts-node-dev --transpile-only --quiet src/scripts/verify-publish.ts",
     "verify:sprint43": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint43.ts",
     "verify:sprint51": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint51.ts",
+    "verify:instagram": "ts-node-dev --transpile-only --quiet src/scripts/verify-instagram-publish.ts",
     "verify:models": "ts-node-dev --transpile-only --quiet src/scripts/verify-model-routing.ts"
   },
   "dependencies": {

@@ -136,6 +136,15 @@ export interface InstagramCreatedNode {
   id?: string;
 }
 
+/** `GET /{ig-container-id}?fields=status_code,status` — the readiness poll. */
+export interface InstagramContainerStatusNode {
+  id?: string;
+  /** `FINISHED` | `IN_PROGRESS` | `ERROR` | `EXPIRED` | `PUBLISHED`. */
+  status_code?: string;
+  /** Human-readable detail; carries the error text when `status_code` is ERROR. */
+  status?: string;
+}
+
 /** `GET /{ig-media-id}?fields=permalink` */
 export interface InstagramMediaNode {
   id?: string;
