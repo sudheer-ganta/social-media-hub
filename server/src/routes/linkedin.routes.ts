@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { linkedinProvider } from '../providers';
 import { requireAuth } from '../middleware/auth.middleware';
 import { buildIntegrationsRedirect } from '../services/oauth-redirect';
+import { ContextError } from '../services/account-context';
 
 /**
  * LinkedIn OAuth routes.
@@ -52,6 +53,12 @@ function handleJson(fn: (req: Request, res: Response) => Promise<void>) {
         error: error instanceof Error ? error.message : error,
       });
       if (!res.headersSent) {
+        // A bad context (unknown brand, malformed brandId) is the member's to
+        // fix and its message is written for them; anything else stays generic.
+        if (error instanceof ContextError) {
+          res.status(error.status).json({ error: error.message });
+          return;
+        }
         res
           .status(500)
           .json({ error: 'LinkedIn connections are unavailable right now.' });

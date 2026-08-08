@@ -54,6 +54,8 @@ function fakeAccount(overrides: Partial<SafeSocialAccount> = {}): SafeSocialAcco
     providerVersion: '202401',
     lastSyncedAt: now,
     lastHealthCheck: now,
+    contextType: 'personal',
+    brandId: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,

@@ -30,6 +30,13 @@ export interface ConnectAccountInput {
   userId: string;
   provider: ProviderId;
   providerAccountId: string;
+  /**
+   * Which publishing context the connection serves — 'personal' or 'brand'
+   * with its brand id. Captured from the server-minted OAuth state; ownership
+   * was already validated when the connect started.
+   */
+  contextType?: string;
+  brandId?: string | null;
   displayName?: string | null;
   /**
    * The member's handle where the network has one. LinkedIn does not; Instagram
@@ -99,6 +106,8 @@ export async function connectAccount(
     userId: input.userId,
     provider: input.provider,
     providerAccountId: input.providerAccountId,
+    contextType: input.contextType ?? 'personal',
+    brandId: input.brandId ?? null,
     displayName: input.displayName ?? null,
     username: input.username ?? null,
     profileImage: input.profileImage ?? null,

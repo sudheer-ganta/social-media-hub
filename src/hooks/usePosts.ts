@@ -8,12 +8,27 @@ import {
 import { toast } from "sonner";
 import { postsService } from "@/services";
 import type { AiStudioInput } from "@/ai/types";
-import type { Post, PostInsert, PostListParams, PostUpdate } from "@/types";
+import type {
+  Post,
+  PostContext,
+  PostInsert,
+  PostListParams,
+  PostUpdate,
+} from "@/types";
+
+/** Scopes a whole-table read to one publishing context. */
+export interface PostContextFilter {
+  context: PostContext | "all";
+  brandId: string | null;
+}
 
 export const postKeys = {
   all: ["posts"] as const,
   page: (params: PostListParams) => ["posts", "page", params] as const,
-  full: ["posts", "full"] as const,
+  // Context in the key, or switching context would serve the other context's
+  // cached list until an invalidation happened to run.
+  full: (filter: PostContextFilter) =>
+    ["posts", "full", filter.context, filter.brandId] as const,
   month: (month: string) => ["posts", "month", month] as const,
   detail: (id: string) => ["posts", "detail", id] as const,
 };
@@ -35,10 +50,12 @@ export function usePostsPage(params: PostListParams) {
   });
 }
 
-export function useAllPosts() {
+export function useAllPosts(
+  filter: PostContextFilter = { context: "all", brandId: null },
+) {
   return useQuery({
-    queryKey: postKeys.full,
-    queryFn: () => postsService.listAll(),
+    queryKey: postKeys.full(filter),
+    queryFn: () => postsService.listAll(filter),
   });
 }
 

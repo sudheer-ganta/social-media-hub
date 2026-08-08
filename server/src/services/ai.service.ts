@@ -46,6 +46,8 @@ const MAX_TOPIC_LENGTH = 2000;
 const MIN_TOPIC_LENGTH = 3;
 const MAX_TITLE_LENGTH = 300;
 const MAX_PREVIOUS_CAPTION_LENGTH = 5000;
+/** Matches the composer's own limit on the Music / Song field. */
+const MAX_MUSIC_LENGTH = 200;
 const MAX_PLATFORMS = 8;
 
 const MIN_VARIATIONS = 1;
@@ -305,6 +307,11 @@ export function parseCaptionRequest(body: unknown): CaptionRequest {
     ...(readImageUrl(input.imageUrl) && {
       imageUrl: readImageUrl(input.imageUrl),
     }),
+    ...(readString(input.music, MAX_MUSIC_LENGTH) && {
+      music: readString(input.music, MAX_MUSIC_LENGTH),
+    }),
+    // Off unless a caller explicitly asks. See CaptionRequest.suggestSongs.
+    suggestSongs: input.suggestSongs === true,
     audience: readEnum(input.audience, AUDIENCE_REGISTERS, DEFAULT_AUDIENCE),
     platforms: readPlatforms(input.platforms),
     goal: readEnum(input.goal, GOALS, 'brand_awareness'),

@@ -31,6 +31,8 @@ const DEFAULT_FILTERS: Filters = {
   search: "",
   status: "all",
   platform: "all",
+  context: "all",
+  brandId: null,
   from: "",
   to: "",
   sort: "created_desc",
@@ -71,6 +73,7 @@ export default function Posts() {
     Boolean(debouncedSearch) ||
     filters.status !== "all" ||
     filters.platform !== "all" ||
+    filters.context !== "all" ||
     Boolean(filters.from || filters.to);
 
   const confirmDelete = () => {

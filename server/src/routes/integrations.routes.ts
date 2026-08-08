@@ -4,6 +4,12 @@ import {
   integrationService,
   IntegrationError,
 } from '../services/integration.service';
+import {
+  assertContextOwned,
+  readContext,
+  ContextError,
+  type AccountContext,
+} from '../services/account-context';
 import { isKnownProvider } from '../providers';
 import type { ProviderId } from '../providers';
 
@@ -43,7 +49,7 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
     try {
       await fn(req, res);
     } catch (error) {
-      if (error instanceof IntegrationError) {
+      if (error instanceof IntegrationError || error instanceof ContextError) {
         res.status(error.status).json({ error: error.message });
         return;
       }
@@ -76,12 +82,30 @@ function requireProvider(req: Request): ProviderId {
   return provider;
 }
 
-// GET /api/integrations → every catalogued network plus its connection.
+/**
+ * The publishing context this request is scoped to, ownership-checked.
+ *
+ * Every account-shaped endpoint takes it from the query string
+ * (`?context=brand&brandId=…`; absent means Personal), because with contexts
+ * a provider name alone no longer identifies a connection — the same user can
+ * hold a personal and a brand LinkedIn at once.
+ */
+async function requireContext(req: Request): Promise<AccountContext> {
+  const context = readContext(req.query);
+  await assertContextOwned(req.user.id, context);
+  return context;
+}
+
+// GET /api/integrations → every catalogued network plus its connection,
+// scoped to one publishing context.
 router.get(
   '/',
   requireAuth,
   handle(async (req, res) => {
-    const integrations = await integrationService.listIntegrations(req.user.id);
+    const integrations = await integrationService.listIntegrations(
+      req.user.id,
+      await requireContext(req),
+    );
     res.json({ integrations });
   }),
 );
@@ -116,6 +140,7 @@ router.get(
     const integration = await integrationService.getIntegration(
       req.user.id,
       requireProvider(req),
+      await requireContext(req),
     );
     res.json({ integration });
   }),
@@ -131,12 +156,14 @@ router.post(
     const result = await integrationService.refreshConnection(
       req.user.id,
       requireProvider(req),
+      await requireContext(req),
     );
     res.json(result);
   }),
 );
 
-// DELETE /api/integrations/:provider → disconnect and delete the tokens.
+// DELETE /api/integrations/:provider → disconnect and delete the tokens,
+// for one context only — a brand disconnect never touches the personal row.
 router.delete(
   '/:provider',
   requireAuth,
@@ -144,6 +171,7 @@ router.delete(
     const result = await integrationService.disconnectIntegration(
       req.user.id,
       requireProvider(req),
+      await requireContext(req),
     );
     res.json(result);
   }),

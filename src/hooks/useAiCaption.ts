@@ -23,8 +23,14 @@ export interface UseAiCaptionDraft {
   caption?: string;
   image_url?: string;
   platforms?: string[];
+  /** The song already in the composer. Suggestions are suppressed when set. */
+  music?: string;
+  /** Personal only — opt in to audio ideas. See CaptionBrief.suggestSongs. */
+  suggestSongs?: boolean;
   /** Which register to write in. Omitted lets the backend choose. */
   audience?: AudienceRegister;
+  /** Brand-context identity: the AI writes as this brand, not the default voice. */
+  brand?: { name: string; description?: string } | null;
 }
 
 export interface UseAiCaption {

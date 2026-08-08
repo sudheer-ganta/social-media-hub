@@ -25,6 +25,15 @@ export interface PendingOAuthState {
    * session before we ever left the app.
    */
   userId: string;
+  /**
+   * Which publishing context the connection is for — 'personal' or 'brand',
+   * with the brand id when it is a brand. Rides in the state for the same
+   * reason userId does: the provider's redirect back is unauthenticated, so
+   * anything not bound to the server-minted state would be spoofable. Brand
+   * ownership is validated at connect() time, before the state is minted.
+   */
+  contextType: string;
+  brandId: string | null;
 }
 
 /** Ten minutes. Long enough for a consent screen, short enough to bound replay. */
@@ -33,9 +42,12 @@ export const DEFAULT_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 export interface OAuthStateStore {
   /**
    * Mints a 32-byte CSPRNG value, base64url so it survives a query string
-   * untouched, and binds it to a user for {@link ttlMs}.
+   * untouched, and binds it to a user and publishing context for {@link ttlMs}.
    */
-  create(userId: string): string;
+  create(
+    userId: string,
+    context: { contextType: string; brandId: string | null },
+  ): string;
   /**
    * Looks up an incoming state and deletes it in the same step.
    *
@@ -61,12 +73,20 @@ export function createOAuthStateStore(
   }
 
   return {
-    create(userId: string): string {
+    create(
+      userId: string,
+      context: { contextType: string; brandId: string | null },
+    ): string {
       const now = Date.now();
       evictExpired(now);
 
       const state = crypto.randomBytes(32).toString('base64url');
-      pending.set(state, { expiresAt: now + ttlMs, userId });
+      pending.set(state, {
+        expiresAt: now + ttlMs,
+        userId,
+        contextType: context.contextType,
+        brandId: context.brandId,
+      });
       return state;
     },
 

@@ -2,6 +2,10 @@ import {
   socialAccountRepository,
   type SafeSocialAccount,
 } from '../repositories/social-account.repository';
+import {
+  PERSONAL_CONTEXT,
+  type AccountContext,
+} from './account-context';
 import { SocialAccountStatus } from '../generated/prisma/enums';
 import { activityService, ActivityAction } from './activity.service';
 import {
@@ -53,6 +57,9 @@ export class IntegrationError extends Error {
 export interface IntegrationAccountDto {
   id: string;
   providerAccountId: string;
+  /** 'personal' or 'brand' — which publishing context this connection serves. */
+  contextType: string;
+  brandId: string | null;
   displayName: string | null;
   username: string | null;
   profileImage: string | null;
@@ -94,6 +101,8 @@ function toAccountDto(account: SafeSocialAccount): IntegrationAccountDto {
   return {
     id: account.id,
     providerAccountId: account.providerAccountId,
+    contextType: account.contextType,
+    brandId: account.brandId,
     displayName: account.displayName,
     username: account.username,
     profileImage: account.profileImage,
@@ -146,8 +155,12 @@ function toIntegrationDto(
  */
 export async function listIntegrations(
   userId: string,
+  context: AccountContext = PERSONAL_CONTEXT,
 ): Promise<IntegrationDto[]> {
-  const accounts = await socialAccountRepository.listByUser(userId);
+  // Filtered in the query, not in the response: the browser must never receive
+  // another context's accounts and merely hide them. Within one context the
+  // provider→account Map stays 1:1, which is what the card layout assumes.
+  const accounts = await socialAccountRepository.listByUser(userId, context);
   const byProvider = new Map(accounts.map((a) => [a.provider, a]));
   const now = new Date();
 
@@ -160,6 +173,7 @@ export async function listIntegrations(
 export async function getIntegration(
   userId: string,
   provider: ProviderId,
+  context: AccountContext = PERSONAL_CONTEXT,
 ): Promise<IntegrationDto> {
   const catalog = getCatalogEntry(provider);
   if (!catalog) {
@@ -169,6 +183,7 @@ export async function getIntegration(
   const account = await socialAccountRepository.findByUserAndProvider(
     userId,
     provider,
+    context,
   );
   return toIntegrationDto(catalog, account, new Date());
 }
@@ -206,6 +221,7 @@ export interface RefreshResult {
 export async function refreshConnection(
   userId: string,
   provider: ProviderId,
+  context: AccountContext = PERSONAL_CONTEXT,
 ): Promise<RefreshResult> {
   const catalog = getCatalogEntry(provider);
   if (!catalog) {
@@ -215,6 +231,7 @@ export async function refreshConnection(
   const account = await socialAccountRepository.findByUserAndProvider(
     userId,
     provider,
+    context,
   );
   if (!account) {
     throw new IntegrationError(
@@ -231,17 +248,17 @@ export async function refreshConnection(
   if (!implementation?.verify) {
     await socialAccountRepository.markHealthChecked(account.id);
     return {
-      integration: await getIntegration(userId, provider),
+      integration: await getIntegration(userId, provider, context),
       verified: false,
       message: `${catalog.displayName} does not support connection checks yet.`,
     };
   }
 
-  // Decrypted as late as possible and never held beyond this call — see the
-  // contract on getDecryptedTokens.
-  const tokens = await socialAccountRepository.getDecryptedTokens(
-    userId,
-    provider,
+  // Decrypted as late as possible and never held beyond this call. Fetched by
+  // the id of the row selected above, so the token checked is always the
+  // token of the account this context resolved to.
+  const tokens = await socialAccountRepository.getDecryptedTokensById(
+    account.id,
   );
   if (!tokens) {
     throw new IntegrationError(
@@ -264,7 +281,7 @@ export async function refreshConnection(
     });
 
     return {
-      integration: await getIntegration(userId, provider),
+      integration: await getIntegration(userId, provider, context),
       verified: true,
       message: `${catalog.displayName} connection is healthy.`,
     };
@@ -280,7 +297,7 @@ export async function refreshConnection(
     });
 
     return {
-      integration: await getIntegration(userId, provider),
+      integration: await getIntegration(userId, provider, context),
       verified: false,
       message: `${catalog.displayName} needs your permission again. Reconnect to keep publishing.`,
     };
@@ -294,7 +311,7 @@ export async function refreshConnection(
   });
 
   return {
-    integration: await getIntegration(userId, provider),
+    integration: await getIntegration(userId, provider, context),
     verified: false,
     message: `Could not reach ${catalog.displayName} just now. Your connection was left as it is.`,
   };
@@ -323,6 +340,7 @@ export interface DisconnectResult {
 export async function disconnectIntegration(
   userId: string,
   provider: ProviderId,
+  context: AccountContext = PERSONAL_CONTEXT,
 ): Promise<DisconnectResult> {
   const catalog = getCatalogEntry(provider);
   if (!catalog) {
@@ -332,6 +350,7 @@ export async function disconnectIntegration(
   const account = await socialAccountRepository.findByUserAndProvider(
     userId,
     provider,
+    context,
   );
   if (!account) {
     throw new IntegrationError(
@@ -340,9 +359,12 @@ export async function disconnectIntegration(
     );
   }
 
+  // Scoped by context: disconnecting a brand's LinkedIn must never take the
+  // personal LinkedIn connection down with it.
   const removed = await socialAccountRepository.deleteByUserAndProvider(
     userId,
     provider,
+    context,
   );
 
   // Logged with what was removed, so the timeline can say which account went

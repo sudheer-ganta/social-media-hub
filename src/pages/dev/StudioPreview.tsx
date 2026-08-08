@@ -12,7 +12,9 @@
 
 import { MarketingStudio } from "@/components/marketing/MarketingStudio";
 import { AiStrategyPanel } from "@/components/posts/AiStrategyPanel";
+import { CreatePostForm } from "@/components/posts/CreatePostForm";
 import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
+import { PERSONAL_CONTEXT, brandContext } from "@/constants/integrations";
 import { STUDIO_SCHEMA_VERSION } from "@/ai/types";
 import type { Post } from "@/types";
 
@@ -25,6 +27,11 @@ const MOCK_POST: Post = {
   status: "draft",
   publish_date: "2026-08-06",
   publish_time: "09:00",
+  context_type: "personal",
+  brand_id: null,
+  music: null,
+  cta: null,
+  link_url: null,
   created_by: "00000000-0000-0000-0000-000000000000",
   created_at: "2026-08-06T09:00:00.000Z",
   updated_at: "2026-08-06T09:15:03.882Z",
@@ -610,6 +617,33 @@ export default function StudioPreview() {
           Legacy pending row — reads as idle, offers a fresh run
         </h2>
         <MarketingStudio post={MOCK_LEGACY_PENDING_POST} />
+      </section>
+
+      {/* The two composer modes side by side — Personal must show no
+          marketing controls, Brand must show all of them. */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">
+          Personal composer — creator mode, no marketing controls
+        </h2>
+        <CreatePostForm context={PERSONAL_CONTEXT} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">
+          Brand composer — full marketing mode
+        </h2>
+        <CreatePostForm
+          context={brandContext("mock-brand")}
+          brand={{
+            id: "mock-brand",
+            name: "Glow Labs",
+            description: "Minimal skincare",
+            website: "",
+            created_by: "mock-user",
+            created_at: "2026-08-01T00:00:00Z",
+            updated_at: "2026-08-01T00:00:00Z",
+          }}
+        />
       </section>
 
     </div>

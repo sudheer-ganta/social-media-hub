@@ -16,7 +16,8 @@
     "verify:sprint43": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint43.ts",
     "verify:sprint51": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint51.ts",
     "verify:instagram": "ts-node-dev --transpile-only --quiet src/scripts/verify-instagram-publish.ts",
-    "verify:models": "ts-node-dev --transpile-only --quiet src/scripts/verify-model-routing.ts"
+    "verify:models": "ts-node-dev --transpile-only --quiet src/scripts/verify-model-routing.ts",
+    "verify:contexts": "ts-node-dev --transpile-only --quiet src/scripts/verify-context-isolation.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

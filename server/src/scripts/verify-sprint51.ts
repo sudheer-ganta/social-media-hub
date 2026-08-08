@@ -208,8 +208,9 @@ console.log('\n[5] Publish scope');
 
 console.log('\n[6] OAuth state store');
 {
+  const personal = { contextType: 'personal', brandId: null };
   const store = createOAuthStateStore(60_000);
-  const state = store.create('user-1');
+  const state = store.create('user-1', personal);
 
   assert.strictEqual(store.consume(state)?.userId, 'user-1');
   ok('a minted state resolves to its user');
@@ -225,13 +226,13 @@ console.log('\n[6] OAuth state store');
   ok('an unknown state is rejected');
 
   const expiring = createOAuthStateStore(-1);
-  assert.strictEqual(expiring.consume(expiring.create('user-2')), null);
+  assert.strictEqual(expiring.consume(expiring.create('user-2', personal)), null);
   ok('an expired state is rejected');
 
   // The separation that stops a state minted for one network satisfying
   // another's callback.
   const other = createOAuthStateStore(60_000);
-  assert.strictEqual(other.consume(store.create('user-3')), null);
+  assert.strictEqual(other.consume(store.create('user-3', personal)), null);
   ok("one provider's state does not satisfy another's store");
 }
 

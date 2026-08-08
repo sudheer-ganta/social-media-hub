@@ -4,6 +4,7 @@ import {
   Eye,
   Hash,
   ImageOff,
+  Music,
   RefreshCw,
   Sparkles,
   Wand2,
@@ -58,6 +59,11 @@ interface AiCaptionPanelProps {
   onGenerate: () => void;
   onUseCaption: (caption: string) => void;
   onAppendHashtags: (hashtags: string[]) => void;
+  /**
+   * Fills the composer's Music / Song field. Optional: a composer without an
+   * audio field simply omits it and no suggestions are shown.
+   */
+  onUseSong?: (song: string) => void;
 }
 
 /** A row of chips, or nothing at all when the list is empty. */
@@ -160,6 +166,7 @@ export function AiCaptionPanel({
   onGenerate,
   onUseCaption,
   onAppendHashtags,
+  onUseSong,
 }: AiCaptionPanelProps) {
   const hasResult = Boolean(result && result.variations.length > 0);
   const platformEntries = Object.entries(result?.platformCaptions ?? {}) as [
@@ -176,18 +183,18 @@ export function AiCaptionPanel({
         <div>
           <CardTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            AI Caption
+            AI Assistant
           </CardTitle>
           <CardDescription>
             {isGenerating
               ? hasImage
                 ? "Looking at your image, then writing from what it sees…"
-                : "Writing captions from your title, brand voice and platforms…"
+                : "Writing suggestions from your title, caption and platforms…"
               : hasResult
-                ? "Pick an angle, drop it into the editor, then edit it freely."
+                ? "Pick an angle, apply it to your post, then edit it freely."
                 : hasImage
-                  ? "Your image is analysed first, then the copy is written from what's actually in it."
-                  : "Generate caption options from your title, brand voice and chosen platforms."}
+                  ? "Optional. Your image is analysed first, then suggestions are written from what's actually in it."
+                  : "Optional. Get caption, hook and hashtag suggestions from your title and chosen platforms."}
           </CardDescription>
         </div>
 
@@ -303,7 +310,7 @@ export function AiCaptionPanel({
                       onClick={() => onUseCaption(variation.caption)}
                     >
                       <Wand2 />
-                      Use as caption
+                      Apply to Post
                     </Button>
                   </div>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
@@ -343,6 +350,57 @@ export function AiCaptionPanel({
                 </div>
               </div>
             )}
+
+            {/* Only ever present when the Music / Song field was empty at
+                generation time — the backend suppresses the whole list once a
+                song is chosen, so there is nothing here that could tempt anyone
+                into replacing a decision the user already made. */}
+            {onUseSong && result.songSuggestions?.length ? (
+              <div className="rounded-md border p-4">
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Music className="h-3.5 w-3.5 text-primary" />
+                  Audio ideas
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  AI recommendations based on your content — not live chart data.
+                  Check the track is available on your platform before you post.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {result.songSuggestions.map((song) => (
+                    <div
+                      key={`${song.title}-${song.artist}`}
+                      className="flex flex-wrap items-start justify-between gap-2 rounded-md border bg-muted/20 p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">
+                          {song.title}
+                          <span className="text-muted-foreground">
+                            {" "}
+                            · {song.artist}
+                          </span>
+                        </p>
+                        {song.reason && (
+                          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                            {song.reason}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          onUseSong(`${song.title} - ${song.artist}`)
+                        }
+                      >
+                        <Music />
+                        Use this song
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {platformEntries.length > 0 && (
               <div className="grid gap-3 lg:grid-cols-2">

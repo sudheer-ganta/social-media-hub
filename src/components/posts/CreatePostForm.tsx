@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,6 +21,8 @@ import { PlatformSelector } from "./PlatformSelector";
 import { SchedulePicker } from "./SchedulePicker";
 import { AiStrategyPanel } from "./AiStrategyPanel";
 import { AiCaptionPanel } from "./AiCaptionPanel";
+import { ReachPanel } from "./ReachPanel";
+import { PublishedSummary } from "./PublishedSummary";
 import { PublishStatus } from "./PublishStatus";
 import { MarketingStudio } from "@/components/marketing/MarketingStudio";
 import {
@@ -40,18 +43,43 @@ import {
   validateFutureSchedule,
   type PostFormValues,
 } from "@/validators";
-import type { Platform, Post, PostStatus } from "@/types";
+import type { AccountContext } from "@/constants/integrations";
+import type {
+  Brand,
+  Platform,
+  Post,
+  PostPlatformState,
+  PostStatus,
+} from "@/types";
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <p className="text-xs font-medium text-destructive">{message}</p>;
 }
 
+/**
+ * General per-network guidance for the "Suggested time" chip. Static on
+ * purpose and labeled as a general recommendation in the UI — there are no
+ * per-user analytics to derive a personal best time from yet, and the
+ * assistant must not pretend otherwise.
+ */
+const SUGGESTED_TIMES: Partial<Record<Platform, string>> = {
+  linkedin: "09:00",
+  instagram: "19:30",
+  facebook: "13:00",
+  x: "12:00",
+  threads: "20:00",
+};
+
 interface CreatePostFormProps {
   post?: Post;
+  /** The publishing context this composer is working in. */
+  context: AccountContext;
+  /** The brand behind a brand context, when it has loaded. */
+  brand?: Brand | null;
 }
 
-export function CreatePostForm({ post }: CreatePostFormProps) {
+export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const navigate = useNavigate();
   const createPost = useCreatePost();
   const updatePost = useUpdatePost();
@@ -60,7 +88,13 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
   const generateStrategy = useGenerateWithSettings();
   const publish = usePublishPostToProvider();
   const { data: publishState } = usePublishState(post?.id);
-  const { integrations } = useIntegrations();
+  // Context-scoped: the backend filters, so a Personal composer never even
+  // receives a brand account. Everything below (the platform cards, the
+  // publishable set) inherits the isolation from this one call.
+  const { integrations } = useIntegrations(context);
+
+  const isBrand = context.contextType === "brand";
+  const contextLabel = isBrand ? (brand?.name ?? "this brand") : "Personal";
 
   const defaultValues = useMemo<PostFormValues>(
     () => ({
@@ -68,11 +102,16 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       caption: post?.caption ?? "",
       image_url: post?.image_url ?? "",
       platforms: post?.platforms ?? [],
+      context_type: post?.context_type ?? context.contextType,
+      brand_id: post?.brand_id ?? context.brandId,
+      music: post?.music ?? "",
+      cta: post?.cta ?? "",
+      link_url: post?.link_url ?? "",
       publish_date: post?.publish_date ?? today(),
       publish_time: post?.publish_time ?? currentTime(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     }),
-    [post],
+    [post, context],
   );
 
   const {
@@ -109,6 +148,25 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
   const [publishingProvider, setPublishingProvider] = useState<Platform | null>(
     null,
   );
+
+  /**
+   * The outcome of a Personal publish, which swaps the composer for
+   * {@link PublishedSummary}.
+   *
+   * Personal only, deliberately. Brand's post-publish behaviour is out of scope
+   * for this sprint and is left exactly as it was — it keeps the composer and
+   * its Marketing Studio on screen, which is what a campaign post is edited
+   * from next.
+   *
+   * Held here rather than read back from `usePublishState` because a brand-new
+   * post's route changes the moment it is saved, and the remount that follows
+   * would take this state with it. The rows below are what the publisher
+   * actually returned, network by network.
+   */
+  const [published, setPublished] = useState<{
+    id: string;
+    platforms: PostPlatformState[];
+  } | null>(null);
 
   /**
    * The networks FlowPost can actually publish to, from the server's catalogue.
@@ -171,9 +229,36 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       return;
     }
 
-    return getValues("image_url")?.trim()
+    // Personal never runs the marketing pipeline — the caption path already
+    // reads the image and returns hooks, hashtags and platform captions, which
+    // is the whole of the Personal AI Assistant. The strategy pipeline (goals,
+    // funnel, campaign assets) is a Brand concept.
+    return isBrand && getValues("image_url")?.trim()
       ? runStrategy()
       : runCaptionOnly();
+  };
+
+  /** Brand-context identity for the AI, or null in Personal mode. */
+  const brandIdentity =
+    isBrand && brand
+      ? { name: brand.name, ...(brand.description && { description: brand.description }) }
+      : null;
+
+  /**
+   * The studio settings, stamped with the active context. In Brand mode the
+   * voice writes as the brand — its name and description override the saved
+   * profile's, while the profile's tone rules still apply.
+   */
+  const buildContextSettings = () => {
+    const settings = studio.buildRequest();
+    return {
+      ...settings,
+      contextType: context.contextType,
+      brandId: context.brandId,
+      ...(brandIdentity && {
+        brandVoice: { ...settings.brandVoice, ...brandIdentity },
+      }),
+    };
   };
 
   const runCaptionOnly = async () => {
@@ -184,7 +269,20 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       caption: values.caption,
       image_url: values.image_url,
       platforms: values.platforms,
+      // Audio is a Personal concern only. Brand's brief is left byte-identical
+      // to what it was before this panel existed — it neither sends the song
+      // nor asks for suggestions, so a Brand generation reads exactly the
+      // prompt it always did.
+      //
+      // Within Personal the rule is: a song the user already chose is context,
+      // never a target. It steers the copy, and it suppresses the suggestions
+      // entirely so nothing can offer to replace a decision already made.
+      ...(!isBrand && {
+        music: values.music,
+        suggestSongs: !values.music.trim(),
+      }),
       audience,
+      brand: brandIdentity,
     });
 
     // Drop the recommended option straight into an empty editor — with nothing
@@ -211,6 +309,16 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
     timezone: watch("timezone"),
   };
 
+  // The first selected platform with a known slot drives the suggestion chip.
+  const selectedPlatforms = watch("platforms");
+  const suggestedFor = selectedPlatforms.find((p) => SUGGESTED_TIMES[p]);
+  const suggestion = suggestedFor
+    ? {
+        name: PLATFORM_MAP[suggestedFor]?.name ?? suggestedFor,
+        time: SUGGESTED_TIMES[suggestedFor]!,
+      }
+    : null;
+
   /**
    * Saves the form's current values and resolves with the stored post.
    *
@@ -229,6 +337,11 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       status,
       publish_date: values.publish_date,
       publish_time: values.publish_time,
+      context_type: values.context_type,
+      brand_id: values.context_type === "brand" ? values.brand_id : null,
+      music: values.music.trim() || null,
+      cta: values.cta.trim() || null,
+      link_url: values.link_url.trim() || null,
     };
 
     const saved = post
@@ -298,7 +411,7 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         const saved = await persist(values, post?.status ?? "draft");
         await generateStrategy.mutateAsync({
           id: saved.id,
-          settings: studio.buildRequest(),
+          settings: buildContextSettings(),
         });
         if (!post) navigate(`/posts/${saved.id}/edit`, { replace: true });
       } catch {
@@ -355,11 +468,48 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       // own outcome through the mutation's toasts, and `post_platforms` records
       // them separately — so "published to LinkedIn, failed on Instagram" is a
       // state the app can actually show rather than one it has to flatten.
+      const outcomes: PostPlatformState[] = [];
+
       for (const provider of targets) {
         setPublishingProvider(provider);
-        await publish
-          .mutateAsync({ postId: saved.id, provider })
-          .catch(() => undefined);
+        outcomes.push(
+          await publish
+            .mutateAsync({ postId: saved.id, provider })
+            .then<PostPlatformState>((result) => ({
+              provider,
+              providerName: PLATFORM_MAP[provider]?.name ?? provider,
+              status: "PUBLISHED",
+              publishedId: result.publishedId,
+              url: result.url,
+              errorMessage: null,
+            }))
+            .catch<PostPlatformState>((cause) => ({
+              provider,
+              providerName: PLATFORM_MAP[provider]?.name ?? provider,
+              status: "FAILED",
+              publishedId: null,
+              url: null,
+              // Already written for a member by the backend — the mutation's
+              // own toast renders the same string.
+              errorMessage:
+                cause instanceof Error ? cause.message : "Publishing failed.",
+            })),
+        );
+      }
+
+      // Personal, and something actually went out: the work is finished, so
+      // the form gives way to the result rather than leaving someone staring
+      // at fields they have no further use for.
+      //
+      // The `some` is load-bearing. A publish where *every* network failed has
+      // not succeeded at anything, and swapping in a success screen would both
+      // lie about it and take away the form the member needs to fix and retry
+      // from. In that case this falls through and behaves exactly as it did
+      // before: stay put, keep the values, let PublishStatus and the mutation's
+      // toasts say what went wrong.
+      if (!isBrand && outcomes.some((o) => o.status === "PUBLISHED")) {
+        setPublished({ id: saved.id, platforms: outcomes });
+        return;
       }
 
       // A brand-new post published from /posts/new has no route of its own
@@ -374,6 +524,24 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       setPublishingProvider(null);
     }
   });
+
+  // Personal, published: the composer has done its job. Everything the creator
+  // wants now — where it landed, what it looks like, how it performs — is in
+  // the summary, and "Edit this post" comes back here.
+  if (published) {
+    return (
+      <PublishedSummary
+        imageUrl={getValues("image_url")}
+        caption={getValues("caption")}
+        music={getValues("music")}
+        platforms={published.platforms}
+        onEdit={() => {
+          setPublished(null);
+          if (!post) navigate(`/posts/${published.id}/edit`, { replace: true });
+        }}
+      />
+    );
+  }
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
@@ -425,6 +593,42 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
               />
               <FieldError message={errors.caption?.message} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="post-music">Music / Song</Label>
+              <Input
+                id="post-music"
+                placeholder="Add song / music (optional)"
+                {...register("music")}
+              />
+              <FieldError message={errors.music?.message} />
+            </div>
+            {isBrand && (
+              <details className="rounded-lg border p-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Campaign options
+                </summary>
+                <div className="mt-3 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="post-cta">Call to action</Label>
+                    <Input
+                      id="post-cta"
+                      placeholder={`Try ${contextLabel} today`}
+                      {...register("cta")}
+                    />
+                    <FieldError message={errors.cta?.message} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="post-link">Link</Label>
+                    <Input
+                      id="post-link"
+                      placeholder="https://…"
+                      {...register("link_url")}
+                    />
+                    <FieldError message={errors.link_url?.message} />
+                  </div>
+                </div>
+              </details>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -433,7 +637,9 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         <CardHeader>
           <CardTitle>Platforms</CardTitle>
           <CardDescription>
-            Choose where this post should be published.
+            {isBrand
+              ? `Accounts connected to ${contextLabel}.`
+              : "Your personal connected accounts."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -441,7 +647,12 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
             control={control}
             name="platforms"
             render={({ field }) => (
-              <PlatformSelector value={field.value} onChange={field.onChange} />
+              <PlatformSelector
+                value={field.value}
+                onChange={field.onChange}
+                integrations={integrations}
+                contextLabel={contextLabel}
+              />
             )}
           />
           <FieldError message={errors.platforms?.message} />
@@ -456,6 +667,30 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {suggestion && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+              <p className="text-xs text-muted-foreground">
+                Suggested:{" "}
+                <span className="font-semibold text-foreground">
+                  {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
+                </span>{" "}
+                for {suggestion.name} — general recommendation, not yet based
+                on your analytics.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setValue("publish_time", suggestion.time, {
+                    shouldValidate: true,
+                  })
+                }
+              >
+                Use
+              </Button>
+            </div>
+          )}
           <SchedulePicker
             value={schedule}
             onChange={(next) => {
@@ -469,7 +704,11 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
         </CardContent>
       </Card>
 
-      <AiStrategyPanel studio={studio} hasImage={Boolean(imageUrl?.trim())} />
+      {/* Brand-only: goals, funnel stages, brand voice and competitor context
+          are marketing concepts. Personal gets the AI Assistant below instead. */}
+      {isBrand && (
+        <AiStrategyPanel studio={studio} hasImage={Boolean(imageUrl?.trim())} />
+      )}
 
       <AiCaptionPanel
         result={ai.result}
@@ -484,7 +723,24 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
           setValue("caption", caption, { shouldValidate: true })
         }
         onAppendHashtags={handleAppendHashtags}
+        {...(!isBrand && {
+          onUseSong: (song: string) =>
+            setValue("music", song, { shouldValidate: true }),
+        })}
       />
+
+      {/* Personal's second, optional assistant. Brand reads the same analysis
+          through the Marketing Studio below, so it is not repeated here. */}
+      {!isBrand && (
+        <ReachPanel
+          caption={watch("caption")}
+          platforms={selectedPlatforms}
+          hasImage={Boolean(imageUrl?.trim())}
+          {...(ai.result?.imageAnalysis && {
+            imageAnalysis: ai.result.imageAnalysis,
+          })}
+        />
+      )}
 
       {/* Where this post stands on each network. Hides itself entirely until
           there is something to report. */}
@@ -496,7 +752,7 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
       {/* Everything the pipeline produced, plus the approval gate. Only on an
           existing post — there is nothing stored to review before that. This is
           the whole of the old AI Studio's right-hand panel. */}
-      {post && (
+      {isBrand && post && (
         <MarketingStudio
           post={post}
           onUseCaption={(caption) =>
@@ -516,17 +772,21 @@ export function CreatePostForm({ post }: CreatePostFormProps) {
             <FileText />
             Save Draft
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            loading={generating}
-            disabled={Boolean(blockedReason)}
-            title={blockedReason ?? undefined}
-            onClick={handleGenerate}
-          >
-            <Sparkles />
-            {hasGenerated ? "Regenerate" : "Generate with AI"}
-          </Button>
+          {/* Brand keeps AI in the primary workflow; Personal's only AI entry
+              point is the optional AI Assistant panel above. */}
+          {isBrand && (
+            <Button
+              type="button"
+              variant="secondary"
+              loading={generating}
+              disabled={Boolean(blockedReason)}
+              title={blockedReason ?? undefined}
+              onClick={handleGenerate}
+            >
+              <Sparkles />
+              {hasGenerated ? "Regenerate" : "Generate with AI"}
+            </Button>
+          )}
           <Button
             type="button"
             variant="secondary"

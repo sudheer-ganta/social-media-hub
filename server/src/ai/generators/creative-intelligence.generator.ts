@@ -1,5 +1,5 @@
 import { resolveBrandProfile } from '../brand/brand-profile';
-import { buildCaptionPrompt } from '../prompts/caption.prompt';
+import { buildCaptionPrompt, wantsSongSuggestions } from '../prompts/caption.prompt';
 import { AiProviderError, type AiTextProvider } from '../providers';
 import { analyseImage } from './image-analysis.generator';
 import type {
@@ -11,6 +11,7 @@ import type {
   ImageAnalysis,
   InlineImage,
   RawCaptionPayload,
+  SongSuggestion,
 } from '../types';
 
 /**
@@ -51,6 +52,9 @@ const MAX_HASHTAG_LENGTH = 40;
 
 /** A caption shorter than this is a failure, not a terse option. */
 const MIN_CAPTION_LENGTH = 12;
+
+/** More audio ideas than this is a list to scroll, not a choice to make. */
+const MAX_SONG_SUGGESTIONS = 4;
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -128,6 +132,34 @@ function normaliseVariations(
 
   // Over-delivery is harmless but confusing in the UI; trim to what was asked.
   return variations.slice(0, request.variationCount);
+}
+
+/**
+ * Audio ideas, kept only when they name an actual track.
+ *
+ * A suggestion missing a title or an artist is not a recommendation anyone can
+ * act on — the composer's field takes a song name, and "an upbeat pop song" is
+ * not one. Dropped rather than defaulted, same rule as the variation extras.
+ * The whole list is skipped when the user already chose a song.
+ */
+function normaliseSongSuggestions(
+  payload: RawCaptionPayload,
+  request: CaptionRequest,
+): SongSuggestion[] {
+  // The same gate the prompt used, so a model that returns the key uninvited
+  // cannot get it into the result.
+  if (!wantsSongSuggestions(request)) return [];
+
+  const raw = Array.isArray(payload.songSuggestions) ? payload.songSuggestions : [];
+
+  return raw
+    .map((item) => ({
+      title: asString(item?.title).slice(0, 160),
+      artist: asString(item?.artist).slice(0, 160),
+      reason: asString(item?.reason).slice(0, 300),
+    }))
+    .filter((song) => song.title.length > 0 && song.artist.length > 0)
+    .slice(0, MAX_SONG_SUGGESTIONS);
 }
 
 function normalisePlatformCaptions(
@@ -233,6 +265,7 @@ export async function generateCaption(
 
   const caption = variations[0].caption;
   const angles = normaliseAngles(payload, request);
+  const songSuggestions = normaliseSongSuggestions(payload, request);
 
   return {
     caption,
@@ -245,6 +278,7 @@ export async function generateCaption(
     // typed and would otherwise have no way of seeing.
     brand,
     ...(angles.length > 0 && { angles }),
+    ...(songSuggestions.length > 0 && { songSuggestions }),
     ...(payload.seo && { seo: payload.seo }),
     ...(payload.campaign && { campaign: payload.campaign }),
     ...(payload.competitor && { competitor: payload.competitor }),

@@ -17,6 +17,10 @@ import {
   INSTAGRAM_PUBLISHABLE_ACCOUNT_TYPES,
 } from './validator';
 import { socialConnectionService } from '../../../services/social-connection.service';
+import {
+  readContext,
+  assertContextOwned,
+} from '../../../services/account-context';
 import { buildIntegrationsRedirect } from '../../../services/oauth-redirect';
 import type { InstagramAuthorizationParams } from './types';
 
@@ -78,12 +82,19 @@ export function buildAuthorizationUrl(state: string): string {
 async function connect(req: Request, res: Response): Promise<void> {
   assertInstagramConfigured();
 
-  const state = states.create(req.user.id);
+  // Which publishing context this connection is for. Read and ownership-checked
+  // here — while the request is still authenticated — then bound into the
+  // state, because Meta's redirect back carries no identity of ours.
+  const context = readContext(req.query);
+  await assertContextOwned(req.user.id, context);
+
+  const state = states.create(req.user.id, context);
 
   // Scopes are safe to log; the state, the app secret and any token are not.
   console.log('[instagram] OAuth started', {
     scopes: instagramConfig.scopes,
     redirectUri: instagramConfig.redirectUri,
+    context: context.contextType,
   });
 
   res.json({ url: buildAuthorizationUrl(state) });
@@ -149,6 +160,8 @@ async function callback(req: Request, res: Response): Promise<void> {
     const account = await socialConnectionService.connectAccount({
       userId: pending.userId,
       provider: 'instagram',
+      contextType: pending.contextType,
+      brandId: pending.brandId,
       // The profile is authoritative over the id the token exchange
       // volunteered — `/me` is what the publishing paths are built from.
       providerAccountId: profile.providerAccountId,

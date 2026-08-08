@@ -2,10 +2,24 @@ import { getSupabase } from "@/lib/supabase";
 import {
   API_BASE_URL,
   INTEGRATIONS_ENDPOINT,
+  type AccountContext,
   type ActivityEvent,
   type Integration,
   type IntegrationId,
 } from "@/constants/integrations";
+
+/**
+ * `?context=…&brandId=…` for one publishing context. Personal is the backend
+ * default, so it sends nothing — which also keeps old bookmarks working.
+ */
+function contextQuery(context: AccountContext): string {
+  if (context.contextType !== "brand" || !context.brandId) return "";
+  const query = new URLSearchParams({
+    context: "brand",
+    brandId: context.brandId,
+  });
+  return `?${query}`;
+}
 
 /**
  * The browser's side of the integrations API.
@@ -90,12 +104,19 @@ async function request<T>(
  * the backend's access log, the browser's history, and the `Referer` sent to
  * the provider.
  */
-export async function startConnect(integration: Integration): Promise<void> {
+export async function startConnect(
+  integration: Integration,
+  context: AccountContext,
+): Promise<void> {
   if (!integration.connectPath) {
     throw new Error(`${integration.displayName} is not available yet.`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${integration.connectPath}`, {
+  // The context rides the authenticated connect request, where the backend
+  // validates brand ownership and binds it into the OAuth state.
+  const response = await fetch(
+    `${API_BASE_URL}${integration.connectPath}${contextQuery(context)}`,
+    {
     headers: { Authorization: `Bearer ${await getAccessToken()}` },
     // The provider's authorization URL must never be *fetched*, only navigated
     // to — instagram.com and linkedin.com send no CORS headers, so a followed
@@ -134,9 +155,11 @@ export async function startConnect(integration: Integration): Promise<void> {
  * Every network the backend catalogues, with its connection when there is one.
  * A single call regardless of how many networks exist.
  */
-export async function fetchIntegrations(): Promise<Integration[]> {
+export async function fetchIntegrations(
+  context: AccountContext,
+): Promise<Integration[]> {
   const { integrations } = await request<{ integrations?: Integration[] }>(
-    "",
+    contextQuery(context),
     { method: "GET" },
     "Could not load your connected accounts.",
   );
@@ -151,25 +174,35 @@ export async function fetchIntegrations(): Promise<Integration[]> {
  * unreachable" — the two are genuinely different, and `message` is what
  * distinguishes them for the member, so show it either way.
  */
-export async function refreshIntegration(provider: IntegrationId): Promise<{
+export async function refreshIntegration(
+  provider: IntegrationId,
+  context: AccountContext,
+): Promise<{
   integration: Integration;
   verified: boolean;
   message: string;
 }> {
   return request(
-    `/${provider}/refresh`,
+    `/${provider}/refresh${contextQuery(context)}`,
     { method: "POST" },
     "Could not check that connection.",
   );
 }
 
-/** Disconnects a network and deletes its stored tokens. Posts are untouched. */
-export async function disconnectIntegration(provider: IntegrationId): Promise<{
+/**
+ * Disconnects a network in one context and deletes its stored tokens. Posts
+ * are untouched, and so is the same provider's connection in any other
+ * context.
+ */
+export async function disconnectIntegration(
+  provider: IntegrationId,
+  context: AccountContext,
+): Promise<{
   integration: Integration;
   message: string;
 }> {
   return request(
-    `/${provider}`,
+    `/${provider}${contextQuery(context)}`,
     { method: "DELETE" },
     "Could not disconnect that account.",
   );

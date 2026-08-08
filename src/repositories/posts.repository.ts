@@ -62,6 +62,12 @@ export const postsRepository = {
     if (params.platform !== "all") {
       query = query.contains("platforms", JSON.stringify([params.platform]));
     }
+    if (params.context !== "all") {
+      query = query.eq("context_type", params.context);
+      if (params.context === "brand" && params.brandId) {
+        query = query.eq("brand_id", params.brandId);
+      }
+    }
     const term = sanitizeSearch(params.search);
     if (term) {
       query = query.or(`title.ilike.%${term}%,caption.ilike.%${term}%`);
@@ -92,11 +98,21 @@ export const postsRepository = {
     };
   },
 
-  async listAll(): Promise<Post[]> {
-    const { data, error } = await getSupabase()
+  async listAll(filter?: {
+    context: Post["context_type"] | "all";
+    brandId: string | null;
+  }): Promise<Post[]> {
+    let query = getSupabase()
       .from(TABLE)
       .select("*")
       .order("created_at", { ascending: false });
+    if (filter && filter.context !== "all") {
+      query = query.eq("context_type", filter.context);
+      if (filter.context === "brand" && filter.brandId) {
+        query = query.eq("brand_id", filter.brandId);
+      }
+    }
+    const { data, error } = await query;
     if (error) throw new Error(error.message);
     return (data ?? []).map(mapRow);
   },

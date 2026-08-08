@@ -36,6 +36,26 @@ export type IntegrationId =
   | "tiktok";
 
 /**
+ * Which publishing context an integrations request is scoped to. Personal and
+ * Brand connections are separate rows server-side; every list/refresh/
+ * disconnect/connect call names the context it means.
+ */
+export interface AccountContext {
+  contextType: "personal" | "brand";
+  /** Set exactly when contextType is 'brand'. */
+  brandId: string | null;
+}
+
+export const PERSONAL_CONTEXT: AccountContext = {
+  contextType: "personal",
+  brandId: null,
+};
+
+export function brandContext(brandId: string): AccountContext {
+  return { contextType: "brand", brandId };
+}
+
+/**
  * Derived connection status. Wider than the database's own enum because some of
  * these are computed at read time — a token whose expiry has passed reports
  * `needs_reconnect` without anything having written to the row.
@@ -91,6 +111,9 @@ export interface ConnectionHealth {
 export interface ConnectedAccount {
   id: string;
   providerAccountId: string;
+  /** 'personal' or 'brand' — which publishing context this connection serves. */
+  contextType: string;
+  brandId: string | null;
   displayName: string | null;
   username: string | null;
   profileImage: string | null;

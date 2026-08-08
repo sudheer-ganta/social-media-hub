@@ -10,7 +10,11 @@ import { ConnectionHealthMeter } from "@/components/integrations/ConnectionHealt
 import { PermissionList } from "@/components/integrations/PermissionList";
 import { DisconnectDialog } from "@/components/integrations/DisconnectDialog";
 import { integrationsService } from "@/services";
-import type { Integration, IntegrationId } from "@/constants/integrations";
+import type {
+  AccountContext,
+  Integration,
+  IntegrationId,
+} from "@/constants/integrations";
 import {
   formatAbsolute,
   formatCalendarDay,
@@ -19,6 +23,8 @@ import {
 
 interface ProviderCardProps {
   integration: Integration;
+  /** The publishing context the page is showing — new connections join it. */
+  context: AccountContext;
   onRefresh: (provider: IntegrationId) => Promise<{
     verified: boolean;
     message: string;
@@ -41,6 +47,7 @@ interface ProviderCardProps {
  */
 export function ProviderCard({
   integration,
+  context,
   onRefresh,
   onDisconnect,
 }: ProviderCardProps) {
@@ -61,7 +68,7 @@ export function ProviderCard({
   const handleConnect = async () => {
     setConnecting(true);
     try {
-      await integrationsService.startConnect(integration);
+      await integrationsService.startConnect(integration, context);
     } catch (error) {
       toast.error(
         error instanceof Error

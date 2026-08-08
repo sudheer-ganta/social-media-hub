@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PlatformSelector } from "@/components/posts/PlatformSelector";
+import { useIntegrations } from "@/hooks/useIntegrations";
 import { useSettings } from "@/hooks/useSettings";
 import { TIMEZONES } from "@/constants";
 import { settingsSchema, type SettingsFormValues } from "@/validators";
@@ -51,6 +52,8 @@ const NOTIFICATION_OPTIONS: {
 
 export function SettingsForm() {
   const { settings, saveSettings } = useSettings();
+  // Defaults apply to new posts, which start Personal until a context is chosen.
+  const { integrations } = useIntegrations();
   const [saved, setSaved] = useState(false);
 
   const {
@@ -144,6 +147,8 @@ export function SettingsForm() {
               <PlatformSelector
                 value={field.value as Platform[]}
                 onChange={field.onChange}
+                integrations={integrations}
+                contextLabel="Personal"
               />
             )}
           />

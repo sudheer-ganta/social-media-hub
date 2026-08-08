@@ -5,6 +5,10 @@ import {
   type Provider,
 } from '../provider.interface';
 import { createOAuthStateStore, firstQueryValue } from '../oauth-state';
+import {
+  readContext,
+  assertContextOwned,
+} from '../../services/account-context';
 import { assertLinkedInConfigured, linkedinConfig } from './config';
 import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode } from './token';
@@ -79,13 +83,20 @@ export function buildAuthorizationUrl(state: string): string {
 async function connect(req: Request, res: Response): Promise<void> {
   assertLinkedInConfigured();
 
-  const state = states.create(req.user.id);
+  // Which publishing context this connection is for. Read and ownership-checked
+  // here — while the request is still authenticated — then bound into the
+  // state, because LinkedIn's redirect back carries no identity of ours.
+  const context = readContext(req.query);
+  await assertContextOwned(req.user.id, context);
+
+  const state = states.create(req.user.id, context);
   const authorizationUrl = buildAuthorizationUrl(state);
 
   // Scopes are safe to log; the state, the client secret and any token are not.
   console.log('[linkedin] OAuth started', {
     scopes: linkedinConfig.scopes,
     redirectUri: linkedinConfig.redirectUri,
+    context: context.contextType,
   });
 
   res.json({ url: authorizationUrl });
@@ -144,6 +155,8 @@ async function callback(req: Request, res: Response): Promise<void> {
     const account = await socialConnectionService.connectAccount({
       userId: pending.userId,
       provider: 'linkedin',
+      contextType: pending.contextType,
+      brandId: pending.brandId,
       providerAccountId: profile.providerAccountId,
       displayName: profile.displayName,
       profileImage: profile.profileImage,

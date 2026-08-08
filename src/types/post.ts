@@ -34,6 +34,26 @@ export type Platform =
   | "x"
   | "threads";
 
+/**
+ * The Personal-vs-Brand publishing context. Every post and every social
+ * connection belongs to exactly one, and the two never mix — the backend
+ * filters account lists and resolves publish targets by it.
+ */
+export type PostContext = "personal" | "brand";
+
+/** A `brands` row — a Brand publishing context. Snake_case like every PostgREST row. */
+export interface Brand {
+  id: string;
+  name: string;
+  description: string;
+  website: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BrandInsert = Pick<Brand, "name" | "description" | "website">;
+
 export interface PlatformResult {
   url?: string;
   id?: string;
@@ -90,6 +110,13 @@ export interface Post {
   status: PostStatus;
   publish_date: string;
   publish_time: string;
+  /** Publishing context. brand_id is set exactly when context_type is 'brand'. */
+  context_type: PostContext;
+  brand_id: string | null;
+  /** Composer fields. music is display metadata; cta/link_url are Brand-mode. */
+  music: string | null;
+  cta: string | null;
+  link_url: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -117,6 +144,11 @@ export type PostInsert = Pick<
   | "status"
   | "publish_date"
   | "publish_time"
+  | "context_type"
+  | "brand_id"
+  | "music"
+  | "cta"
+  | "link_url"
 >;
 
 export type PostUpdate = Partial<
@@ -134,6 +166,10 @@ export interface PostFilters {
   search: string;
   status: PostStatus | "all";
   platform: Platform | "all";
+  /** 'all' mixes nothing away on the list page; analytics always pick one. */
+  context: PostContext | "all";
+  /** Narrows a brand context to one brand. Ignored unless context is 'brand'. */
+  brandId: string | null;
   from: string;
   to: string;
   sort: SortOption;

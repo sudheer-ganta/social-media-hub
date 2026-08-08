@@ -1,25 +1,38 @@
 import { useCallback, useEffect, useState } from "react";
 import { integrationsService } from "@/services";
-import type { Integration, IntegrationId } from "@/constants/integrations";
+import {
+  PERSONAL_CONTEXT,
+  type AccountContext,
+  type Integration,
+  type IntegrationId,
+} from "@/constants/integrations";
 
 /**
- * The signed-in user's integrations, and the two things you can do to one.
+ * The signed-in user's integrations for one publishing context, and the two
+ * things you can do to one.
  *
  * A single request covers every network, because `GET /api/integrations` is
- * provider-agnostic — adding Instagram changes nothing here. Mutations return
- * the rebuilt card and are patched into the list in place, so a refresh or a
- * disconnect updates one card without the whole page flickering through a
- * loading state.
+ * provider-agnostic — adding Instagram changes nothing here. The context is
+ * part of the request, filtered server-side: Personal never sees a brand's
+ * accounts and a brand never sees Personal's. Mutations return the rebuilt
+ * card and are patched into the list in place, so a refresh or a disconnect
+ * updates one card without the whole page flickering through a loading state.
  */
-export function useIntegrations() {
+export function useIntegrations(context: AccountContext = PERSONAL_CONTEXT) {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Primitive deps so a caller passing a fresh object literal every render
+  // doesn't refetch in a loop.
+  const { contextType, brandId } = context;
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setIntegrations(await integrationsService.fetchIntegrations());
+      setIntegrations(
+        await integrationsService.fetchIntegrations({ contextType, brandId }),
+      );
       setError(null);
     } catch (cause) {
       // A failed load is not a failed connection: the page shows why rather
@@ -33,7 +46,7 @@ export function useIntegrations() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [contextType, brandId]);
 
   useEffect(() => {
     void refresh();
@@ -55,20 +68,26 @@ export function useIntegrations() {
    */
   const refreshConnection = useCallback(
     async (provider: IntegrationId) => {
-      const result = await integrationsService.refreshIntegration(provider);
+      const result = await integrationsService.refreshIntegration(provider, {
+        contextType,
+        brandId,
+      });
       replace(result.integration);
       return result;
     },
-    [replace],
+    [replace, contextType, brandId],
   );
 
   const disconnect = useCallback(
     async (provider: IntegrationId) => {
-      const result = await integrationsService.disconnectIntegration(provider);
+      const result = await integrationsService.disconnectIntegration(provider, {
+        contextType,
+        brandId,
+      });
       replace(result.integration);
       return result;
     },
-    [replace],
+    [replace, contextType, brandId],
   );
 
   return {

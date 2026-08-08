@@ -16,6 +16,9 @@
 //   • the `updated_at` trigger
 //   • the expression index on ai_studio_output -> 'meta' ->> 'status'
 //   • the partial unique index enforcing one default brand voice per user
+//   • the CHECK constraints on `context_type` (posts and social_accounts)
+//   • the COALESCE-based unique index on social_accounts
+//     (user, provider, account, context) — replaces the old three-column unique
 // Because of that, always create new migrations with
 //   npx prisma migrate dev --create-only
 // and review the generated SQL before applying.
@@ -45,6 +48,21 @@ model Post {
   created_at   DateTime   @default(now()) @db.Timestamptz(6)
   updated_at   DateTime   @default(now()) @db.Timestamptz(6)
 
+  // Publishing context. A post belongs to exactly one context; the publisher
+  // resolves the social account from these two columns, never from the request,
+  // so a personal post can never go out through a brand connection. The CHECK
+  // tying brand_id to context_type = 'brand', and the RLS clause proving the
+  // brand belongs to the author, live in migration SQL.
+  context_type String  @default("personal")
+  brand_id     String? @db.Uuid
+  brand        Brand?  @relation(fields: [brand_id], references: [id], onDelete: Cascade)
+
+  // Composer fields. music is display metadata (no network API attaches
+  // audio); cta and link_url are Brand-mode fields.
+  music    String?
+  cta      String?
+  link_url String?
+
   // AI pipeline. Written by the backend AI module via the posts API —
   // see server/src/ai/ and src/services/posts.service.ts.
   ai_status           String    @default("pending")
@@ -70,7 +88,31 @@ model Post {
   @@index([publish_date])
   @@index([created_at(sort: Desc)])
   @@index([approved])
+  @@index([brand_id])
   @@map("posts")
+}
+
+/// A first-class Brand — a publishing context with its own connected social
+/// accounts and posts, distinct from BrandVoice (a reusable AI writing style).
+/// Browser-facing via PostgREST (per-user RLS in migration SQL); the backend
+/// reads it via Prisma to validate ownership when a connection or publish
+/// claims to act for a brand. Deleting a brand CASCADEs to its connections
+/// (tokens must not outlive the brand) and its posts.
+model Brand {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String   @default("")
+  website     String   @default("")
+  created_by  String   @default(dbgenerated("auth.uid()")) @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  social_accounts SocialAccount[]
+  posts           Post[]
+
+  @@unique([created_by, name])
+  @@index([created_by])
+  @@map("brands")
 }
 
 /// Reusable Brand Voice profiles for the AI Marketing Studio. The `voice`
@@ -138,14 +180,22 @@ model SocialAccount {
   /// failed check updates this but not `lastSyncedAt`.
   lastHealthCheck DateTime? @map("last_health_check") @db.Timestamptz(6)
 
+  /// Which publishing context this connection serves: 'personal' or 'brand'.
+  /// A brand connection always carries its brandId (CHECK in migration SQL).
+  /// The same provider account may be connected once per context, so the
+  /// reconnect-idempotency unique index includes the context — it lives in
+  /// migration SQL because it needs COALESCE over the nullable brand_id.
+  contextType String  @default("personal") @map("context_type")
+  brandId     String? @map("brand_id") @db.Uuid
+  brand       Brand?  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  /// Reconnecting the same LinkedIn account upserts this row rather than
-  /// stacking duplicates, which is what makes the OAuth callback idempotent.
-  @@unique([userId, provider, providerAccountId])
   @@index([userId])
+  @@index([userId, provider])
   @@index([provider, status])
+  @@index([brandId])
   @@map("social_accounts")
 }
 

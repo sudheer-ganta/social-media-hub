@@ -55,6 +55,21 @@ export interface CaptionBrief {
    * model — it is not quoted into a prompt, which is what a model cannot read.
    */
   imageUrl?: string;
+  /**
+   * The song already in the composer's Music / Song field.
+   *
+   * Sending it does two things: the copy is written to match that track, and
+   * the backend returns no song suggestions — a user who has chosen their audio
+   * is not shopping for alternatives, and nothing here may overwrite it.
+   */
+  music?: string;
+  /**
+   * Ask for audio ideas. Opt-in, and only the Personal composer sends it —
+   * without it the backend builds exactly the prompt it built before song
+   * suggestions existed, which is what keeps Brand generations unchanged.
+   * Ignored when `music` is set.
+   */
+  suggestSongs?: boolean;
   /** Defaults to `gen_z_millennial` on the backend. */
   audience?: AudienceRegister;
   platforms?: string[];
@@ -92,6 +107,19 @@ export interface CreativeAngle {
   imageHook: string;
 }
 
+/**
+ * One audio recommendation, and why it fits.
+ *
+ * Presented as a model's read of the post and labelled as such — nothing in
+ * this app reads a live charts feed, so "trending on Instagram right now" is a
+ * claim it is not entitled to make.
+ */
+export interface SongSuggestion {
+  title: string;
+  artist: string;
+  reason: string;
+}
+
 export interface CaptionMeta {
   provider: string;
   model: string;
@@ -117,6 +145,8 @@ export interface CaptionResult {
   competitor?: CompetitorAnalysis;
   /** The directions considered, in the order the options use them. */
   angles?: CreativeAngle[];
+  /** Audio ideas. Absent when the composer already has a song. */
+  songSuggestions?: SongSuggestion[];
   meta: CaptionMeta;
 }
 

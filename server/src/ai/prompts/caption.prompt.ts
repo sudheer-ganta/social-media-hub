@@ -44,8 +44,40 @@ import type { BrandProfile, CaptionRequest, ImageAnalysis } from '../types';
  * request: what the brand sells, its USP, and who it competes with.
  */
 
+/**
+ * ─── What changed in v4 ──────────────────────────────────────────────────────
+ * Audio became part of the brief. A post's song is half of what a reel *is* on
+ * Instagram and TikTok, and the composer has always had the field — the prompt
+ * just never saw it. Now it does, in one of two directions:
+ *
+ *   music chosen  → write copy that sits with that track. Suggest nothing.
+ *   music empty   → suggest a few tracks that fit, each with a reason.
+ *
+ * The asymmetry is the point. A user who typed "Espresso — Sabrina Carpenter"
+ * has decided; handing them alternatives is noise, and overwriting the field is
+ * the one behaviour this assistant is forbidden.
+ */
+
 /** Bump when the prompt's shape changes, so `meta.promptVersion` stays honest. */
-export const CAPTION_PROMPT_VERSION = 3;
+export const CAPTION_PROMPT_VERSION = 4;
+
+/** How many audio ideas to ask for when the user has not picked one. */
+const SONG_SUGGESTION_COUNT = 4;
+
+/**
+ * Whether this request should come back with audio ideas.
+ *
+ * Two conditions, and both are refusals rather than permissions: the caller has
+ * to have asked (Brand never does, so its prompt is unchanged), and the Music /
+ * Song field has to be empty (a chosen song is never offered alternatives).
+ *
+ * Shared by the schema and the instruction list so the two can never disagree —
+ * a schema key the instructions do not mention is a key the model fills with
+ * whatever it likes.
+ */
+export function wantsSongSuggestions(request: CaptionRequest): boolean {
+  return request.suggestSongs && !request.music?.trim();
+}
 
 // ─── Persona ─────────────────────────────────────────────────────────────────
 
@@ -277,6 +309,28 @@ export function buildCaptionResponseSchema(
         maxItems: Math.max(request.hashtagCount, 1),
         items: { type: 'string', description: 'A hashtag without the # sign.' },
       },
+      // Only asked for when the field is empty. A model given the key while the
+      // user has already chosen a song will fill it, and a filled list in the
+      // UI invites replacing a decision that was already made.
+      ...(wantsSongSuggestions(request) && {
+        songSuggestions: {
+          type: 'array',
+          maxItems: SONG_SUGGESTION_COUNT,
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'The track title.' },
+              artist: { type: 'string', description: 'The performing artist.' },
+              reason: {
+                type: 'string',
+                description:
+                  'One sentence on why this track fits this post, referring to the actual content.',
+              },
+            },
+            required: ['title', 'artist', 'reason'],
+          },
+        },
+      }),
       ...(request.platforms.length > 0 && {
         platformCaptions: {
           type: 'object',
@@ -493,6 +547,9 @@ export function buildCaptionPrompt(
       !imageAnalysis && request.imageUrl
         ? '- The post has an accompanying image, but it could not be analysed. Write copy that complements a visual rather than describing it, and never claim to know what the image shows.'
         : null,
+      request.music?.trim()
+        ? `- Audio already chosen by the user: "${request.music.trim()}". The copy should sit naturally with that track's mood and pacing. Do not suggest a different song and do not tell the user to change it.`
+        : null,
     ]),
 
     imageAnalysis ? imageSection(imageAnalysis) : null,
@@ -527,14 +584,21 @@ export function buildCaptionPrompt(
       request.platforms.length > 0
         ? `5. The first caption option rewritten for each of: ${request.platforms.join(', ')}, obeying the platform rules above. Keep the angle, change the shape.`
         : null,
+      wantsSongSuggestions(request)
+        ? `6. ${SONG_SUGGESTION_COUNT} audio ideas in "songSuggestions": real, well-known released tracks that fit ${
+            imageAnalysis
+              ? 'the mood, pace and setting of the image'
+              : 'the subject and mood of the post'
+          }. Give the real title and artist — never invent a song. For each, one sentence on why it fits this specific post. Do not claim anything is currently trending; you have no live chart data.`
+        : null,
       request.features?.seo
-        ? '6. Include an `seo` object with targeted keywords (with relevance & difficulty scores, intent), metaTitle (50-60 chars), metaDescription (120-155 chars), altText, slug, and readabilityScore.'
+        ? '7. Include an `seo` object with targeted keywords (with relevance & difficulty scores, intent), metaTitle (50-60 chars), metaDescription (120-155 chars), altText, slug, and readabilityScore.'
         : null,
       request.features?.campaign
-        ? '7. Include a `campaign` plan object with campaign name, bigIdea, durationDays, beats array (day, channel, angle, contentIdea), kpis array, and budgetTier.'
+        ? '8. Include a `campaign` plan object with campaign name, bigIdea, durationDays, beats array (day, channel, angle, contentIdea), kpis array, and budgetTier.'
         : null,
       request.features?.competitorAnalysis
-        ? '8. Include a `competitor` analysis object detailing positioning, toneObserved, contentThemes, postingFrequency, strengths, weaknesses, gaps, and differentiationAdvice.'
+        ? '9. Include a `competitor` analysis object detailing positioning, toneObserved, contentThemes, postingFrequency, strengths, weaknesses, gaps, and differentiationAdvice.'
         : null,
     ]),
 

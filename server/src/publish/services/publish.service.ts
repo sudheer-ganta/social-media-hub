@@ -110,19 +110,27 @@ export async function publishPost(
   }
 
   try {
+    // The post's stored context decides which connection may publish it —
+    // never anything in the request, so the browser cannot cross contexts. A
+    // personal post resolves only personal accounts; a brand post only that
+    // brand's.
+    const context = { contextType: post.context_type, brandId: post.brand_id };
+
     const account = await loadPublishableAccount(
       userId,
       providerId,
       networkName,
       provider,
+      context,
     );
 
     // 5. Decrypted here and nowhere earlier — as late as it can be and still
     // be handed to the provider. Never assigned to anything that outlives this
-    // function, never logged, never included in a thrown error.
-    const tokens = await socialAccountRepository.getDecryptedTokens(
-      userId,
-      providerId,
+    // function, never logged, never included in a thrown error. Fetched by the
+    // selected account's id so the token and the providerAccountId handed to
+    // the provider can never come from different rows.
+    const tokens = await socialAccountRepository.getDecryptedTokensById(
+      account.id,
     );
     if (!tokens) {
       throw new PublishError(
@@ -217,15 +225,19 @@ async function loadPublishableAccount(
   providerId: ProviderId,
   networkName: string,
   provider: Provider,
+  context: { contextType: string; brandId: string | null },
 ) {
   const account = await socialAccountRepository.findByUserAndProvider(
     userId,
     providerId,
+    context,
   );
 
   if (!account) {
     throw new PublishError(
-      `Connect your ${networkName} account before publishing.`,
+      context.contextType === 'brand'
+        ? `Connect a ${networkName} account for this brand before publishing.`
+        : `Connect your ${networkName} account before publishing.`,
       400,
     );
   }

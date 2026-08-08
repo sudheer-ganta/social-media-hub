@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { Building2, RefreshCw, User } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,9 +9,31 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProviderCard } from "@/components/integrations/ProviderCard";
 import { ActivityTimeline } from "@/components/integrations/ActivityTimeline";
 import { useIntegrationActivity, useIntegrations } from "@/hooks";
-import type { IntegrationId } from "@/constants/integrations";
+import { useBrands } from "@/hooks/useBrands";
+import { cn } from "@/lib/utils";
+import {
+  PERSONAL_CONTEXT,
+  brandContext,
+  type AccountContext,
+  type IntegrationId,
+} from "@/constants/integrations";
 
 export default function Integrations() {
+  const { brands } = useBrands();
+
+  /**
+   * Which publishing context the page is showing. Connections made while a
+   * brand is selected belong to that brand; the account lists are filtered
+   * server-side, so the two contexts never share a card.
+   */
+  const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
+  const selectedBrand = selectedBrandId
+    ? (brands.find((b) => b.id === selectedBrandId) ?? null)
+    : null;
+  const context: AccountContext = selectedBrand
+    ? brandContext(selectedBrand.id)
+    : PERSONAL_CONTEXT;
+
   const {
     integrations,
     loading,
@@ -19,7 +41,7 @@ export default function Integrations() {
     refresh,
     refreshConnection,
     disconnect,
-  } = useIntegrations();
+  } = useIntegrations(context);
   const activity = useIntegrationActivity();
   const { refresh: refreshActivity } = activity;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -120,6 +142,32 @@ export default function Integrations() {
         </Button>
       }
     >
+      {/* Context switcher: Personal plus one pill per brand. Which context is
+          active decides which accounts are listed AND which context a new
+          connection joins. */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <ContextPill
+          active={!selectedBrand}
+          onClick={() => setSelectedBrandId(null)}
+        >
+          <User className="h-3.5 w-3.5" />
+          Personal
+        </ContextPill>
+        {brands.map((brand) => (
+          <ContextPill
+            key={brand.id}
+            active={selectedBrandId === brand.id}
+            onClick={() => setSelectedBrandId(brand.id)}
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            {brand.name}
+          </ContextPill>
+        ))}
+        <span className="text-xs text-muted-foreground">
+          Manage brands in Settings.
+        </span>
+      </div>
+
       {error && !loading && (
         <Card className="mb-4 border-red-500/25 bg-red-500/5 p-4">
           <p className="text-sm">{error}</p>
@@ -142,8 +190,9 @@ export default function Integrations() {
               ))
             : ordered.map((integration) => (
                 <ProviderCard
-                  key={integration.provider}
+                  key={`${context.contextType}:${context.brandId ?? ""}:${integration.provider}`}
                   integration={integration}
+                  context={context}
                   onRefresh={handleRefreshConnection}
                   onDisconnect={handleDisconnect}
                 />
@@ -157,6 +206,31 @@ export default function Integrations() {
         />
       </div>
     </PageContainer>
+  );
+}
+
+function ContextPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        active
+          ? "border-primary/60 bg-primary/10 text-primary"
+          : "text-muted-foreground hover:border-primary/40 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

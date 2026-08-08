@@ -107,8 +107,11 @@ export const postsService = {
     return postsRepository.page(params);
   },
 
-  listAll(): Promise<Post[]> {
-    return postsRepository.listAll();
+  listAll(filter?: {
+    context: Post["context_type"] | "all";
+    brandId: string | null;
+  }): Promise<Post[]> {
+    return postsRepository.listAll(filter);
   },
 
   listForMonth(monthIso: string): Promise<Post[]> {
@@ -138,7 +141,7 @@ export const postsService = {
     return postsRepository.remove(id);
   },
 
-  /** Copy an existing post into a fresh draft. */
+  /** Copy an existing post into a fresh draft, in the same publishing context. */
   async duplicate(id: string): Promise<Post> {
     const source = await postsRepository.getById(id);
     return postsRepository.insert({
@@ -149,6 +152,11 @@ export const postsService = {
       status: "draft",
       publish_date: source.publish_date,
       publish_time: source.publish_time,
+      context_type: source.context_type,
+      brand_id: source.brand_id,
+      music: source.music,
+      cta: source.cta,
+      link_url: source.link_url,
     });
   },
 
@@ -253,21 +261,42 @@ export const postsService = {
     caption?: string;
     image_url?: string;
     platforms?: string[];
+    /** The song already chosen, if any. Never suggested over — see CaptionBrief. */
+    music?: string;
+    /** Personal only — opt in to audio ideas. See CaptionBrief.suggestSongs. */
+    suggestSongs?: boolean;
     /** Omitted means "let the backend pick" — see AudienceRegister. */
     audience?: AudienceRegister;
+    /** Brand-context identity, layered over the default voice profile. */
+    brand?: { name: string; description?: string } | null;
   }): Promise<CaptionBrief> {
     const settings = await buildDefaultStudioInput();
+
+    // In a Brand context the AI writes as that brand: its name and description
+    // override the voice profile's, while the profile's tone rules still apply.
+    const brandVoice = draft.brand
+      ? {
+          ...settings.brandVoice,
+          name: draft.brand.name,
+          ...(draft.brand.description && {
+            description: draft.brand.description,
+          }),
+        }
+      : settings.brandVoice;
+
     return {
       topic: draft.title,
       title: draft.title,
       ...(draft.image_url && { imageUrl: draft.image_url }),
+      ...(draft.music?.trim() && { music: draft.music.trim() }),
+      ...(draft.suggestSongs && { suggestSongs: true }),
       ...(draft.audience && { audience: draft.audience }),
       platforms: draft.platforms ?? [],
       goal: settings.goal,
       funnelStage: settings.funnelStage,
       captionLength: settings.captionLength,
       language: settings.language,
-      brandVoice: settings.brandVoice,
+      brandVoice,
       ...(draft.caption?.trim() && { previousCaption: draft.caption }),
     };
   },

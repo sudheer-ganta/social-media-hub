@@ -229,6 +229,23 @@ export interface CaptionRequest {
   /** The post's working title, when it differs from the topic. */
   title?: string;
   /**
+   * The song the user already chose, if any.
+   *
+   * Two effects, both deliberate: the copy is written to sit with that track's
+   * mood, and no song suggestions are produced. A user who has picked their
+   * audio does not want a list of alternatives, and overwriting their choice is
+   * the one thing the assistant must never do.
+   */
+  music?: string;
+  /**
+   * Whether to return audio ideas. Opt-in and off by default.
+   *
+   * The default matters: with this false the prompt is assembled exactly as it
+   * was before song suggestions existed. Only the Personal composer sets it,
+   * which is what keeps every other caller's generation unchanged.
+   */
+  suggestSongs: boolean;
+  /**
    * Public URL of the post's image. Fetched, decoded and sent to the model as
    * pixels — not quoted into the prompt as a string, which is what a model
    * cannot do anything with.
@@ -331,6 +348,20 @@ export interface CompetitorAnalysis {
   differentiationAdvice: string;
 }
 
+/**
+ * One audio recommendation.
+ *
+ * Deliberately carries no "trending on Instagram right now" claim. Nothing in
+ * this backend reads a live charts feed, so a trending label would be invented
+ * — the UI presents these as what they are: a model's read of the post.
+ */
+export interface SongSuggestion {
+  title: string;
+  artist: string;
+  /** One line on why it fits this post. */
+  reason: string;
+}
+
 /** The body of a successful `POST /api/ai/caption`. */
 export interface CaptionResult {
   /** The recommended caption — the first variation, promoted for convenience. */
@@ -357,6 +388,8 @@ export interface CaptionResult {
   competitor?: CompetitorAnalysis;
   /** The directions considered, in the order the options use them. */
   angles?: CreativeAngle[];
+  /** Audio ideas. Absent when the user already chose a song. */
+  songSuggestions?: SongSuggestion[];
   meta: CaptionMeta;
 }
 
@@ -375,6 +408,11 @@ export interface RawCaptionPayload {
     whyItWorks?: unknown;
   }>;
   hashtags?: unknown;
+  songSuggestions?: Array<{
+    title?: unknown;
+    artist?: unknown;
+    reason?: unknown;
+  }>;
   platformCaptions?: Record<string, unknown>;
   seo?: SeoAnalysis;
   campaign?: CampaignPlan;

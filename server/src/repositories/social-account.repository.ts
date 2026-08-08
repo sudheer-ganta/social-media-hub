@@ -18,6 +18,17 @@ import {
  * token.
  */
 
+/**
+ * The Personal-vs-Brand discriminator on a connection. Mirrors
+ * `services/account-context.ts` (typed loosely here to keep the repository
+ * import-free of the service layer); rows are constrained to the two valid
+ * shapes by CHECKs in the migration SQL.
+ */
+export interface AccountContextFilter {
+  contextType: string;
+  brandId: string | null;
+}
+
 /** A connection as the rest of the app is allowed to see it — no tokens. */
 export interface SafeSocialAccount {
   id: string;
@@ -36,6 +47,10 @@ export interface SafeSocialAccount {
   lastSyncedAt: Date | null;
   /** Last health check, successful or not. */
   lastHealthCheck: Date | null;
+  /** 'personal' or 'brand' — which publishing context this connection serves. */
+  contextType: string;
+  /** Set exactly when contextType is 'brand'. */
+  brandId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +59,9 @@ export interface UpsertSocialAccountInput {
   userId: string;
   provider: string;
   providerAccountId: string;
+  /** Which publishing context this connection serves. Defaults to personal. */
+  contextType?: string;
+  brandId?: string | null;
   displayName?: string | null;
   username?: string | null;
   profileImage?: string | null;
@@ -58,6 +76,18 @@ export interface UpsertSocialAccountInput {
   providerVersion?: string | null;
 }
 
+/**
+ * Narrows a query to one publishing context. Spread into where-clauses rather
+ * than bolted on per call site, so "filtered by context" means the same thing
+ * everywhere. An omitted filter deliberately matches every context — that is
+ * for the scripts and internal reads that genuinely mean "all".
+ */
+function contextWhere(context?: AccountContextFilter) {
+  return context
+    ? { contextType: context.contextType, brandId: context.brandId }
+    : {};
+}
+
 /** Strips the token columns off a row on its way out of this module. */
 function toSafe(account: SocialAccount): SafeSocialAccount {
   const {
@@ -70,9 +100,15 @@ function toSafe(account: SocialAccount): SafeSocialAccount {
 
 /**
  * Creates the connection, or refreshes it if the user reconnects the same
- * provider account. Upserting on (userId, provider, providerAccountId) is what
- * makes the OAuth callback safe to hit twice — a duplicate callback updates the
- * tokens instead of creating a second row.
+ * provider account *in the same context*. The identity that makes a callback
+ * safe to hit twice is (userId, provider, providerAccountId, context) — the
+ * same human account connected for Personal and for a Brand is two rows, so
+ * connecting one must never overwrite the other.
+ *
+ * find-then-write rather than a Prisma upsert because the backing unique
+ * index COALESCEs the nullable brand_id and is not expressible in the schema.
+ * The index still backstops the race: a concurrent duplicate callback loses
+ * the create with P2002 and is retried as the update it really is.
  *
  * A reconnect always resets `status` to CONNECTED: the whole point of
  * reconnecting is to clear an EXPIRED or REVOKED state.
@@ -80,6 +116,14 @@ function toSafe(account: SocialAccount): SafeSocialAccount {
 export async function upsert(
   input: UpsertSocialAccountInput,
 ): Promise<SafeSocialAccount> {
+  const identity = {
+    userId: input.userId,
+    provider: input.provider,
+    providerAccountId: input.providerAccountId,
+    contextType: input.contextType ?? 'personal',
+    brandId: input.brandId ?? null,
+  };
+
   const tokens = {
     encryptedAccessToken: encrypt(input.accessToken),
     encryptedRefreshToken: encryptNullable(input.refreshToken),
@@ -100,36 +144,51 @@ export async function upsert(
     lastHealthCheck: new Date(),
   };
 
-  const account = await prisma.socialAccount.upsert({
-    where: {
-      userId_provider_providerAccountId: {
-        userId: input.userId,
-        provider: input.provider,
-        providerAccountId: input.providerAccountId,
-      },
-    },
-    create: {
-      userId: input.userId,
-      provider: input.provider,
-      providerAccountId: input.providerAccountId,
-      status: SocialAccountStatus.CONNECTED,
-      ...profile,
-      ...tokens,
-    },
-    update: {
-      status: SocialAccountStatus.CONNECTED,
-      ...profile,
-      ...tokens,
-    },
-  });
+  const refresh = {
+    status: SocialAccountStatus.CONNECTED,
+    ...profile,
+    ...tokens,
+  };
 
-  return toSafe(account);
+  const existing = await prisma.socialAccount.findFirst({ where: identity });
+  if (existing) {
+    const account = await prisma.socialAccount.update({
+      where: { id: existing.id },
+      data: refresh,
+    });
+    return toSafe(account);
+  }
+
+  try {
+    const account = await prisma.socialAccount.create({
+      data: { ...identity, ...refresh },
+    });
+    return toSafe(account);
+  } catch (error) {
+    // Unique-index collision: a concurrent callback created the row between
+    // our find and create. It is the same identity, so update it.
+    if ((error as { code?: string }).code !== 'P2002') throw error;
+    const raced = await prisma.socialAccount.findFirst({ where: identity });
+    if (!raced) throw error;
+    const account = await prisma.socialAccount.update({
+      where: { id: raced.id },
+      data: refresh,
+    });
+    return toSafe(account);
+  }
 }
 
-/** Every connection for a user, newest first. Never includes tokens. */
-export async function listByUser(userId: string): Promise<SafeSocialAccount[]> {
+/**
+ * A user's connections, newest first. Never includes tokens. Filtered to one
+ * publishing context when given one — which is how GET /api/integrations keeps
+ * brand accounts out of the Personal studio server-side.
+ */
+export async function listByUser(
+  userId: string,
+  context?: AccountContextFilter,
+): Promise<SafeSocialAccount[]> {
   const accounts = await prisma.socialAccount.findMany({
-    where: { userId },
+    where: { userId, ...contextWhere(context) },
     orderBy: { createdAt: 'desc' },
   });
   return accounts.map(toSafe);
@@ -139,9 +198,10 @@ export async function listByUser(userId: string): Promise<SafeSocialAccount[]> {
 export async function findByUserAndProvider(
   userId: string,
   provider: string,
+  context?: AccountContextFilter,
 ): Promise<SafeSocialAccount | null> {
   const account = await prisma.socialAccount.findFirst({
-    where: { userId, provider },
+    where: { userId, provider, ...contextWhere(context) },
     orderBy: { createdAt: 'desc' },
   });
   return account ? toSafe(account) : null;
@@ -163,15 +223,38 @@ export async function findById(id: string): Promise<SafeSocialAccount | null> {
 export async function getDecryptedTokens(
   userId: string,
   provider: string,
+  context?: AccountContextFilter,
 ): Promise<{
   accessToken: string;
   refreshToken: string | null;
   expiresAt: Date | null;
 } | null> {
   const account = await prisma.socialAccount.findFirst({
-    where: { userId, provider },
+    where: { userId, provider, ...contextWhere(context) },
     orderBy: { createdAt: 'desc' },
   });
+  if (!account) return null;
+
+  return {
+    accessToken: decrypt(account.encryptedAccessToken),
+    refreshToken: decryptNullable(account.encryptedRefreshToken),
+    expiresAt: account.expiresAt,
+  };
+}
+
+/**
+ * Tokens for one already-selected row. Prefer this over
+ * {@link getDecryptedTokens} whenever the caller has an account in hand: two
+ * independent (userId, provider) lookups can disagree the moment personal and
+ * brand connections coexist on a provider, and a token from one row paired
+ * with the providerAccountId of another is a cross-context publish.
+ */
+export async function getDecryptedTokensById(id: string): Promise<{
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: Date | null;
+} | null> {
+  const account = await prisma.socialAccount.findUnique({ where: { id } });
   if (!account) return null;
 
   return {
@@ -288,9 +371,10 @@ export async function markHealthChecked(
 export async function deleteByUserAndProvider(
   userId: string,
   provider: string,
+  context?: AccountContextFilter,
 ): Promise<number> {
   const { count } = await prisma.socialAccount.deleteMany({
-    where: { userId, provider },
+    where: { userId, provider, ...contextWhere(context) },
   });
   return count;
 }
@@ -301,6 +385,7 @@ export const socialAccountRepository = {
   findByUserAndProvider,
   findById,
   getDecryptedTokens,
+  getDecryptedTokensById,
   updateTokens,
   updateStatus,
   markSynced,

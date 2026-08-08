@@ -207,6 +207,12 @@ export interface AiStudioInput {
   brandVoice: BrandVoice;
   /** Which saved profile it came from, if any — for provenance only. */
   brandVoiceProfileId: string | null;
+  /**
+   * Which publishing context the generation ran under. Optional and additive —
+   * legacy envelopes lack it, and every reader treats missing keys as unknown.
+   */
+  contextType?: "personal" | "brand";
+  brandId?: string | null;
   competitor: CompetitorContext | null;
   features: StudioFeatureFlags;
   language: string;

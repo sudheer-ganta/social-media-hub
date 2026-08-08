@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BarChart3,
@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Menu,
   Plug,
-  Plus,
   Settings,
   X,
 } from "lucide-react";
@@ -58,14 +57,6 @@ export function Topbar() {
           </div>
           <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         </div>
-
-        <Button asChild size="sm" className="shadow-glow">
-          <Link to="/posts/new">
-            <Plus />
-            <span className="hidden sm:inline">Create Post</span>
-            <span className="sm:hidden">New</span>
-          </Link>
-        </Button>
       </div>
 
       {/* Mobile navigation drawer */}

@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PLATFORMS, SORT_OPTIONS } from "@/constants";
+import { useBrands } from "@/hooks/useBrands";
 import type { Platform, PostFilters as Filters, PostStatus, SortOption } from "@/types";
 
 const STATUS_FILTERS: { value: PostStatus | "all"; label: string }[] = [
@@ -34,6 +35,21 @@ interface PostFiltersProps {
 export function PostFilters({ value, onChange }: PostFiltersProps) {
   const patch = (partial: Partial<Filters>) => onChange({ ...value, ...partial });
   const hasDateRange = Boolean(value.from || value.to);
+  const { brands } = useBrands();
+
+  // One select covers context and brand: "all" | "personal" | "brand:<id>".
+  const contextValue =
+    value.context === "brand" && value.brandId
+      ? `brand:${value.brandId}`
+      : value.context;
+
+  const handleContextChange = (next: string) => {
+    if (next.startsWith("brand:")) {
+      patch({ context: "brand", brandId: next.slice("brand:".length) });
+    } else {
+      patch({ context: next as Filters["context"], brandId: null });
+    }
+  };
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row">
@@ -49,6 +65,21 @@ export function PostFilters({ value, onChange }: PostFiltersProps) {
       </div>
 
       <div className="flex flex-wrap gap-3">
+        <Select value={contextValue} onValueChange={handleContextChange}>
+          <SelectTrigger className="w-36" aria-label="Filter by context">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All contexts</SelectItem>
+            <SelectItem value="personal">Personal</SelectItem>
+            {brands.map((brand) => (
+              <SelectItem key={brand.id} value={`brand:${brand.id}`}>
+                {brand.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Select
           value={value.status}
           onValueChange={(status) => patch({ status: status as PostStatus | "all" })}
