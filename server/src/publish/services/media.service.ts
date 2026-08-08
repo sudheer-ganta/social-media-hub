@@ -1,7 +1,6 @@
-import { activeProvider } from '../../ai/providers';
+import { providerForRole } from '../../ai/providers';
 import { generateAltText } from '../../ai/generators/alt-text.generator';
 import { fetchImageBytes, ImageFetchError } from '../../ai/vision/image-source';
-import { env } from '../../config/env';
 import type {
   ProviderMediaAsset,
   ProviderMediaRequirements,
@@ -260,7 +259,9 @@ async function describeImage(
           data: buffer.toString('base64'),
           sizeBytes: buffer.byteLength,
         },
-        provider: activeProvider(env.AI_PROVIDER),
+        // The light role: one sentence about one image, on every publish —
+        // exactly the frequent, simple call the cheap model exists for.
+        provider: providerForRole('light'),
         caption,
       }),
       ALT_TEXT_TIMEOUT_MS,

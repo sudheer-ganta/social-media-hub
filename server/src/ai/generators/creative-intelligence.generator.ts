@@ -148,7 +148,14 @@ function normalisePlatformCaptions(
 }
 
 export interface CaptionGeneratorDeps {
+  /** Writes the captions — the creative model. */
   provider: AiTextProvider;
+  /**
+   * Looks at the image in stage one. Defaults to `provider`, so tests and
+   * text-only callers hand over one provider and are done; the service passes
+   * the vision-role provider so the two stages can run on different models.
+   */
+  visionProvider?: AiTextProvider;
 }
 
 /**
@@ -161,7 +168,7 @@ export interface CaptionGeneratorDeps {
  */
 export async function generateCaption(
   request: CaptionRequest,
-  { provider }: CaptionGeneratorDeps,
+  { provider, visionProvider = provider }: CaptionGeneratorDeps,
 ): Promise<CaptionResult> {
   const startedAt = Date.now();
 
@@ -172,7 +179,7 @@ export async function generateCaption(
   if (request.imageUrl) {
     const outcome = await analyseImage({
       imageUrl: request.imageUrl,
-      provider,
+      provider: visionProvider,
       topic: request.topic,
       brandName: request.brandVoice?.name,
       brandDescription: request.brandVoice?.description,

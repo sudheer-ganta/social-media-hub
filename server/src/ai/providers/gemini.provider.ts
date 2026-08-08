@@ -38,21 +38,30 @@ const REQUEST_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 
 /**
- * Gemini 2.5 models think before answering, and bill for it. A caption is a
- * writing task, not a reasoning one: budget 0 cut a three-variation request
- * from ~19s to a few seconds with no drop in quality, and latency here is
- * watched by a user with a spinner in front of them.
+ * Thinking models bill for reasoning before answering, and a caption is a
+ * writing task, not a reasoning one — latency here is watched by a user with
+ * a spinner in front of them.
  *
- * Only sent to models that understand it — an older model rejects the field
- * outright with a 400. `GEMINI_THINKING_BUDGET` raises it if a future prompt
- * genuinely needs deliberation; -1 hands the decision back to the model.
+ * The knob is generation-dependent, and the two dialects are mutually
+ * exclusive — never send both fields in one request:
+ *  - Gemini 3.x cannot disable thinking (budget 0 is a 422: "This model only
+ *    works in thinking mode") and takes `thinkingLevel` instead.
+ *    `GEMINI_THINKING_LEVEL` defaults to "low", the fastest level it allows.
+ *  - Gemini 2.5 takes a token count via `GEMINI_THINKING_BUDGET`; 0 skips the
+ *    reasoning pass entirely, -1 hands the decision back to the model.
+ *  - Older models reject either field with a 400, so they get neither.
  */
-function thinkingConfigFor(model: string): Record<string, number> | undefined {
-  if (!/^gemini-(?:[3-9]|2\.5)/.test(model)) return undefined;
-
-  const configured = Number.parseInt(env.GEMINI_THINKING_BUDGET, 10);
-  const budget = Number.isFinite(configured) ? configured : 0;
-  return { thinkingBudget: budget };
+function thinkingConfigFor(
+  model: string,
+): { thinkingLevel: string } | { thinkingBudget: number } | undefined {
+  if (/^gemini-[3-9]/.test(model)) {
+    return { thinkingLevel: env.GEMINI_THINKING_LEVEL };
+  }
+  if (/^gemini-2\.5/.test(model)) {
+    const configured = Number.parseInt(env.GEMINI_THINKING_BUDGET, 10);
+    return { thinkingBudget: Number.isFinite(configured) ? configured : 0 };
+  }
+  return undefined;
 }
 
 /** One retry, and only for failures that are plausibly transient. */
@@ -311,8 +320,11 @@ export class GeminiProvider implements AiTextProvider {
   }
 }
 
+// One instance per workload, same key, different model. Which generator gets
+// which instance is decided by `providerForRole` in `providers/index.ts` —
+// nothing else should import these directly.
 export const geminiProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL);
-export const geminiVisionProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_VISION_MODEL);
 export const geminiCaptionProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_CAPTION_MODEL);
+export const geminiVisionProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_VISION_MODEL);
 export const geminiMarketingProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MARKETING_MODEL);
-export const geminiBrandProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_BRAND_MODEL);
+export const geminiLightProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_LIGHT_MODEL);

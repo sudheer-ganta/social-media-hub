@@ -52,17 +52,33 @@ export const env = {
   // endpoint and never reaches the browser.
   AI_PROVIDER: process.env.AI_PROVIDER || 'gemini',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+  // The vendor-level default, reported by /api/ai/status. Workloads do NOT
+  // fall back to it — each role below defaults to the model sized for that
+  // job, and inheriting GEMINI_MODEL here would silently route caption
+  // traffic to the expensive analysis model on any deployment that sets it.
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
-  
-  // Per-service model mapping (defaults to GEMINI_MODEL / gemini-3.1-pro-preview)
-  GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
-  GEMINI_CAPTION_MODEL: process.env.GEMINI_CAPTION_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
-  GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
-  GEMINI_BRAND_MODEL: process.env.GEMINI_BRAND_MODEL || process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
+
+  // ── Model per workload ─────────────────────────────────────────────────────
+  // Flash writes and looks, Pro Preview reasons, Flash-Lite does chores.
+  // See `ai/providers/index.ts` for what routes where.
+  //
+  // 3.6 rather than a 3.1 flash because there is no such model: ListModels for
+  // this API shows the 3.1 family ships pro-preview, flash-lite and image
+  // variants only. gemini-3.6-flash is the newest stable flash it offers.
+  GEMINI_CAPTION_MODEL: process.env.GEMINI_CAPTION_MODEL || 'gemini-3.6-flash',
+  GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL || 'gemini-3.6-flash',
+  GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || 'gemini-3.1-pro-preview',
+  GEMINI_LIGHT_MODEL: process.env.GEMINI_LIGHT_MODEL || 'gemini-3.1-flash-lite',
   GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'imagen-3.0-generate-002',
   
-  // Thinking tokens for Gemini 2.5+/3.x models. Default 0 — captions are a writing task,
-  // and the reasoning pass triples latency for no gain. -1 lets the model
-  // decide. Ignored by models that don't support it.
+  // Thinking depth for Gemini 3.x models, which cannot disable thinking and
+  // reject thinkingBudget 0. "low" is their fastest level — right for caption
+  // writing. Ignored by other models.
+  GEMINI_THINKING_LEVEL: process.env.GEMINI_THINKING_LEVEL || 'low',
+
+  // Thinking tokens for Gemini 2.5 models only — 3.x uses GEMINI_THINKING_LEVEL
+  // instead. Default 0 — captions are a writing task, and the reasoning pass
+  // triples latency for no gain. -1 lets the model decide. Ignored by models
+  // that don't support it.
   GEMINI_THINKING_BUDGET: process.env.GEMINI_THINKING_BUDGET || '0',
 };

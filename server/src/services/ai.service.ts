@@ -1,9 +1,8 @@
-import { env } from '../config/env';
 import {
-  activeProvider,
   AiProviderError,
   analyseCaption,
   generateCaption,
+  providerForRole,
   type AnalysisRequest,
   type AudienceRegister,
   type CaptionAnalysis,
@@ -464,7 +463,7 @@ export const aiService = {
     body: unknown,
   ): Promise<CaptionResult> {
     const request = parseCaptionRequest(body);
-    const provider = activeProvider(env.AI_PROVIDER);
+    const provider = providerForRole('caption');
 
     if (!provider.isConfigured()) {
       throw new AiError(
@@ -473,7 +472,10 @@ export const aiService = {
       );
     }
 
-    const result = await generateCaption(request, { provider });
+    const result = await generateCaption(request, {
+      provider,
+      visionProvider: providerForRole('vision'),
+    });
 
     console.info('[ai] caption generated', {
       userId,
@@ -503,7 +505,7 @@ export const aiService = {
    */
   async analyseCaption(userId: string, body: unknown): Promise<CaptionAnalysis> {
     const request = parseAnalysisRequest(body);
-    const provider = activeProvider(env.AI_PROVIDER);
+    const provider = providerForRole('marketing');
 
     if (!provider.isConfigured()) {
       throw new AiError('AI analysis is not set up on this server yet.', 503);
@@ -535,7 +537,10 @@ export const aiService = {
    * never the key — `configured` is the only fact the browser needs.
    */
   status(): { configured: boolean; provider: string; model: string } {
-    const provider = activeProvider(env.AI_PROVIDER);
+    // The caption role is what the Create Post button actually invokes, so its
+    // model is the honest answer here. All roles share one key, so
+    // `configured` speaks for every workload.
+    const provider = providerForRole('caption');
     return {
       configured: provider.isConfigured(),
       provider: provider.id,

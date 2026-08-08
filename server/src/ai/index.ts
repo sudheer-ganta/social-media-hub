@@ -44,7 +44,9 @@ export {
   AiProviderError,
   activeProvider,
   aiProviders,
+  providerForRole,
   type AiProviderId,
+  type AiRole,
   type AiTextProvider,
 } from './providers';
 export {

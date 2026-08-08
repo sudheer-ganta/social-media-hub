@@ -1,5 +1,11 @@
 import type { AiTextProvider } from './provider.interface';
-import { geminiProvider } from './gemini.provider';
+import {
+  geminiProvider,
+  geminiCaptionProvider,
+  geminiVisionProvider,
+  geminiMarketingProvider,
+  geminiLightProvider,
+} from './gemini.provider';
 
 export {
   AiProviderError,
@@ -9,10 +15,10 @@ export {
 export {
   GeminiProvider,
   geminiProvider,
-  geminiVisionProvider,
   geminiCaptionProvider,
+  geminiVisionProvider,
   geminiMarketingProvider,
-  geminiBrandProvider,
+  geminiLightProvider,
 } from './gemini.provider';
 
 export type AiProviderId = 'gemini';
@@ -38,4 +44,36 @@ export const aiProviders = {
 export function activeProvider(id?: string): AiTextProvider {
   const key = (id ?? '').toLowerCase();
   return (aiProviders as Record<string, AiTextProvider>)[key] ?? geminiProvider;
+}
+
+/**
+ * What kind of work a model call is, named after the module that makes it:
+ *
+ *   caption    Creative Intelligence — captions, hooks, CTAs, hashtags,
+ *              platform variations. High volume, quality-sensitive, fast.
+ *   vision     image analysis — what is actually in the picture.
+ *   marketing  Marketing Intelligence — reach scoring, improvements, the
+ *              deep-reasoning engine. The only role that earns Pro.
+ *   light      chores — alt text and other small, frequent calls.
+ */
+export type AiRole = 'caption' | 'vision' | 'marketing' | 'light';
+
+const geminiByRole: Record<AiRole, AiTextProvider> = {
+  caption: geminiCaptionProvider,
+  vision: geminiVisionProvider,
+  marketing: geminiMarketingProvider,
+  light: geminiLightProvider,
+};
+
+/**
+ * The model-selection layer: workload in, provider out.
+ *
+ * Call sites name the job, never a model — which model serves a role is set in
+ * `config/env.ts` (`GEMINI_<ROLE>_MODEL`) and nowhere else.
+ *
+ * Gemini is currently the only vendor, so this is one table; a second vendor
+ * adds its own table here, keyed the same way `aiProviders` already is.
+ */
+export function providerForRole(role: AiRole): AiTextProvider {
+  return geminiByRole[role];
 }
