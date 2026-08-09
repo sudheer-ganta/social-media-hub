@@ -45,6 +45,41 @@ export const env = {
   // backend must not require a redeploy.
   META_API_VERSION: process.env.META_API_VERSION || 'v25.0',
 
+  // ── Meta / Facebook Pages ──────────────────────────────────────────────────
+  //
+  // These are the **Meta** App ID and App Secret, from the app's own
+  // Settings → Basic page — *not* the Instagram pair above. Facebook Pages uses
+  // the "Facebook Login" model, which is authenticated by the Meta credentials;
+  // Instagram uses "Instagram Login", authenticated by the Instagram ones. The
+  // two are different numbers on the same app, and swapping them produces a
+  // consent screen that fails with a generic error naming nothing.
+  //
+  // Both surfaces live on the same Meta Developer App deliberately: one
+  // consent brand, one Business Verification, one App Review queue.
+  FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID || '',
+  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET || '',
+  FACEBOOK_REDIRECT_URI: process.env.FACEBOOK_REDIRECT_URI || '',
+  // The Business Login Configuration ID, from Facebook Login for Business →
+  // Configurations in the App Dashboard.
+  //
+  // Required for **Business-type apps**, which is what this app is. Meta serves
+  // those the *Facebook Login for Business* dialog rather than the consumer
+  // one, and that dialog takes its permission set from a dashboard
+  // configuration — not from the `scope` parameter. Sending scope alone makes
+  // it render nothing and answer HTTP 500 ("Sorry, something went wrong"),
+  // which is what this variable exists to fix.
+  //
+  // Left empty on a consumer-type app, where `scope` is the correct mechanism
+  // and a config_id would be rejected. See providers/meta/facebook/config.ts.
+  FACEBOOK_CONFIG_ID: process.env.FACEBOOK_CONFIG_ID || '',
+  // Optional override for the requested permissions, comma-delimited. Empty
+  // means the provider's own publish-only default
+  // (pages_show_list, pages_read_engagement, pages_manage_posts). In the
+  // environment because App Review can approve a different set than we first
+  // asked for, and narrowing what we request should not need a redeploy.
+  // Unknown values are dropped rather than sent — see facebook/config.ts.
+  FACEBOOK_SCOPES: process.env.FACEBOOK_SCOPES || '',
+
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY || '',
 
   // AI generation. The Gemini key is read here and used only by

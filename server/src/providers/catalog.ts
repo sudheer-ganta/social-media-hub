@@ -131,6 +131,44 @@ const INSTAGRAM_PERMISSIONS: ProviderPermission[] = [
   },
 ];
 
+/**
+ * Permissions Facebook Login grants for Page publishing. Mirrors
+ * `meta/facebook/config.ts` — that file decides what to *ask* for, this one
+ * explains what each one means to a member.
+ *
+ * `pages_show_list` is marked required even though nothing publishes with it:
+ * without it `/me/accounts` comes back empty, there is no Page to choose, and
+ * the connection cannot be made at all. A member who declines it does not get a
+ * degraded connection, they get none.
+ */
+const FACEBOOK_PERMISSIONS: ProviderPermission[] = [
+  {
+    scope: 'pages_manage_posts',
+    label: 'Publish Posts',
+    description: 'Publish text and image posts to the Facebook Page you connect.',
+    required: true,
+  },
+  {
+    scope: 'pages_show_list',
+    label: 'List Your Pages',
+    description: 'See which Pages you manage, so you can choose one to publish to.',
+    required: true,
+  },
+  {
+    scope: 'pages_read_engagement',
+    label: 'Read Page Profile',
+    description: "Read the Page's name and photo so FlowPost can show the account.",
+    required: true,
+  },
+  {
+    scope: null,
+    label: 'Publish Reels',
+    description: 'Upload short-form video. Arriving with video support.',
+    required: false,
+    planned: true,
+  },
+];
+
 /** Capabilities a video-first network will grant once it is implemented. */
 const VIDEO_PERMISSIONS: ProviderPermission[] = [
   {
@@ -191,27 +229,18 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
   {
     id: 'facebook',
     displayName: 'Facebook',
-    description: 'Pages, groups & communities',
+    // "Pages" specifically, not "groups & communities": a Page is the only
+    // thing this integration can publish to, and the card should not imply
+    // otherwise.
+    description: 'Page posts & updates',
     brandColor: '#1877F2',
-    available: false,
-    connectPath: null,
-    apiVersion: null,
-    permissions: [
-      {
-        scope: null,
-        label: 'Publish to Pages',
-        description: 'Post to Pages you manage.',
-        required: false,
-        planned: true,
-      },
-      {
-        scope: null,
-        label: 'Read Profile',
-        description: 'Read your account name and photo.',
-        required: false,
-        planned: true,
-      },
-    ],
+    available: true,
+    connectPath: '/auth/facebook/connect',
+    // Same Graph version Instagram is pinned to, read from the shared Meta
+    // config so the value publishing sends and the value we display can never
+    // drift apart.
+    apiVersion: META_API_VERSION,
+    permissions: FACEBOOK_PERMISSIONS,
   },
   {
     id: 'x',

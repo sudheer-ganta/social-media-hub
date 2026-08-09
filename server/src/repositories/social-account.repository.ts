@@ -361,6 +361,41 @@ export async function markHealthChecked(
 }
 
 /**
+ * Removes every *other* connection this user holds for one provider in one
+ * context, keeping the row named by `keepId`.
+ *
+ * Exists for Facebook, and it is the enforcement point for "one Page per
+ * context". The unique index keys on `provider_account_id`, so connecting Page
+ * A and then Page B in the same context is two perfectly legal rows — at which
+ * point `findByUserAndProvider` starts choosing between them by `createdAt`,
+ * and the publisher silently targets whichever was connected most recently.
+ * That is a wrong-Page publish, so the second connect retires the first.
+ *
+ * Ordered deliberately at the call site: upsert *then* prune. The other way
+ * round would delete the very row a reconnect of the same Page is supposed to
+ * update, losing its `createdAt` and its audit continuity.
+ *
+ * Returns the number of rows removed, so a caller can log a real replacement
+ * distinctly from an ordinary reconnect.
+ */
+export async function deleteOthersInContext(
+  userId: string,
+  provider: string,
+  context: AccountContextFilter,
+  keepId: string,
+): Promise<number> {
+  const { count } = await prisma.socialAccount.deleteMany({
+    where: {
+      userId,
+      provider,
+      ...contextWhere(context),
+      id: { not: keepId },
+    },
+  });
+  return count;
+}
+
+/**
  * Disconnects a provider for a user. Deletes rather than soft-deletes, so the
  * encrypted tokens actually leave the database — that is the point of the
  * button. The audit trail lives in `activity_logs`.
@@ -390,5 +425,6 @@ export const socialAccountRepository = {
   updateStatus,
   markSynced,
   markHealthChecked,
+  deleteOthersInContext,
   deleteByUserAndProvider,
 };

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProviderCard } from "@/components/integrations/ProviderCard";
+import { FacebookPageDialog } from "@/components/integrations/FacebookPageDialog";
 import { ActivityTimeline } from "@/components/integrations/ActivityTimeline";
 import { useIntegrationActivity, useIntegrations } from "@/hooks";
 import { useBrands } from "@/hooks/useBrands";
@@ -57,10 +58,26 @@ export default function Integrations() {
   const handledCallback = useRef(false);
   const provider = searchParams.get("provider");
   const status = searchParams.get("status");
+  const callbackBrandId =
+    searchParams.get("context") === "brand"
+      ? searchParams.get("brandId")
+      : null;
+
+  /**
+   * A pending Facebook Page selection, when the callback came back with one.
+   * Facebook is the only provider whose OAuth cannot finish on its own — the
+   * member manages several Pages and has to choose. See FacebookPageDialog.
+   */
+  const [pageSelection, setPageSelection] = useState<string | null>(null);
 
   useEffect(() => {
     if (!provider || !status || handledCallback.current) return;
     handledCallback.current = true;
+
+    // Return to the context the connect started from, so a brand connection
+    // does not land the member on the Personal tab wondering what happened.
+    // Only Facebook sends these params today.
+    if (callbackBrandId) setSelectedBrandId(callbackBrandId);
 
     if (status === "connected") {
       // The provider's display name lives on the server, and the list may not
@@ -68,6 +85,15 @@ export default function Integrations() {
       toast.success("Account connected.");
       void refresh();
       void refreshActivity();
+    } else if (status === "select") {
+      // Not connected yet, and deliberately no toast: the dialog *is* the
+      // message, and a "nearly there" toast under it would be noise.
+      const selection = searchParams.get("selection");
+      if (selection) {
+        setPageSelection(selection);
+      } else {
+        toast.error("Could not connect that account. Please try again.");
+      }
     } else {
       // The backend deliberately does not tell the browser *why*; the detail is
       // in the server log, where it cannot leak anything the provider sent us.
@@ -78,7 +104,15 @@ export default function Integrations() {
     // `refreshActivity` rather than the whole `activity` object: the hook
     // returns a fresh object every render, which would re-run this effect on
     // each one. The callback itself is stable.
-  }, [provider, status, refresh, refreshActivity, setSearchParams]);
+  }, [
+    provider,
+    status,
+    callbackBrandId,
+    searchParams,
+    refresh,
+    refreshActivity,
+    setSearchParams,
+  ]);
 
   /**
    * Mutations refresh the timeline too — a disconnect that doesn't appear in
@@ -205,6 +239,32 @@ export default function Integrations() {
           error={activity.error}
         />
       </div>
+
+      {/* Facebook only, and only when the member manages more than one Page.
+          A single eligible Page is connected by the callback itself and this
+          never opens. */}
+      {pageSelection && (
+        <FacebookPageDialog
+          selection={pageSelection}
+          contextLabel={selectedBrand ? selectedBrand.name : "Personal"}
+          open
+          onOpenChange={(next) => !next && setPageSelection(null)}
+          onConnected={(displayName) => {
+            toast.success(
+              displayName
+                ? `${displayName} connected.`
+                : "Facebook Page connected.",
+            );
+            setPageSelection(null);
+            void refresh();
+            void refreshActivity();
+          }}
+          onError={(message) => {
+            toast.error(message);
+            setPageSelection(null);
+          }}
+        />
+      )}
     </PageContainer>
   );
 }

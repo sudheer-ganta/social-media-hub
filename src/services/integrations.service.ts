@@ -225,10 +225,109 @@ export async function fetchActivity(
   return events ?? [];
 }
 
+// ─── Facebook Page selection ─────────────────────────────────────────────────
+//
+// The one flow that does not fit the provider-agnostic shape above, and the
+// reason is Facebook's alone: OAuth identifies the *member*, not the account
+// to publish to, and a member can manage any number of Pages. So the callback
+// parks its result and sends the browser back with `status=select&selection=…`,
+// and these two calls finish the job.
+//
+// Deliberately kept to the two calls and no more. There is no `connectFacebook`
+// and there should not be — connecting still goes through `startConnect` like
+// every other network.
+
+/** One Page offered by a pending selection. Never carries an access token. */
+export interface FacebookPageChoice {
+  id: string;
+  name: string;
+  username: string | null;
+  profileImage: string | null;
+}
+
+/**
+ * One authenticated call to the Facebook OAuth routes.
+ *
+ * A separate helper from {@link request} because these live under
+ * `/auth/facebook`, not under `/api/integrations` — the selection is part of
+ * the OAuth dance, not part of the connections API.
+ */
+async function facebookRequest<T>(
+  path: string,
+  init: RequestInit,
+  fallback: string,
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}/auth/facebook${path}`, {
+    ...init,
+    headers: {
+      ...init.headers,
+      Authorization: `Bearer ${await getAccessToken()}`,
+    },
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      body && typeof body === "object" && typeof body.error === "string"
+        ? body.error
+        : fallback,
+    );
+  }
+
+  return body as T;
+}
+
+/**
+ * The Pages a pending selection is offering.
+ *
+ * The `selection` id is a lookup key, not a credential: the request is
+ * authenticated, and the backend additionally checks the selection belongs to
+ * the signed-in member.
+ */
+export async function fetchPendingPages(
+  selection: string,
+): Promise<FacebookPageChoice[]> {
+  const { pages } = await facebookRequest<{ pages?: FacebookPageChoice[] }>(
+    `/pages?selection=${encodeURIComponent(selection)}`,
+    { method: "GET" },
+    "Could not load your Facebook Pages.",
+  );
+  return pages ?? [];
+}
+
+/**
+ * Finishes the connection with the chosen Page.
+ *
+ * Note what is *not* sent: no publishing context. The backend took it from the
+ * OAuth state at the start of the flow and will not accept a different one
+ * here, which is what stops a Personal connect from being finished into a
+ * Brand.
+ */
+export async function selectFacebookPage(
+  selection: string,
+  pageId: string,
+): Promise<{ displayName: string | null }> {
+  const { account } = await facebookRequest<{
+    account?: { displayName: string | null };
+  }>(
+    "/pages/select",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selection, pageId }),
+    },
+    "Could not connect that Facebook Page.",
+  );
+  return { displayName: account?.displayName ?? null };
+}
+
 export const integrationsService = {
   startConnect,
   fetchIntegrations,
   refreshIntegration,
   disconnectIntegration,
   fetchActivity,
+  fetchPendingPages,
+  selectFacebookPage,
 };
