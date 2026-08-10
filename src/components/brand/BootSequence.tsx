@@ -1,49 +1,19 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Logo } from "@/components/brand/Logo";
+import { AnimatePresence, motion } from "framer-motion";
+import { FlowPostIcon } from "@/components/brand/Logo";
 
 const SEEN_KEY = "fp-boot-seen";
 
-/**
- * Twelve scattered fragments — the raw material of a feed. Each starts
- * somewhere loose and lands in one of three columns, so the settling reads as
- * organisation rather than decoration.
- */
-const FRAGMENTS = Array.from({ length: 12 }, (_, i) => {
-  const column = i % 3;
-  const row = Math.floor(i / 3);
-  return {
-    id: i,
-    // Where it starts: scattered, off-grid.
-    fromX: (i * 67) % 260 - 130,
-    fromY: (i * 43) % 180 - 90,
-    fromR: (i % 5) * 9 - 18,
-    // Where it lands: three tidy columns.
-    toX: (column - 1) * 44,
-    toY: row * 15 - 22,
-    wide: i % 4 === 0,
-  };
-});
-
-/**
- * FlowPost's opening moment: content fragments scatter, settle into columns,
- * the columns draw into a single rail, the rail collapses into the mark.
- * "All your social workflows. One flow." ~1.2s.
- *
- * It is a cover, not a gate — the workspace mounts and fetches underneath, so
- * nobody waits on it. Shown once per browser session, and not at all under
- * reduced motion, where the workspace is simply already there.
- */
 export function BootSequence() {
-  const reduced = useReducedMotion();
   const [visible, setVisible] = useState(
-    () => !reduced && localStorage.getItem(SEEN_KEY) !== "1",
+    () => localStorage.getItem(SEEN_KEY) !== "1",
   );
 
   useEffect(() => {
     if (!visible) return;
     localStorage.setItem(SEEN_KEY, "1");
-    const t = setTimeout(() => setVisible(false), 1200);
+    // Auto-dismiss after animation completes (1.8s)
+    const t = setTimeout(() => setVisible(false), 1800);
     return () => clearTimeout(t);
   }, [visible]);
 
@@ -52,71 +22,63 @@ export function BootSequence() {
       {visible && (
         <motion.div
           key="boot"
+          initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-background"
+          transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background"
           aria-hidden="true"
         >
-          <div className="relative flex h-56 w-72 items-center justify-center">
-            {FRAGMENTS.map((f) => (
-              <motion.span
-                key={f.id}
-                initial={{
-                  x: f.fromX,
-                  y: f.fromY,
-                  rotate: f.fromR,
-                  opacity: 0,
-                  scaleX: 1,
-                }}
-                animate={{
-                  // scatter → settle into columns → collapse to the rail
-                  x: [f.fromX, f.toX, 0],
-                  y: [f.fromY, f.toY, 0],
-                  rotate: [f.fromR, 0, 0],
-                  opacity: [0, 1, 0],
-                  scaleX: [1, 1, 0.12],
-                }}
-                transition={{
-                  duration: 0.92,
-                  times: [0, 0.55, 1],
-                  ease: [0.32, 0.72, 0, 1],
-                  delay: (f.id % 4) * 0.03,
-                }}
-                className="absolute h-[3px] rounded-full bg-foreground/25"
-                style={{ width: f.wide ? 34 : 22 }}
-              />
-            ))}
-
-            {/* The rail the columns collapse into. */}
+          {/* Ripple rings */}
+          {[0, 1, 2].map((i) => (
             <motion.span
-              initial={{ scaleX: 0, opacity: 0 }}
-              animate={{ scaleX: [0, 1, 0], opacity: [0, 1, 0] }}
+              key={i}
+              className="absolute rounded-full border border-primary/30"
+              initial={{ width: 56, height: 56, opacity: 0.7 }}
+              animate={{ width: 56 + (i + 1) * 48, height: 56 + (i + 1) * 48, opacity: 0 }}
               transition={{
-                duration: 0.5,
-                delay: 0.5,
-                times: [0, 0.5, 1],
-                ease: [0.32, 0.72, 0, 1],
+                duration: 1.4,
+                delay: i * 0.3,
+                repeat: Infinity,
+                ease: "easeOut",
               }}
-              className="absolute h-[3px] w-40 rounded-full bg-foreground/50"
             />
+          ))}
 
-            {/* The mark, exactly as supplied. */}
+          {/* Logo icon — scale in then float */}
+          <motion.div
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
+          >
             <motion.div
-              initial={{ opacity: 0, scale: 0.92 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4, delay: 0.78, ease: [0.32, 0.72, 0, 1] }}
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
             >
-              <Logo size="lg" />
+              <FlowPostIcon className="h-14 w-14 drop-shadow-[0_0_18px_rgba(99,102,241,0.6)]" />
             </motion.div>
+          </motion.div>
 
-            {/* The masthead rule drawing across as the workspace arrives. */}
-            <motion.span
-              initial={{ scaleX: 0 }}
-              animate={{ scaleX: 1 }}
-              transition={{ duration: 0.35, delay: 0.92, ease: [0.4, 0, 0.2, 1] }}
-              className="absolute inset-x-0 bottom-[38%] h-px origin-left bg-border"
-            />
-          </div>
+          {/* Brand name */}
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.4 }}
+            className="mt-5 text-xl font-extrabold tracking-tight text-foreground select-none"
+          >
+            Flow<span className="text-[#2563EB]">Post</span>
+          </motion.p>
+
+          {/* Gradient progress bar */}
+          <motion.div
+            className="absolute bottom-12 left-1/2 h-[3px] -translate-x-1/2 rounded-full"
+            style={{
+              background: "linear-gradient(90deg, #4F46E5, #818CF8, #C084FC)",
+              boxShadow: "0 0 12px rgba(99,102,241,0.7)",
+            }}
+            initial={{ width: 0, opacity: 1 }}
+            animate={{ width: 160, opacity: [1, 1, 0] }}
+            transition={{ duration: 1.6, ease: [0.4, 0, 0.2, 1] }}
+          />
         </motion.div>
       )}
     </AnimatePresence>
