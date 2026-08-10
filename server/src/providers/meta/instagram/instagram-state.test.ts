@@ -25,6 +25,7 @@ import {
   INSTAGRAM_STATE_COOKIE,
   INSTAGRAM_STATE_TTL_MS,
 } from './instagram-state';
+import { createCookieStateStore } from '../../oauth-state-cookie';
 
 // ─── Minimal Express request/response mocks ───────────────────────────────────
 
@@ -318,6 +319,58 @@ describe('consumeInstagramState — rejection cases', () => {
       expect(call).not.toContain(state);
       expect(call).not.toContain(process.env.TOKEN_ENCRYPTION_KEY);
     }
+  });
+});
+
+/**
+ * Facebook uses the same store with its own cookie name and path. These cover
+ * the two things that are Facebook's rather than the mechanism's: the cookie it
+ * writes, and the fact that a state minted for one provider cannot satisfy the
+ * other's callback.
+ */
+describe('Facebook store — same mechanism, own cookie', () => {
+  const facebook = createCookieStateStore({
+    cookieName: 'fb_oauth_state',
+    callbackPath: '/auth/facebook/callback',
+    redirectUri: 'https://example.com/auth/facebook/callback',
+  });
+
+  function fbCookie(res: ReturnType<typeof makeRes>): string {
+    const h = res._headers['set-cookie'];
+    const entries = Array.isArray(h) ? h : [h ?? ''];
+    return entries.find((e) => e.startsWith('fb_oauth_state='))!;
+  }
+
+  it('scopes its cookie to the Facebook callback path with the secure attributes', () => {
+    const res = makeRes();
+    facebook.create(res, USER_ID, CONTEXT_PERSONAL);
+    const cookie = fbCookie(res);
+
+    expect(cookie).toContain('Path=/auth/facebook/callback');
+    expect(cookie.toLowerCase()).toContain('httponly');
+    expect(cookie.toLowerCase()).toContain('samesite=none');
+    expect(cookie.toLowerCase()).toContain('secure');
+  });
+
+  it('round-trips a brand context and clears the cookie', () => {
+    const res = makeRes();
+    const state = facebook.create(res, USER_ID, CONTEXT_BRAND);
+    const req = makeReq(extractCookiePair(fbCookie(res)));
+    const callbackRes = makeRes();
+
+    const pending = facebook.consume(req, callbackRes, state);
+
+    expect(pending?.userId).toBe(USER_ID);
+    expect(pending?.brandId).toBe(CONTEXT_BRAND.brandId);
+    expect(fbCookie(callbackRes)).toContain('Max-Age=0');
+  });
+
+  it('rejects an Instagram-minted state — the cookies do not cross providers', () => {
+    const igRes = makeRes();
+    const igState = createInstagramState(igRes, USER_ID, CONTEXT_PERSONAL);
+    const req = makeReq(extractCookiePair(getSetCookieValue(igRes)!));
+
+    expect(facebook.consume(req, makeRes(), igState)).toBeNull();
   });
 });
 

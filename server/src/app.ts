@@ -4,7 +4,41 @@ import { env } from './config/env';
 
 const app = express();
 
-app.use(cors());
+/**
+ * CORS, with credentials.
+ *
+ * `cors()` with no options answers `Access-Control-Allow-Origin: *` and no
+ * `Allow-Credentials`, under which the browser **discards** the `Set-Cookie` on
+ * the `/connect` response — which is where the OAuth state now lives. A
+ * wildcard origin and credentials are also mutually exclusive by spec, so the
+ * allowed origins have to be named.
+ *
+ * The list comes from the environment: `CORS_ORIGINS` (comma-delimited) if set,
+ * otherwise the deployed SPA (`FRONTEND_URL`) plus the Vite dev server. A
+ * request with no `Origin` header — server-to-server, health checks, and the
+ * provider redirects that land on `/callback` — is allowed through, because
+ * there is no origin to police and no cookie for a browser to withhold.
+ */
+const allowedOrigins = (
+  process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',')
+    : [env.FRONTEND_URL, 'http://localhost:5173']
+)
+  .map((origin) => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 // Health check endpoint

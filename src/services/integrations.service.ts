@@ -118,6 +118,13 @@ export async function startConnect(
     `${API_BASE_URL}${integration.connectPath}${contextQuery(context)}`,
     {
     headers: { Authorization: `Bearer ${await getAccessToken()}` },
+    // Not for sending anything — for *receiving*. The backend answers this
+    // request with the signed OAuth-state cookie, and a cross-origin fetch
+    // without this flag makes the browser discard the `Set-Cookie` silently.
+    // The callback then finds no cookie and reports "OAuth state mismatch".
+    // Requires the API to name this origin in CORS and send
+    // `Access-Control-Allow-Credentials: true` — see server/src/app.ts.
+    credentials: "include",
     // The provider's authorization URL must never be *fetched*, only navigated
     // to — instagram.com and linkedin.com send no CORS headers, so a followed
     // redirect fails as an opaque network error that names neither the backend

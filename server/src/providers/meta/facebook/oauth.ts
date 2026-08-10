@@ -4,7 +4,8 @@ import {
   ProviderError,
   type Provider,
 } from '../../provider.interface';
-import { createOAuthStateStore, firstQueryValue } from '../../oauth-state';
+import { firstQueryValue } from '../../oauth-state';
+import { createCookieStateStore } from '../../oauth-state-cookie';
 import { assertFacebookConfigured, facebookConfig } from './config';
 import { exchangeAuthorizationCode } from './token';
 import {
@@ -56,11 +57,21 @@ import type {
  * retire a superseded Page (see {@link connectSelectedPage}), which is a
  * Facebook-specific invariant with no home in the shared service.
  *
- * The state store is the shared one from `providers/oauth-state.ts`, with its
- * own instance — a state minted here can never satisfy an Instagram or LinkedIn
- * callback.
+ * The state store is the shared signed-cookie one from
+ * `providers/oauth-state-cookie.ts`, with its own cookie name and path — a
+ * state minted here can never satisfy an Instagram or LinkedIn callback.
+ *
+ * Cookie rather than the in-memory Map in `providers/oauth-state.ts`: Render
+ * spins the process down between `/connect` and `/callback`, and the Map goes
+ * with it, which is exactly the "OAuth state mismatch" this flow was returning
+ * in production. Instagram moved for the same reason.
  */
-const states = createOAuthStateStore(facebookConfig.stateTtlMs);
+const states = createCookieStateStore({
+  cookieName: 'fb_oauth_state',
+  callbackPath: '/auth/facebook/callback',
+  redirectUri: facebookConfig.redirectUri,
+  ttlMs: facebookConfig.stateTtlMs,
+});
 const selections = createPendingSelectionStore(facebookConfig.selectionTtlMs);
 
 /**
@@ -125,7 +136,10 @@ async function connect(req: Request, res: Response): Promise<void> {
   const context = readContext(req.query);
   await assertContextOwned(req.user.id, context);
 
-  const state = states.create(req.user.id, context);
+  // Signs the state payload into an HttpOnly SameSite=None cookie on `res` and
+  // returns only the random token to embed in the Facebook URL. The payload
+  // (userId, context, expiry) never leaves the signed cookie.
+  const state = states.create(res, req.user.id, context);
 
   // Safe to log: which dialog we are invoking, what we are asking for and where
   // Meta will send the member back. Not safe, and deliberately absent: the
@@ -160,8 +174,10 @@ async function callback(req: Request, res: Response): Promise<void> {
   const code = firstQueryValue(req.query.code);
 
   // Resolved before anything can throw, so the catch block can attribute the
-  // failure to a user in the audit trail.
-  const pending = state ? states.consume(state) : null;
+  // failure to a user in the audit trail. Clears the state cookie on every
+  // exit path, success and failure alike, so a captured redirect URL cannot be
+  // replayed.
+  const pending = states.consume(req, res, state);
 
   try {
     // The member pressed Cancel, or Meta refused the request outright.
