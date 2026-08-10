@@ -37,12 +37,12 @@ const FRAGMENTS = Array.from({ length: 12 }, (_, i) => {
 export function BootSequence() {
   const reduced = useReducedMotion();
   const [visible, setVisible] = useState(
-    () => !reduced && sessionStorage.getItem(SEEN_KEY) !== "1",
+    () => !reduced && localStorage.getItem(SEEN_KEY) !== "1",
   );
 
   useEffect(() => {
     if (!visible) return;
-    sessionStorage.setItem(SEEN_KEY, "1");
+    localStorage.setItem(SEEN_KEY, "1");
     const t = setTimeout(() => setVisible(false), 1200);
     return () => clearTimeout(t);
   }, [visible]);
