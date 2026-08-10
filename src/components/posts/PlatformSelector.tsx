@@ -20,6 +20,7 @@ interface PlatformSelectorProps {
   integrations: Integration[];
   /** "personal" or the brand's name, for the empty state's wording. */
   contextLabel: string;
+  disabled?: boolean;
 }
 
 export function PlatformSelector({
@@ -27,8 +28,10 @@ export function PlatformSelector({
   onChange,
   integrations,
   contextLabel,
+  disabled,
 }: PlatformSelectorProps) {
   const toggle = (platform: Platform) => {
+    if (disabled) return;
     onChange(
       value.includes(platform)
         ? value.filter((p) => p !== platform)
@@ -85,7 +88,8 @@ export function PlatformSelector({
               <div
                 onClick={() => toggle(platform.id)}
                 className={cn(
-                  "flex w-full cursor-pointer flex-col rounded-xl border bg-card p-4 text-left shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-elevated",
+                  "flex w-full flex-col rounded-xl border bg-card p-4 text-left shadow-soft transition-all duration-200",
+                  disabled ? "cursor-default opacity-85" : "cursor-pointer hover:-translate-y-0.5 hover:shadow-elevated",
                   selected && "border-primary/60 ring-1 ring-primary/40",
                 )}
               >
@@ -109,6 +113,7 @@ export function PlatformSelector({
                     onCheckedChange={() => toggle(platform.id)}
                     onClick={(e) => e.stopPropagation()}
                     aria-label={`Toggle ${platform.name}`}
+                    disabled={disabled}
                   />
                 </div>
 

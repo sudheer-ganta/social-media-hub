@@ -8,6 +8,7 @@ import {
   Pencil,
   Send,
   Trash2,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,12 +77,21 @@ export function PostCard({ post, onDelete, onDuplicate, onPublish, onClick }: Po
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link to={`/posts/${post.id}/edit`}>
-                  <Pencil />
-                  Edit
-                </Link>
-              </DropdownMenuItem>
+              {post.status === "published" ? (
+                <DropdownMenuItem asChild>
+                  <Link to={`/posts/${post.id}/edit`}>
+                    <Eye />
+                    View Details
+                  </Link>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem asChild>
+                  <Link to={`/posts/${post.id}/edit`}>
+                    <Pencil />
+                    Edit
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => onDuplicate(post)}>
                 <Copy />
                 Duplicate

@@ -11,6 +11,7 @@ import {
   FileText,
   Send,
   Sparkles,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ import {
   useCreatePost,
   useUpdatePost,
   useGenerateWithSettings,
+  useDuplicatePost,
 } from "@/hooks/usePosts";
 import { useAiCaption } from "@/hooks/useAiCaption";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -114,10 +116,24 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const generateStrategy = useGenerateWithSettings();
   const publish = usePublishPostToProvider();
   const { data: publishState } = usePublishState(post?.id);
-  const { integrations } = useIntegrations(context);
   const { user } = useAuth();
   const { settings } = useSettings();
 
+  const isPublished = post?.status === "published";
+  const duplicatePost = useDuplicatePost();
+
+  const handleDuplicateClick = async () => {
+    if (!post) return;
+    try {
+      const duplicated = await postsService.duplicate(post.id);
+      toast.success("Post duplicated", { description: duplicated.title });
+      navigate(`/posts/${duplicated.id}/edit`);
+    } catch (e) {
+      toast.error("Failed to duplicate post");
+    }
+  };
+
+  const { integrations } = useIntegrations(context);
   const isBrand = context.contextType === "brand";
   const contextLabel = isBrand ? (brand?.name ?? "this brand") : "Personal";
   const authorName = isBrand
@@ -831,41 +847,43 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
           sticky on desktop down the entire form length. */}
       <div className="grid gap-6 items-start xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="min-w-0 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Media</CardTitle>
-              <CardDescription>
-                Add images to your post — drag the thumbnails to set their order.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <MediaUploader
-                items={media}
-                onChange={setMedia}
-                selected={selectedMedia}
-                onSelect={setSelectedMedia}
-                maxItems={maxMedia}
-              />
-              <FieldError message={errors.image_url?.message} />
-
-              {media.length > 0 && (
-                <MediaFormatPanel
+          <fieldset disabled={isPublished} className="contents">
+            <Card>
+              <CardHeader>
+                <CardTitle>Media</CardTitle>
+                <CardDescription>
+                  Add images to your post — drag the thumbnails to set their order.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <MediaUploader
                   items={media}
                   onChange={setMedia}
                   selected={selectedMedia}
                   onSelect={setSelectedMedia}
+                  maxItems={maxMedia}
+                  disabled={isPublished}
                 />
-              )}
-            </CardContent>
-          </Card>
+                <FieldError message={errors.image_url?.message} />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Content</CardTitle>
-              <CardDescription>
-                Title for your workspace, caption for your audience.
-              </CardDescription>
-            </CardHeader>
+                {media.length > 0 && !isPublished && (
+                  <MediaFormatPanel
+                    items={media}
+                    onChange={setMedia}
+                    selected={selectedMedia}
+                    onSelect={setSelectedMedia}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Content</CardTitle>
+                <CardDescription>
+                  Title for your workspace, caption for your audience.
+                </CardDescription>
+              </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="post-title">Title</Label>
@@ -926,105 +944,109 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Platforms</CardTitle>
-              <CardDescription>
-                {isBrand
-                  ? `Accounts connected to ${contextLabel}.`
-                  : "Your personal connected accounts."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Controller
-                control={control}
-                name="platforms"
-                render={({ field }) => (
-                  <PlatformSelector
-                    value={field.value}
-                    onChange={field.onChange}
-                    integrations={integrations}
-                    contextLabel={contextLabel}
-                  />
+            <Card>
+              <CardHeader>
+                <CardTitle>Platforms</CardTitle>
+                <CardDescription>
+                  {isBrand
+                    ? `Accounts connected to ${contextLabel}.`
+                    : "Your personal connected accounts."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Controller
+                  control={control}
+                  name="platforms"
+                  render={({ field }) => (
+                    <PlatformSelector
+                      value={field.value}
+                      onChange={field.onChange}
+                      integrations={integrations}
+                      contextLabel={contextLabel}
+                      disabled={isPublished}
+                    />
+                  )}
+                />
+                <FieldError message={errors.platforms?.message} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Schedule</CardTitle>
+                <CardDescription>
+                  Pick the moment your audience is most active.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {suggestion && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Suggested:{" "}
+                      <span className="font-semibold text-foreground">
+                        {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
+                      </span>{" "}
+                      for {suggestion.name} — general recommendation, not yet based
+                      on your analytics.
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setValue("publish_time", suggestion.time, {
+                          shouldValidate: true,
+                        })
+                      }
+                    >
+                      Use
+                    </Button>
+                  </div>
                 )}
-              />
-              <FieldError message={errors.platforms?.message} />
-            </CardContent>
-          </Card>
+                <SchedulePicker
+                  value={schedule}
+                  onChange={(next) => {
+                    setValue("publish_date", next.publish_date, { shouldValidate: true });
+                    setValue("publish_time", next.publish_time, { shouldValidate: true });
+                    setValue("timezone", next.timezone, { shouldValidate: true });
+                  }}
+                />
+                <FieldError message={errors.publish_date?.message} />
+                <FieldError message={errors.publish_time?.message} />
+              </CardContent>
+            </Card>
+          </fieldset>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Schedule</CardTitle>
-              <CardDescription>
-                Pick the moment your audience is most active.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {suggestion && (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
-                  <p className="text-xs text-muted-foreground">
-                    Suggested:{" "}
-                    <span className="font-semibold text-foreground">
-                      {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
-                    </span>{" "}
-                    for {suggestion.name} — general recommendation, not yet based
-                    on your analytics.
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setValue("publish_time", suggestion.time, {
-                        shouldValidate: true,
-                      })
-                    }
-                  >
-                    Use
-                  </Button>
-                </div>
-              )}
-              <SchedulePicker
-                value={schedule}
-                onChange={(next) => {
-                  setValue("publish_date", next.publish_date, { shouldValidate: true });
-                  setValue("publish_time", next.publish_time, { shouldValidate: true });
-                  setValue("timezone", next.timezone, { shouldValidate: true });
-                }}
-              />
-              <FieldError message={errors.publish_date?.message} />
-              <FieldError message={errors.publish_time?.message} />
-            </CardContent>
-          </Card>
-
-          {isBrand && (
+          {isBrand && !isPublished && (
             <AiStrategyPanel studio={studio} hasImage={Boolean(imageUrl?.trim())} />
           )}
 
-          <AiCaptionPanel
-            result={ai.result}
-            isGenerating={generating}
-            error={ai.error}
-            blockedReason={blockedReason}
-            audience={audience}
-            onAudienceChange={setAudience}
-            hasImage={Boolean(imageUrl?.trim())}
-            currentCaption={watch("caption")}
-            onGenerate={handleGenerate}
-            showPlatformVariations={isBrand}
-            onUseCaption={(caption) =>
-              setValue("caption", applyCaption(caption, ai.result?.hashtags ?? []), {
-                shouldValidate: true,
-              })
-            }
-            onAppendHashtags={handleAppendHashtags}
-            {...(!isBrand && {
-              onUseSong: (song: string) =>
-                setValue("music", song, { shouldValidate: true }),
-            })}
-          />
+          {!isPublished && (
+            <AiCaptionPanel
+              result={ai.result}
+              isGenerating={generating}
+              error={ai.error}
+              blockedReason={blockedReason}
+              audience={audience}
+              onAudienceChange={setAudience}
+              hasImage={Boolean(imageUrl?.trim())}
+              currentCaption={watch("caption")}
+              onGenerate={handleGenerate}
+              showPlatformVariations={isBrand}
+              onUseCaption={(caption) =>
+                setValue("caption", applyCaption(caption, ai.result?.hashtags ?? []), {
+                  shouldValidate: true,
+                })
+              }
+              onAppendHashtags={handleAppendHashtags}
+              {...(!isBrand && {
+                onUseSong: (song: string) =>
+                  setValue("music", song, { shouldValidate: true }),
+              })}
+            />
+          )}
 
-          {!isBrand && (
+          {!isBrand && !isPublished && (
             <ReachPanel
               caption={watch("caption")}
               platforms={selectedPlatforms}
@@ -1055,7 +1077,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
             publishingProvider={publish.isPending ? publishingProvider : null}
           />
 
-          {isBrand && post && (
+          {isBrand && post && !isPublished && (
             <MarketingStudio
               post={post}
               onUseCaption={(caption) =>
@@ -1098,7 +1120,11 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
       <div className="sticky bottom-4 z-20">
         <div className="glass flex flex-wrap items-center justify-between sm:justify-end gap-2 rounded-lg border p-3 shadow-elevated">
           <p className="w-full sm:w-auto sm:mr-auto flex items-center gap-1.5 text-xs text-muted-foreground pb-1 sm:pb-0">
-            {isDirty || mediaDirty ? (
+            {isPublished ? (
+              <span className="font-semibold text-emerald-500">
+                Published to social networks
+              </span>
+            ) : isDirty || mediaDirty ? (
               <>
                 <CircleDashed className="h-3.5 w-3.5" />
                 Unsaved changes
@@ -1111,53 +1137,79 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
             ) : null}
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              loading={isSubmitting}
-              onClick={submitWithStatus("draft")}
-              className="flex-1 sm:flex-initial"
-            >
-              <FileText className="h-4 w-4" />
-              Save Draft
-            </Button>
-            {isBrand && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                loading={generating}
-                disabled={Boolean(blockedReason)}
-                title={blockedReason ?? undefined}
-                onClick={handleGenerate}
-                className="flex-1 sm:flex-initial"
-              >
-                <Sparkles className="h-4 w-4" />
-                {hasGenerated ? "Regenerate" : "Generate with AI"}
-              </Button>
+            {isPublished ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/posts")}
+                  className="flex-1 sm:flex-initial"
+                >
+                  Go to Library
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleDuplicateClick}
+                  loading={duplicatePost.isPending}
+                  className="shadow-glow flex-1 sm:flex-initial gap-1.5"
+                >
+                  <Copy className="h-4 w-4" />
+                  Duplicate to new draft
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  loading={isSubmitting}
+                  onClick={submitWithStatus("draft")}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <FileText className="h-4 w-4" />
+                  Save Draft
+                </Button>
+                {isBrand && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    loading={generating}
+                    disabled={Boolean(blockedReason)}
+                    title={blockedReason ?? undefined}
+                    onClick={handleGenerate}
+                    className="flex-1 sm:flex-initial"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {hasGenerated ? "Regenerate" : "Generate with AI"}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  loading={isSubmitting}
+                  onClick={submitWithStatus("scheduled")}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  Schedule
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  loading={isSubmitting || publish.isPending}
+                  onClick={handlePublish}
+                  className="shadow-glow flex-1 sm:flex-initial"
+                >
+                  <Send className="h-4 w-4" />
+                  {publish.isPending ? "Publishing…" : "Publish"}
+                </Button>
+              </>
             )}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              loading={isSubmitting}
-              onClick={submitWithStatus("scheduled")}
-              className="flex-1 sm:flex-initial"
-            >
-              <CalendarClock className="h-4 w-4" />
-              Schedule
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              loading={isSubmitting || publish.isPending}
-              onClick={handlePublish}
-              className="shadow-glow flex-1 sm:flex-initial"
-            >
-              <Send className="h-4 w-4" />
-              {publish.isPending ? "Publishing…" : "Publish"}
-            </Button>
           </div>
         </div>
       </div>

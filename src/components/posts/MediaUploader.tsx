@@ -53,6 +53,7 @@ interface MediaUploaderProps {
    * at publish time.
    */
   maxItems: number;
+  disabled?: boolean;
 }
 
 /** One in-flight upload. Rendered as a placeholder tile in the rail. */
@@ -101,6 +102,7 @@ export function MediaUploader({
   selected,
   onSelect,
   maxItems,
+  disabled,
 }: MediaUploaderProps) {
   const [pending, setPending] = useState<PendingUpload[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -204,7 +206,7 @@ export function MediaUploader({
     accept: ACCEPTED_IMAGE_TYPES,
     maxSize: MAX_IMAGE_SIZE_BYTES,
     multiple: true,
-    disabled: remaining === 0,
+    disabled: disabled || remaining === 0,
     // With images on screen the tiles are the click targets; a click anywhere
     // in the rail opening a file dialog would fight every other control.
     noClick: items.length > 0,
@@ -212,6 +214,7 @@ export function MediaUploader({
   });
 
   const removeAt = (index: number) => {
+    if (disabled) return;
     const item = items[index];
     onChange(items.filter((_, at) => at !== index));
     // Best-effort, and only for assets uploaded in this session — see the
@@ -222,7 +225,7 @@ export function MediaUploader({
   };
 
   const move = (from: number, to: number) => {
-    if (to < 0 || to >= items.length) return;
+    if (disabled || to < 0 || to >= items.length) return;
     onChange(reorderMedia(items, from, to));
     // The selection follows the picture, not the position — dragging the item
     // you are editing must not switch you to editing a different one.
@@ -237,9 +240,11 @@ export function MediaUploader({
         <input {...getInputProps()} />
         <button
           type="button"
-          onClick={open}
+          onClick={disabled ? undefined : open}
+          disabled={disabled}
           className={cn(
             "flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed bg-muted/30 px-6 py-12 text-center transition-colors",
+            disabled ? "cursor-default opacity-60" :
             isDragActive
               ? "border-primary bg-accent"
               : "hover:border-primary/50 hover:bg-accent/40",
@@ -259,13 +264,10 @@ export function MediaUploader({
           </motion.span>
           <span>
             <span className="block text-sm font-semibold">
-              {isDragActive ? "Drop them here" : "Add media"}
+              No media attached
             </span>
             <span className="mt-1 block text-xs text-muted-foreground">
-              Drag &amp; drop files here or click to browse
-            </span>
-            <span className="mt-1 block text-xs text-muted-foreground">
-              PNG, JPG, WEBP up to 20MB each
+              {disabled ? "This post is published and cannot be modified." : "Drag & drop files here or click to browse"}
             </span>
           </span>
         </button>
@@ -295,27 +297,27 @@ export function MediaUploader({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.15 }}
-              draggable
-              onDragStart={() => setDragIndex(index)}
+              draggable={!disabled}
+              onDragStart={() => !disabled && setDragIndex(index)}
               onDragEnd={() => {
                 setDragIndex(null);
                 setOverIndex(null);
               }}
               onDragOver={(event) => {
-                // Without this the drop never fires — the default is "reject".
                 event.preventDefault();
-                if (dragIndex !== null && dragIndex !== index) {
+                if (!disabled && dragIndex !== null && dragIndex !== index) {
                   setOverIndex(index);
                 }
               }}
               onDrop={(event) => {
                 event.preventDefault();
-                if (dragIndex !== null) move(dragIndex, index);
+                if (!disabled && dragIndex !== null) move(dragIndex, index);
                 setDragIndex(null);
                 setOverIndex(null);
               }}
               className={cn(
-                "group relative h-28 w-24 shrink-0 cursor-grab overflow-hidden rounded-lg border-2 bg-muted transition-all active:cursor-grabbing",
+                "group relative h-28 w-24 shrink-0 overflow-hidden rounded-lg border-2 bg-muted transition-all",
+                disabled ? "cursor-default opacity-90" : "cursor-grab active:cursor-grabbing",
                 selected === index
                   ? "border-primary shadow-glow"
                   : "border-transparent hover:border-border",
@@ -330,10 +332,7 @@ export function MediaUploader({
                 aria-label={`Media ${index + 1}`}
                 onClick={() => onSelect(index)}
                 onKeyDown={(event) => {
-                  // The keyboard route to the same reorder. Native drag and
-                  // drop gives a keyboard user nothing at all, and ordering is
-                  // not a decorative capability — it decides what a follower
-                  // sees first.
+                  if (disabled) return;
                   if (event.altKey && event.key === "ArrowLeft") {
                     event.preventDefault();
                     move(index, index - 1);
@@ -369,14 +368,16 @@ export function MediaUploader({
                 <ImageIcon className="h-3 w-3" />
               </span>
 
-              <button
-                type="button"
-                aria-label={`Remove media ${index + 1}`}
-                onClick={() => removeAt(index)}
-                className="absolute bottom-1.5 right-1.5 rounded bg-black/65 p-1 text-white opacity-0 transition-opacity hover:bg-destructive focus-visible:opacity-100 group-hover:opacity-100"
-              >
-                <Trash2 className="h-3 w-3" />
-              </button>
+              {!disabled && (
+                <button
+                  type="button"
+                  aria-label={`Remove media ${index + 1}`}
+                  onClick={() => removeAt(index)}
+                  className="absolute bottom-1.5 right-1.5 rounded bg-black/65 p-1 text-white opacity-0 transition-opacity hover:bg-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
@@ -428,7 +429,7 @@ export function MediaUploader({
           </div>
         ))}
 
-        {remaining > 0 && (
+        {!disabled && remaining > 0 && (
           <button
             type="button"
             onClick={open}
@@ -445,10 +446,12 @@ export function MediaUploader({
         )}
       </div>
 
-      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <GripHorizontal className="h-3.5 w-3.5" />
-        Drag to reorder — or focus a tile and press Alt + ← / →
-      </p>
+      {!disabled && (
+        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <GripHorizontal className="h-3.5 w-3.5" />
+          Drag to reorder — or focus a tile and press Alt + ← / →
+        </p>
+      )}
     </div>
   );
 }
