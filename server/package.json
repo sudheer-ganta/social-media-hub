@@ -20,7 +20,9 @@
     "diagnose:facebook": "ts-node-dev --transpile-only --quiet src/scripts/diagnose-facebook-oauth.ts",
     "verify:models": "ts-node-dev --transpile-only --quiet src/scripts/verify-model-routing.ts",
     "verify:contexts": "ts-node-dev --transpile-only --quiet src/scripts/verify-context-isolation.ts",
-    "verify:platform-media": "ts-node-dev --transpile-only --quiet src/scripts/verify-platform-media.ts"
+    "verify:platform-media": "ts-node-dev --transpile-only --quiet src/scripts/verify-platform-media.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
@@ -41,6 +43,7 @@
     "@types/pg": "^8.20.4",
     "prisma": "^7.9.1",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
   }
 }

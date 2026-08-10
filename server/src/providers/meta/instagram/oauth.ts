@@ -4,7 +4,8 @@ import {
   ProviderError,
   type Provider,
 } from '../../provider.interface';
-import { createOAuthStateStore, firstQueryValue } from '../../oauth-state';
+import { firstQueryValue } from '../../oauth-state';
+import { createInstagramState, consumeInstagramState } from './instagram-state';
 import { assertInstagramConfigured, instagramConfig } from './config';
 import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode } from './token';
@@ -27,18 +28,20 @@ import type { InstagramAuthorizationParams } from './types';
 /**
  * Instagram OAuth — both legs of Business Login for Instagram.
  *
- * `connect()` mints a state bound to the FlowPost user and redirects to
- * Instagram. `callback()` validates that state, exchanges the code (twice — see
- * `token.ts`), reads the profile and hands the result to the service layer.
+ * `connect()` mints a signed-cookie state bound to the FlowPost user and
+ * redirects to Instagram. `callback()` reads and verifies that cookie state,
+ * exchanges the code (twice — see `token.ts`), reads the profile and hands
+ * the result to the service layer.
  *
  * This module never imports Prisma and never writes to the database. It talks
  * to Meta and delegates persistence to `services/social-connection.service.ts`,
  * which is the same service LinkedIn uses, unchanged.
  *
- * The state store is the shared one from `providers/oauth-state.ts`, with its
- * own instance — a state minted here can never satisfy a LinkedIn callback.
+ * State is carried in a signed HttpOnly cookie (see `instagram-state.ts`).
+ * The in-memory Map used previously was dropped because Render restarts the
+ * process between `/connect` and `/callback`, losing every pending state and
+ * producing "OAuth state mismatch" on every production attempt.
  */
-const states = createOAuthStateStore(instagramConfig.stateTtlMs);
 
 /**
  * Builds the full authorization URL. Kept exported and pure so it can be
@@ -84,13 +87,17 @@ async function connect(req: Request, res: Response): Promise<void> {
 
   // Which publishing context this connection is for. Read and ownership-checked
   // here — while the request is still authenticated — then bound into the
-  // state, because Meta's redirect back carries no identity of ours.
+  // state cookie, because Meta's redirect back carries no identity of ours.
   const context = readContext(req.query);
   await assertContextOwned(req.user.id, context);
 
-  const state = states.create(req.user.id, context);
+  // Signs the state payload into an HttpOnly SameSite=None cookie on `res`.
+  // Returns only the random state token to embed in the Instagram URL —
+  // the full payload (userId, context, expiry) lives only in the signed cookie.
+  const state = createInstagramState(res, req.user.id, context);
 
-  // Scopes are safe to log; the state, the app secret and any token are not.
+  // Scopes and redirectUri are safe to log; the state value, the app secret
+  // and any token are not, and none appear here.
   console.log('[instagram] OAuth started', {
     scopes: instagramConfig.scopes,
     redirectUri: instagramConfig.redirectUri,
@@ -110,12 +117,14 @@ async function connect(req: Request, res: Response): Promise<void> {
  * stays in the server log. Nothing Meta told us is ever echoed to the URL.
  */
 async function callback(req: Request, res: Response): Promise<void> {
-  const state = firstQueryValue(req.query.state);
+  const stateParam = firstQueryValue(req.query.state);
   const code = firstQueryValue(req.query.code);
 
-  // Resolved before anything can throw, so the catch block can attribute the
-  // failure to a user in the audit trail.
-  const pending = state ? states.consume(state) : null;
+  // Reads, verifies (HMAC + expiry + state-param match) and clears the
+  // signed state cookie. Returns null for any failure — tampered, expired,
+  // missing or mismatched. The cookie is cleared on EVERY exit path (success
+  // and failure) inside consumeInstagramState, before this function returns.
+  const pending = consumeInstagramState(req, res, stateParam);
 
   try {
     // The member pressed Cancel, or Meta refused the request outright.
@@ -130,9 +139,9 @@ async function callback(req: Request, res: Response): Promise<void> {
       );
     }
 
-    // 401-class: an unknown, expired or already-used state means this callback
-    // did not originate from a connect we started. Treated as CSRF.
-    if (!state || !pending) {
+    // 401-class: missing, expired, tampered or already-consumed state cookie
+    // means this callback did not originate from a connect we started. CSRF.
+    if (!stateParam || !pending) {
       throw new ProviderError('OAuth state mismatch', 401, 'instagram');
     }
 
