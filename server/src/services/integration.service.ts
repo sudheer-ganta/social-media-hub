@@ -7,6 +7,11 @@ import {
   type AccountContext,
 } from './account-context';
 import { SocialAccountStatus } from '../generated/prisma/enums';
+import {
+  refreshAccountTokens,
+  isExpiringSoon,
+  TOKEN_REFRESH_SKEW_MS,
+} from './token-refresh';
 import { activityService, ActivityAction } from './activity.service';
 import {
   assessHealth,
@@ -123,7 +128,10 @@ function toIntegrationDto(
   now: Date,
 ): IntegrationDto {
   const permissions = resolvePermissions(catalog, account);
-  const status = deriveStatus(account, permissions, now);
+  // The warning window is the network's own where it declares one — X's tokens
+  // last two hours, so the shared week-long default would never stop warning.
+  const warningMs = catalog.expiryWarningMs;
+  const status = deriveStatus(account, permissions, now, warningMs);
 
   return {
     provider: catalog.id,
@@ -139,7 +147,7 @@ function toIntegrationDto(
     tone: statusTone(status),
     guidance: account ? statusGuidance(status, catalog.displayName) : null,
     permissions,
-    health: account ? assessHealth(account, permissions, now) : null,
+    health: account ? assessHealth(account, permissions, now, warningMs) : null,
     account: account ? toAccountDto(account) : null,
   };
 }
@@ -267,7 +275,71 @@ export async function refreshConnection(
     );
   }
 
-  const result = await implementation.verify(tokens.accessToken);
+  // ─── Renewal, for providers that can ────────────────────────────────────
+  //
+  // Two ways in, and the order matters:
+  //
+  //  1. **Ahead of the check**, when the stored token is already spent or the
+  //     row is flagged EXPIRED. Verifying with a token we know is dead would
+  //     spend a request to be told so, and — before this — would then record
+  //     EXPIRED all over again, which is the loop that made an X connection
+  //     unrecoverable without a manual reconnect.
+  //  2. **After a 401**, when the token looked fine by its timestamp and the
+  //     network disagreed. Clock skew, a revoked session, an early expiry.
+  //
+  // What does *not* happen is a renewal on every press. A healthy token is
+  // verified with, not replaced — refreshing unconditionally would rotate the
+  // refresh token on every page load and spend a grant for nothing.
+  let accessToken = tokens.accessToken;
+  let renewed = false;
+
+  if (
+    implementation.refreshTokens &&
+    (isExpiringSoon(tokens.expiresAt, TOKEN_REFRESH_SKEW_MS) ||
+      account.status === SocialAccountStatus.EXPIRED)
+  ) {
+    const outcome = await refreshAccountTokens(
+      account.id,
+      implementation,
+      tokens.refreshToken,
+    );
+
+    if (outcome.ok) {
+      accessToken = outcome.accessToken;
+      renewed = true;
+    } else if (outcome.reason === 'rejected') {
+      // The network refused the refresh token itself. That is the one answer
+      // that genuinely means "reconnect" — and the only one this branch takes.
+      return await recordUnauthorized(userId, provider, account.id, context, catalog);
+    }
+    // `unsupported` / `no_refresh_token`: nothing was learned. Fall through and
+    // verify with the token we hold, which may well still work.
+  }
+
+  let result = await implementation.verify(accessToken);
+
+  if (
+    !result.ok &&
+    result.reason === 'unauthorized' &&
+    implementation.refreshTokens &&
+    !renewed
+  ) {
+    const outcome = await refreshAccountTokens(
+      account.id,
+      implementation,
+      tokens.refreshToken,
+    );
+
+    if (outcome.ok) {
+      accessToken = outcome.accessToken;
+      renewed = true;
+      // Re-verified rather than assumed: a token exchange proves the refresh
+      // token was good, not that the new access token can read the profile.
+      result = await implementation.verify(accessToken);
+    }
+    // A rejected or impossible refresh leaves `result` as the unauthorized it
+    // already was, and the branch below records it exactly as it did before.
+  }
 
   if (result.ok) {
     await socialAccountRepository.markSynced(account.id, {
@@ -288,19 +360,7 @@ export async function refreshConnection(
   }
 
   if (result.reason === 'unauthorized') {
-    await socialAccountRepository.markHealthChecked(
-      account.id,
-      SocialAccountStatus.EXPIRED,
-    );
-    await activityService.logRefresh(userId, provider, {
-      outcome: 'unauthorized',
-    });
-
-    return {
-      integration: await getIntegration(userId, provider, context),
-      verified: false,
-      message: `${catalog.displayName} needs your permission again. Reconnect to keep publishing.`,
-    };
+    return await recordUnauthorized(userId, provider, account.id, context, catalog);
   }
 
   // Inconclusive. Timestamp only — the status stays whatever it was.
@@ -314,6 +374,36 @@ export async function refreshConnection(
     integration: await getIntegration(userId, provider, context),
     verified: false,
     message: `Could not reach ${catalog.displayName} just now. Your connection was left as it is.`,
+  };
+}
+
+/**
+ * Records a connection the network will not accept, and answers with the card
+ * asking for a reconnect.
+ *
+ * Extracted because there are now two routes to the same conclusion — a
+ * `verify()` that came back unauthorized, and a refresh token the network
+ * rejected outright — and they must record identically. A refresh failure that
+ * left a different status behind would show one thing on the card and mean
+ * another at publish time.
+ */
+async function recordUnauthorized(
+  userId: string,
+  provider: ProviderId,
+  accountId: string,
+  context: AccountContext,
+  catalog: ProviderCatalogEntry,
+): Promise<RefreshResult> {
+  await socialAccountRepository.markHealthChecked(
+    accountId,
+    SocialAccountStatus.EXPIRED,
+  );
+  await activityService.logRefresh(userId, provider, { outcome: 'unauthorized' });
+
+  return {
+    integration: await getIntegration(userId, provider, context),
+    verified: false,
+    message: `${catalog.displayName} needs your permission again. Reconnect to keep publishing.`,
   };
 }
 

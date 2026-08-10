@@ -57,6 +57,22 @@ export interface ProviderCatalogEntry {
   connectPath: string | null;
   /** The provider API version we integrate against. Shown under Details. */
   apiVersion: string | null;
+  /**
+   * How long before expiry a connection should read "Expiring Soon", in
+   * milliseconds. Omitted means the shared default — see
+   * `DEFAULT_EXPIRY_WARNING_MS` in `services/integration-health.ts`.
+   *
+   * Per-provider because token lifetimes differ by three orders of magnitude.
+   * The default window is a week, which is a useful warning for LinkedIn and
+   * Meta (60-day tokens) and meaningless for X (2-hour tokens): a fixed week
+   * would mark every X connection "Expiring Soon" from the moment it was made,
+   * which is a warning that carries no information and trains members to ignore
+   * the one that does.
+   *
+   * Only set it for a network whose tokens are short-lived enough that the
+   * default is wrong. Absent is the right answer for most.
+   */
+  expiryWarningMs?: number;
   permissions: ProviderPermission[];
 }
 
@@ -305,6 +321,16 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     // from the provider config for the same reason LinkedIn's and Meta's are:
     // the value publishing sends and the value we display can never drift apart.
     apiVersion: X_API_VERSION,
+    // Fifteen minutes, against a two-hour token — the last eighth of its life.
+    //
+    // A week here (the shared default) would read "Expiring Soon" from the
+    // second the account was connected and never stop, which is what it did
+    // before this field existed. Fifteen minutes is long enough that a member
+    // who sees it has time to act, and short enough that seeing it means
+    // something went wrong: a healthy X connection refreshes itself on publish
+    // and at every health check, so it should reach this window only when
+    // refreshing has stopped working.
+    expiryWarningMs: 15 * 60 * 1000,
     permissions: X_PERMISSIONS,
   },
   {
@@ -312,16 +338,6 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     displayName: 'YouTube',
     description: 'Long-form video & shorts',
     brandColor: '#FF0000',
-    available: false,
-    connectPath: null,
-    apiVersion: null,
-    permissions: VIDEO_PERMISSIONS,
-  },
-  {
-    id: 'tiktok',
-    displayName: 'TikTok',
-    description: 'Short-form video',
-    brandColor: '#010101',
     available: false,
     connectPath: null,
     apiVersion: null,

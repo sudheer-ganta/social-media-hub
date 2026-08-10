@@ -32,8 +32,7 @@ export type IntegrationId =
   | "instagram"
   | "facebook"
   | "x"
-  | "youtube"
-  | "tiktok";
+  | "youtube";
 
 /**
  * Which publishing context an integrations request is scoped to. Personal and

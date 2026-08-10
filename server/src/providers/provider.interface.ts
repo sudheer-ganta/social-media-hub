@@ -270,8 +270,7 @@ export type ProviderId =
   | 'instagram'
   | 'facebook'
   | 'x'
-  | 'youtube'
-  | 'tiktok';
+  | 'youtube';
 
 /**
  * Thrown by provider implementations when a step of the OAuth flow cannot be

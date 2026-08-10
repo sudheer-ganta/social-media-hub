@@ -54,8 +54,15 @@ export interface ConnectionHealth {
   checks: HealthCheck[];
 }
 
-/** A token inside this window is fine, but worth warning about. */
-const EXPIRY_WARNING_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * A token inside this window is fine, but worth warning about.
+ *
+ * The default, for the long-lived providers it was written for: LinkedIn and
+ * Meta both issue 60-day tokens, and a week's notice is a week to act. A
+ * provider whose tokens are far shorter overrides it with
+ * `expiryWarningMs` on its catalogue entry — see `providers/catalog.ts`.
+ */
+export const DEFAULT_EXPIRY_WARNING_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Past this, a connection has not been verified recently enough to trust. */
 const STALE_SYNC_MS = 30 * 24 * 60 * 60 * 1000;
@@ -121,6 +128,12 @@ export function deriveStatus(
   account: SafeSocialAccount | null,
   permissions: GrantedPermission[],
   now: Date = new Date(),
+  /**
+   * How long before expiry to start warning. Defaults to the week that suits
+   * the long-lived providers; X passes its own. See
+   * {@link DEFAULT_EXPIRY_WARNING_MS}.
+   */
+  expiryWarningMs: number = DEFAULT_EXPIRY_WARNING_MS,
 ): IntegrationStatus {
   if (!account) return 'not_connected';
 
@@ -139,7 +152,7 @@ export function deriveStatus(
 
   if (
     account.expiresAt !== null &&
-    account.expiresAt.getTime() - now.getTime() <= EXPIRY_WARNING_MS
+    account.expiresAt.getTime() - now.getTime() <= expiryWarningMs
   ) {
     return 'expiring_soon';
   }
@@ -227,6 +240,8 @@ export function assessHealth(
   account: SafeSocialAccount | null,
   permissions: GrantedPermission[],
   now: Date = new Date(),
+  /** Passed straight through to {@link deriveStatus} so the two never disagree. */
+  expiryWarningMs: number = DEFAULT_EXPIRY_WARNING_MS,
 ): ConnectionHealth {
   if (!account) {
     return {
@@ -237,7 +252,7 @@ export function assessHealth(
     };
   }
 
-  const status = deriveStatus(account, permissions, now);
+  const status = deriveStatus(account, permissions, now, expiryWarningMs);
   const tokenValid =
     status === 'connected' ||
     status === 'expiring_soon' ||
