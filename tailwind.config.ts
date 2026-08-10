@@ -12,7 +12,14 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        // One modern grotesque doing two jobs — hierarchy comes from weight,
+        // size and tracking rather than from a second personality.
+        sans: ["Instrument Sans", "system-ui", "-apple-system", "sans-serif"],
+        display: ["Instrument Sans", "system-ui", "sans-serif"],
+        // The single serif in the product: the Today lead headline, nowhere else.
+        lead: ["Instrument Serif", "Georgia", "serif"],
+        // Metadata: timestamps, counts, network names, publishing states.
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -56,6 +63,19 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+        },
+        // Network identity — badges, rails and chart series only.
+        platform: {
+          instagram: "hsl(var(--platform-instagram))",
+          linkedin: "hsl(var(--platform-linkedin))",
+          facebook: "hsl(var(--platform-facebook))",
+          x: "hsl(var(--platform-x))",
+          youtube: "hsl(var(--platform-youtube))",
+          threads: "hsl(var(--platform-threads))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -63,10 +83,11 @@ export default {
         sm: "calc(var(--radius) - 8px)",
       },
       boxShadow: {
-        soft: "0 2px 8px -2px rgb(0 0 0 / 0.06), 0 4px 16px -4px rgb(0 0 0 / 0.06)",
+        // Warm, tight shadows — paper lifting off paper, not a neon glow.
+        soft: "0 1px 2px -1px rgb(28 20 12 / 0.08), 0 2px 8px -4px rgb(28 20 12 / 0.08)",
         elevated:
-          "0 4px 12px -2px rgb(0 0 0 / 0.08), 0 12px 32px -8px rgb(0 0 0 / 0.12)",
-        glow: "0 0 0 1px hsl(var(--primary) / 0.1), 0 4px 24px -4px hsl(var(--primary) / 0.35)",
+          "0 2px 6px -2px rgb(28 20 12 / 0.10), 0 10px 28px -10px rgb(28 20 12 / 0.16)",
+        glow: "0 0 0 1px hsl(var(--primary) / 0.25), 0 2px 10px -4px hsl(var(--primary) / 0.30)",
       },
       keyframes: {
         "accordion-down": {

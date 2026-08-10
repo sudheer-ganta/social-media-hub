@@ -1,10 +1,17 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { CalendarClock, FileText, Send, Sparkles } from "lucide-react";
+import {
+  CalendarClock,
+  CircleCheck,
+  CircleDashed,
+  FileText,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ImageUploader } from "./ImageUploader";
+import { MediaUploader } from "./MediaUploader";
 import { CaptionEditor } from "./CaptionEditor";
 import { PlatformSelector } from "./PlatformSelector";
 import { SchedulePicker } from "./SchedulePicker";
@@ -32,13 +39,21 @@ import {
 } from "@/hooks/usePosts";
 import { useAiCaption } from "@/hooks/useAiCaption";
 import { useIntegrations } from "@/hooks/useIntegrations";
+import { useSettings } from "@/hooks/useSettings";
+import { useAuth } from "@/app/AuthProvider";
 import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
 import { PLATFORM_MAP } from "@/constants";
 import { usePublishPostToProvider, usePublishState } from "@/hooks/usePublish";
 import { postsService } from "@/services";
+import { fromStudioOutput } from "@/ai/caption";
 import { currentTime, today } from "@/utils/date";
 import { withHashtags } from "@/utils/hashtags";
 import { withCrop } from "@/utils/crop";
+import { itemUrl, mediaFromImageUrl } from "@/utils/media";
+import {
+  DEFAULT_MEDIA_CAPABILITY,
+  MEDIA_LIMIT_BEFORE_CAPABILITIES_LOAD,
+} from "@/constants/integrations";
 import { MediaFormatPanel } from "./MediaFormatPanel";
 import { PlatformPreview } from "./PlatformPreview";
 import type { AudienceRegister } from "@/ai/caption";
@@ -52,6 +67,7 @@ import type {
   Brand,
   Platform,
   Post,
+  PostMediaItem,
   PostPlatformState,
   PostStatus,
 } from "@/types";
@@ -87,38 +103,56 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const navigate = useNavigate();
   const createPost = useCreatePost();
   const updatePost = useUpdatePost();
-  const ai = useAiCaption();
+  const initialAiResult = useMemo(
+    () => fromStudioOutput(post?.ai_studio_output),
+    [post?.ai_studio_output],
+  );
+  const DRAFT_KEY = `flowpost_draft_${post?.id ?? "new"}_${context.contextType}_${context.brandId ?? "personal"}`;
+  const AI_DRAFT_KEY = `flowpost_ai_draft_${post?.id ?? "new"}_${context.contextType}_${context.brandId ?? "personal"}`;
+  const ai = useAiCaption(initialAiResult, AI_DRAFT_KEY);
   const studio = useMarketingStudio();
   const generateStrategy = useGenerateWithSettings();
   const publish = usePublishPostToProvider();
   const { data: publishState } = usePublishState(post?.id);
-  // Context-scoped: the backend filters, so a Personal composer never even
-  // receives a brand account. Everything below (the platform cards, the
-  // publishable set) inherits the isolation from this one call.
   const { integrations } = useIntegrations(context);
+  const { user } = useAuth();
+  const { settings } = useSettings();
 
   const isBrand = context.contextType === "brand";
   const contextLabel = isBrand ? (brand?.name ?? "this brand") : "Personal";
+  const authorName = isBrand
+    ? brand?.name ?? "Brand Account"
+    : (user?.user_metadata?.full_name as string | undefined) ||
+      settings.fullName ||
+      "Your Profile";
 
-  const defaultValues = useMemo<PostFormValues>(
-    () => ({
-      title: post?.title ?? "",
-      caption: post?.caption ?? "",
-      image_url: post?.image_url ?? "",
-      platforms: post?.platforms ?? [],
+  const defaultValues = useMemo<PostFormValues>(() => {
+    let savedDraft: Partial<PostFormValues> = {};
+    if (!post) {
+      try {
+        const raw = sessionStorage.getItem(DRAFT_KEY);
+        if (raw) savedDraft = JSON.parse(raw);
+      } catch (e) {
+        console.error("Failed to load saved draft", e);
+      }
+    }
+
+    return {
+      title: post?.title ?? savedDraft.title ?? "",
+      caption: post?.caption ?? savedDraft.caption ?? "",
+      image_url: post?.image_url ?? savedDraft.image_url ?? "",
+      platforms: post?.platforms ?? savedDraft.platforms ?? [],
       context_type: post?.context_type ?? context.contextType,
       brand_id: post?.brand_id ?? context.brandId,
-      music: post?.music ?? "",
-      cta: post?.cta ?? "",
-      link_url: post?.link_url ?? "",
-      // Reopening a draft or a scheduled post restores its framing exactly.
-      platform_media: post?.platform_media ?? {},
-      publish_date: post?.publish_date ?? today(),
-      publish_time: post?.publish_time ?? currentTime(),
+      music: post?.music ?? savedDraft.music ?? "",
+      cta: post?.cta ?? savedDraft.cta ?? "",
+      link_url: post?.link_url ?? savedDraft.link_url ?? "",
+      platform_media: post?.platform_media ?? savedDraft.platform_media ?? {},
+      publish_date: post?.publish_date ?? savedDraft.publish_date ?? today(),
+      publish_time: post?.publish_time ?? savedDraft.publish_time ?? currentTime(),
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-    }),
-    [post, context],
-  );
+    };
+  }, [post, context, DRAFT_KEY]);
 
   const {
     register,
@@ -127,15 +161,95 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     setValue,
     setError,
     getValues,
+    reset,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<PostFormValues>({
     resolver: zodResolver(postSchema),
     defaultValues,
   });
 
   const title = watch("title");
+  const caption = watch("caption");
+  const platforms = watch("platforms");
+  const music = watch("music");
+
+  // Save draft state to sessionStorage whenever key form inputs change
+  useEffect(() => {
+    if (post) return; // Editing existing database post; no need for temp draft
+    try {
+      const values = getValues();
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(values));
+    } catch (e) {
+      // Ignore quota errors
+    }
+  }, [title, caption, platforms, music, post, DRAFT_KEY, getValues]);
   const imageUrl = watch("image_url");
+
+  /**
+   * Every image on this post, in publish order.
+   *
+   * Ordinary state rather than a form field, deliberately. The list is
+   * machine-written — the uploader builds each entry from a completed upload —
+   * so there is nothing in it for a validator to reject, and keeping an array
+   * that is reordered and spliced out of React Hook Form avoids relying on how
+   * `setValue` reconciles arrays. `image_url` *is* a form field, mirrored from
+   * the first item below: it is the only part of this a member can make invalid
+   * (by attaching no images at all), and it is what the schema's message is
+   * really about.
+   *
+   * A post written before this column existed is rebuilt from its one image, so
+   * reopening it shows the picture it has always had rather than an empty
+   * uploader.
+   */
+  const MEDIA_DRAFT_KEY = `flowpost_media_draft_${post?.id ?? "new"}_${context.contextType}_${context.brandId ?? "personal"}`;
+
+  const [media, setMediaState] = useState<PostMediaItem[]>(() => {
+    if (post?.media) return post.media;
+    if (post?.image_url) return mediaFromImageUrl(post.image_url);
+    try {
+      const raw = sessionStorage.getItem(MEDIA_DRAFT_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      // ignore parse error
+    }
+    return [];
+  });
+
+  /** True once the list has been touched — see the action bar's save state. */
+  const [mediaDirty, setMediaDirty] = useState(false);
+
+  /**
+   * Which image the composer is working on.
+   *
+   * One number for the whole composer: the thumbnail rail highlights it, the
+   * crop editor edits it and the preview's carousel shows it. Two independent
+   * "current image" states is how clicking thumbnail 3 ends up previewing
+   * image 1.
+   */
+  const [selectedMedia, setSelectedMedia] = useState(0);
+
+  /** When this post was last written to the database, for the action bar. */
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
+  /**
+   * What each connected network will take, straight from the API.
+   *
+   * Never a table of literals here. The server derives these from the same
+   * validator constants its publishers enforce, so the composer cannot offer a
+   * carousel a publish would reject — and bringing a real carousel online on a
+   * new network needs no change in this file.
+   */
+  const mediaCapabilities = useMemo(
+    () =>
+      Object.fromEntries(
+        integrations.map((integration) => [
+          integration.provider,
+          integration.media ?? DEFAULT_MEDIA_CAPABILITY,
+        ]),
+      ) as Partial<Record<Platform, typeof DEFAULT_MEDIA_CAPABILITY>>,
+    [integrations],
+  );
 
   /**
    * The register the AI writes in. Form state rather than a saved setting: it
@@ -300,6 +414,17 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         shouldValidate: true,
       });
     }
+
+    // On a new post (/posts/new), save the draft automatically after generation
+    // and route to /posts/:id/edit so refreshing preserves all generated state.
+    if (!post && generated) {
+      try {
+        const saved = await persist({ ...values, caption: getValues("caption") }, "draft");
+        navigate(`/posts/${saved.id}/edit`, { replace: true });
+      } catch (cause) {
+        console.error("[ai] auto-save on generation failed", cause);
+      }
+    }
   };
 
   /**
@@ -336,6 +461,60 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
 
   // The first selected platform with a known slot drives the suggestion chip.
   const selectedPlatforms = watch("platforms");
+
+  /**
+   * How many images the uploader will accept.
+   *
+   * The most generous of the selected networks, not the least: a post going to
+   * Instagram and X should not be capped at four because X is, when the
+   * Instagram carousel is the point of it. The per-network truth is in the
+   * compatibility list beside the preview, where it can be stated rather than
+   * silently enforced.
+   *
+   * With nothing selected yet it is the most generous network available, so an
+   * empty composer never refuses an upload for a limit no platform has imposed.
+   */
+  const maxMedia = useMemo(() => {
+    const relevant = selectedPlatforms.length
+      ? selectedPlatforms.map((platform) => mediaCapabilities[platform])
+      : Object.values(mediaCapabilities);
+    const limits = relevant
+      .filter(Boolean)
+      .map((capability) => capability!.maxItems);
+    // Nothing known yet — the integrations request has not answered, or no
+    // account is connected. See the constant for why this is not 1.
+    return limits.length
+      ? Math.max(...limits)
+      : MEDIA_LIMIT_BEFORE_CAPABILITIES_LOAD;
+  }, [selectedPlatforms, mediaCapabilities]);
+
+  /**
+   * Writes the media list, keeping `image_url` on the first item.
+   *
+   * That column is what the post list, the dashboard, the AI pipeline and every
+   * pre-multi-image read path use, and it is what the publish path falls back
+   * to. Keeping it in step here — in the one function that changes the list —
+   * is what makes "the composer grew a media array" invisible to all of them.
+   */
+  const setMedia = (next: PostMediaItem[]) => {
+    setMediaState(next);
+    setMediaDirty(true);
+    if (!post) {
+      try {
+        sessionStorage.setItem(MEDIA_DRAFT_KEY, JSON.stringify(next));
+      } catch (e) {
+        // ignore
+      }
+    }
+    setValue("image_url", next[0]?.url ?? "", {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    // Selection can outlive the item it pointed at.
+    setSelectedMedia((current) =>
+      Math.min(current, Math.max(next.length - 1, 0)),
+    );
+  };
   const suggestedFor = selectedPlatforms.find((p) => SUGGESTED_TIMES[p]);
   const suggestion = suggestedFor
     ? {
@@ -373,11 +552,23 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
       platform_media: Object.keys(values.platform_media ?? {}).length
         ? values.platform_media
         : null,
+      // The ordered list, exactly as the composer arranged it — this array is
+      // what the backend publishes, so a reorder here is a reorder on the
+      // network. Null rather than `[]` for a post with no media, so it reads
+      // the same as every post written before this column existed.
+      media: media.length ? media : null,
     };
 
     const saved = post
       ? await updatePost.mutateAsync({ id: post.id, input })
       : await createPost.mutateAsync(input);
+
+    // Only after the write succeeded — the indicator reports what happened,
+    // not what was attempted.
+    setLastSavedAt(new Date());
+    // The values now on screen *are* what is stored, so nothing is unsaved.
+    reset(values, { keepValues: true });
+    setMediaDirty(false);
 
     // A generation from this session belongs to the row now that one exists.
     // Storing it keeps the AI panels populated on reload and preserves which
@@ -604,16 +795,23 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   if (published) {
     return (
       <PublishedSummary
-        // The Instagram crop is the closest thing to "the published image"
-        // this app has — a per-network rendition, derived from the untouched
-        // original. Falls back to the original when nothing was cropped.
-        imageUrl={withCrop(
-          getValues("image_url"),
-          getValues("platform_media")?.[
-            published.platforms.find((p) => p.status === "PUBLISHED")?.provider ??
-              ""
-          ],
-        )}
+        // The first image as it was delivered — its own crop applied, derived
+        // from the untouched original. A carousel has no single "published
+        // image", and the first one is what a feed shows as the post.
+        //
+        // Falls back to the per-network framing of `image_url` for a post that
+        // predates the media list, which is exactly what those posts published.
+        imageUrl={
+          media[0]
+            ? itemUrl(media[0])
+            : withCrop(
+                getValues("image_url"),
+                getValues("platform_media")?.[
+                  published.platforms.find((p) => p.status === "PUBLISHED")
+                    ?.provider ?? ""
+                ],
+              )
+        }
         caption={getValues("caption")}
         music={getValues("music")}
         platforms={published.platforms}
@@ -629,326 +827,338 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Media</CardTitle>
-            <CardDescription>
-              A strong visual doubles engagement on most platforms.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Controller
-              control={control}
-              name="image_url"
-              render={({ field }) => (
-                <ImageUploader value={field.value} onChange={field.onChange} />
-              )}
-            />
-            <FieldError message={errors.image_url?.message} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Content</CardTitle>
-            <CardDescription>
-              Title for your workspace, caption for your audience.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="post-title">Title</Label>
-              <Input
-                id="post-title"
-                placeholder="Q3 product launch announcement"
-                {...register("title")}
+      {/* Composer left, preview right. The preview column is fixed-width and
+          sticky on desktop down the entire form length. */}
+      <div className="grid gap-6 items-start xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Media</CardTitle>
+              <CardDescription>
+                Add images to your post — drag the thumbnails to set their order.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <MediaUploader
+                items={media}
+                onChange={setMedia}
+                selected={selectedMedia}
+                onSelect={setSelectedMedia}
+                maxItems={maxMedia}
               />
-              <FieldError message={errors.title?.message} />
-            </div>
-            <div className="space-y-2">
-              <Label>Caption</Label>
+              <FieldError message={errors.image_url?.message} />
+
+              {media.length > 0 && (
+                <MediaFormatPanel
+                  items={media}
+                  onChange={setMedia}
+                  selected={selectedMedia}
+                  onSelect={setSelectedMedia}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Content</CardTitle>
+              <CardDescription>
+                Title for your workspace, caption for your audience.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="post-title">Title</Label>
+                <Input
+                  id="post-title"
+                  placeholder="Q3 product launch announcement"
+                  {...register("title")}
+                />
+                <FieldError message={errors.title?.message} />
+              </div>
+              <div className="space-y-2">
+                <Label>Caption</Label>
+                <Controller
+                  control={control}
+                  name="caption"
+                  render={({ field }) => (
+                    <CaptionEditor value={field.value} onChange={field.onChange} />
+                  )}
+                />
+                <FieldError message={errors.caption?.message} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="post-music">Music / Song</Label>
+                <Input
+                  id="post-music"
+                  placeholder="Add song / music (optional)"
+                  {...register("music")}
+                />
+                <FieldError message={errors.music?.message} />
+              </div>
+              {isBrand && (
+                <details className="rounded-lg border p-3">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Campaign options
+                  </summary>
+                  <div className="mt-3 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="post-cta">Call to action</Label>
+                      <Input
+                        id="post-cta"
+                        placeholder={`Try ${contextLabel} today`}
+                        {...register("cta")}
+                      />
+                      <FieldError message={errors.cta?.message} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="post-link">Link</Label>
+                      <Input
+                        id="post-link"
+                        placeholder="https://…"
+                        {...register("link_url")}
+                      />
+                      <FieldError message={errors.link_url?.message} />
+                    </div>
+                  </div>
+                </details>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Platforms</CardTitle>
+              <CardDescription>
+                {isBrand
+                  ? `Accounts connected to ${contextLabel}.`
+                  : "Your personal connected accounts."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
               <Controller
                 control={control}
-                name="caption"
+                name="platforms"
                 render={({ field }) => (
-                  <CaptionEditor value={field.value} onChange={field.onChange} />
+                  <PlatformSelector
+                    value={field.value}
+                    onChange={field.onChange}
+                    integrations={integrations}
+                    contextLabel={contextLabel}
+                  />
                 )}
               />
-              <FieldError message={errors.caption?.message} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="post-music">Music / Song</Label>
-              <Input
-                id="post-music"
-                placeholder="Add song / music (optional)"
-                {...register("music")}
-              />
-              <FieldError message={errors.music?.message} />
-            </div>
-            {isBrand && (
-              <details className="rounded-lg border p-3">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Campaign options
-                </summary>
-                <div className="mt-3 space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="post-cta">Call to action</Label>
-                    <Input
-                      id="post-cta"
-                      placeholder={`Try ${contextLabel} today`}
-                      {...register("cta")}
-                    />
-                    <FieldError message={errors.cta?.message} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="post-link">Link</Label>
-                    <Input
-                      id="post-link"
-                      placeholder="https://…"
-                      {...register("link_url")}
-                    />
-                    <FieldError message={errors.link_url?.message} />
-                  </div>
+              <FieldError message={errors.platforms?.message} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Schedule</CardTitle>
+              <CardDescription>
+                Pick the moment your audience is most active.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {suggestion && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Suggested:{" "}
+                    <span className="font-semibold text-foreground">
+                      {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
+                    </span>{" "}
+                    for {suggestion.name} — general recommendation, not yet based
+                    on your analytics.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setValue("publish_time", suggestion.time, {
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    Use
+                  </Button>
                 </div>
-              </details>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Platforms</CardTitle>
-          <CardDescription>
-            {isBrand
-              ? `Accounts connected to ${contextLabel}.`
-              : "Your personal connected accounts."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Controller
-            control={control}
-            name="platforms"
-            render={({ field }) => (
-              <PlatformSelector
-                value={field.value}
-                onChange={field.onChange}
-                integrations={integrations}
-                contextLabel={contextLabel}
+              )}
+              <SchedulePicker
+                value={schedule}
+                onChange={(next) => {
+                  setValue("publish_date", next.publish_date, { shouldValidate: true });
+                  setValue("publish_time", next.publish_time, { shouldValidate: true });
+                  setValue("timezone", next.timezone, { shouldValidate: true });
+                }}
               />
-            )}
-          />
-          <FieldError message={errors.platforms?.message} />
-        </CardContent>
-      </Card>
+              <FieldError message={errors.publish_date?.message} />
+              <FieldError message={errors.publish_time?.message} />
+            </CardContent>
+          </Card>
 
-      {/* Personal's Preview & Adjust workflow. Brand keeps the composer it
-          has — its media rules are a separate piece of work. */}
-      {!isBrand && imageUrl?.trim() && (
-        <Controller
-          control={control}
-          name="platform_media"
-          render={({ field }) => (
-            <MediaFormatPanel
-              imageUrl={imageUrl}
+          {isBrand && (
+            <AiStrategyPanel studio={studio} hasImage={Boolean(imageUrl?.trim())} />
+          )}
+
+          <AiCaptionPanel
+            result={ai.result}
+            isGenerating={generating}
+            error={ai.error}
+            blockedReason={blockedReason}
+            audience={audience}
+            onAudienceChange={setAudience}
+            hasImage={Boolean(imageUrl?.trim())}
+            currentCaption={watch("caption")}
+            onGenerate={handleGenerate}
+            showPlatformVariations={isBrand}
+            onUseCaption={(caption) =>
+              setValue("caption", applyCaption(caption, ai.result?.hashtags ?? []), {
+                shouldValidate: true,
+              })
+            }
+            onAppendHashtags={handleAppendHashtags}
+            {...(!isBrand && {
+              onUseSong: (song: string) =>
+                setValue("music", song, { shouldValidate: true }),
+            })}
+          />
+
+          {!isBrand && (
+            <ReachPanel
+              caption={watch("caption")}
               platforms={selectedPlatforms}
-              value={field.value ?? {}}
-              onChange={field.onChange}
+              hasImage={Boolean(imageUrl?.trim())}
+              music={watch("music")}
+              onApplyCaption={(next) =>
+                setValue("caption", next, { shouldValidate: true })
+              }
+              {...(ai.result?.imageAnalysis && {
+                imageAnalysis: ai.result.imageAnalysis,
+              })}
+              {...(suggestion && {
+                suggestedTime: {
+                  name: suggestion.name,
+                  time: suggestion.time,
+                  label: dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A"),
+                  use: () =>
+                    setValue("publish_time", suggestion.time, {
+                      shouldValidate: true,
+                    }),
+                },
+              })}
             />
           )}
-        />
-      )}
 
-      {!isBrand && (
-        <PlatformPreview
-          platforms={selectedPlatforms}
-          imageUrl={imageUrl ?? ""}
-          caption={watch("caption")}
-          music={watch("music")}
-          media={watch("platform_media") ?? {}}
-        />
-      )}
+          <PublishStatus
+            platforms={publishState?.platforms ?? []}
+            publishingProvider={publish.isPending ? publishingProvider : null}
+          />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Schedule</CardTitle>
-          <CardDescription>
-            Pick the moment your audience is most active.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {suggestion && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
-              <p className="text-xs text-muted-foreground">
-                Suggested:{" "}
-                <span className="font-semibold text-foreground">
-                  {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
-                </span>{" "}
-                for {suggestion.name} — general recommendation, not yet based
-                on your analytics.
-              </p>
+          {isBrand && post && (
+            <MarketingStudio
+              post={post}
+              onUseCaption={(caption) =>
+                setValue("caption", caption, { shouldValidate: true })
+              }
+            />
+          )}
+        </div>
+
+        <div className="min-w-0 xl:sticky xl:top-6 self-start">
+          <Card>
+            <CardContent className="pt-6">
+              <PlatformPreview
+                platforms={selectedPlatforms}
+                media={media}
+                caption={watch("caption")}
+                music={watch("music")}
+                capabilities={mediaCapabilities}
+                activeIndex={selectedMedia}
+                authorName={authorName}
+                accountMap={Object.fromEntries(
+                  integrations
+                    .filter((i) => i.connected && i.account)
+                    .map((i) => [
+                      i.provider as Platform,
+                      {
+                        displayName: i.account?.displayName,
+                        username: i.account?.username,
+                        profileImage: i.account?.profileImage,
+                      },
+                    ]),
+                )}
+                onActiveIndexChange={setSelectedMedia}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="sticky bottom-4 z-20">
+        <div className="glass flex flex-wrap items-center justify-between sm:justify-end gap-2 rounded-lg border p-3 shadow-elevated">
+          <p className="w-full sm:w-auto sm:mr-auto flex items-center gap-1.5 text-xs text-muted-foreground pb-1 sm:pb-0">
+            {isDirty || mediaDirty ? (
+              <>
+                <CircleDashed className="h-3.5 w-3.5" />
+                Unsaved changes
+              </>
+            ) : lastSavedAt ? (
+              <>
+                <CircleCheck className="h-3.5 w-3.5 text-emerald-500" />
+                Saved {dayjs(lastSavedAt).format("HH:mm")}
+              </>
+            ) : null}
+          </p>
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={isSubmitting}
+              onClick={submitWithStatus("draft")}
+              className="flex-1 sm:flex-initial"
+            >
+              <FileText className="h-4 w-4" />
+              Save Draft
+            </Button>
+            {isBrand && (
               <Button
                 type="button"
+                variant="secondary"
                 size="sm"
-                variant="outline"
-                onClick={() =>
-                  setValue("publish_time", suggestion.time, {
-                    shouldValidate: true,
-                  })
-                }
+                loading={generating}
+                disabled={Boolean(blockedReason)}
+                title={blockedReason ?? undefined}
+                onClick={handleGenerate}
+                className="flex-1 sm:flex-initial"
               >
-                Use
+                <Sparkles className="h-4 w-4" />
+                {hasGenerated ? "Regenerate" : "Generate with AI"}
               </Button>
-            </div>
-          )}
-          <SchedulePicker
-            value={schedule}
-            onChange={(next) => {
-              setValue("publish_date", next.publish_date, { shouldValidate: true });
-              setValue("publish_time", next.publish_time, { shouldValidate: true });
-              setValue("timezone", next.timezone, { shouldValidate: true });
-            }}
-          />
-          <FieldError message={errors.publish_date?.message} />
-          <FieldError message={errors.publish_time?.message} />
-        </CardContent>
-      </Card>
-
-      {/* Brand-only: goals, funnel stages, brand voice and competitor context
-          are marketing concepts. Personal gets the AI Assistant below instead. */}
-      {isBrand && (
-        <AiStrategyPanel studio={studio} hasImage={Boolean(imageUrl?.trim())} />
-      )}
-
-      <AiCaptionPanel
-        result={ai.result}
-        isGenerating={generating}
-        error={ai.error}
-        blockedReason={blockedReason}
-        audience={audience}
-        onAudienceChange={setAudience}
-        hasImage={Boolean(imageUrl?.trim())}
-        onGenerate={handleGenerate}
-        onUseCaption={(caption) =>
-          // Personal folds the hashtags in with the caption — one click, and
-          // what is in the editor is what Instagram receives. Brand keeps the
-          // caption alone and appends tags from the Marketing Studio.
-          setValue("caption", applyCaption(caption, ai.result?.hashtags ?? []), {
-            shouldValidate: true,
-          })
-        }
-        onAppendHashtags={handleAppendHashtags}
-        {...(!isBrand && {
-          onUseSong: (song: string) =>
-            setValue("music", song, { shouldValidate: true }),
-        })}
-      />
-
-      {/* Personal's second, optional assistant. Brand reads the same analysis
-          through the Marketing Studio below, so it is not repeated here. */}
-      {!isBrand && (
-        <ReachPanel
-          caption={watch("caption")}
-          platforms={selectedPlatforms}
-          hasImage={Boolean(imageUrl?.trim())}
-          music={watch("music")}
-          // The one thing the panel is allowed to change, and it goes through
-          // the same `setValue` every other panel uses — so Save Draft,
-          // Schedule, Publish and a re-analysis all read the applied caption
-          // without a second copy of it existing anywhere.
-          onApplyCaption={(next) =>
-            setValue("caption", next, { shouldValidate: true })
-          }
-          {...(ai.result?.imageAnalysis && {
-            imageAnalysis: ai.result.imageAnalysis,
-          })}
-          {...(suggestion && {
-            suggestedTime: {
-              name: suggestion.name,
-              time: suggestion.time,
-              label: dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A"),
-              // Feeds the existing schedule field rather than scheduling
-              // anything itself. Nothing is saved, sent or scheduled until the
-              // member presses Schedule below.
-              use: () =>
-                setValue("publish_time", suggestion.time, {
-                  shouldValidate: true,
-                }),
-            },
-          })}
-        />
-      )}
-
-      {/* Where this post stands on each network. Hides itself entirely until
-          there is something to report. */}
-      <PublishStatus
-        platforms={publishState?.platforms ?? []}
-        publishingProvider={publish.isPending ? publishingProvider : null}
-      />
-
-      {/* Everything the pipeline produced, plus the approval gate. Only on an
-          existing post — there is nothing stored to review before that. This is
-          the whole of the old AI Studio's right-hand panel. */}
-      {isBrand && post && (
-        <MarketingStudio
-          post={post}
-          onUseCaption={(caption) =>
-            setValue("caption", caption, { shouldValidate: true })
-          }
-        />
-      )}
-
-      <div className="sticky bottom-4 z-10">
-        <div className="glass flex flex-wrap items-center justify-end gap-2 rounded-lg border p-3 shadow-elevated">
-          <Button
-            type="button"
-            variant="outline"
-            loading={isSubmitting}
-            onClick={submitWithStatus("draft")}
-          >
-            <FileText />
-            Save Draft
-          </Button>
-          {/* Brand keeps AI in the primary workflow; Personal's only AI entry
-              point is the optional AI Assistant panel above. */}
-          {isBrand && (
+            )}
             <Button
               type="button"
               variant="secondary"
-              loading={generating}
-              disabled={Boolean(blockedReason)}
-              title={blockedReason ?? undefined}
-              onClick={handleGenerate}
+              size="sm"
+              loading={isSubmitting}
+              onClick={submitWithStatus("scheduled")}
+              className="flex-1 sm:flex-initial"
             >
-              <Sparkles />
-              {hasGenerated ? "Regenerate" : "Generate with AI"}
+              <CalendarClock className="h-4 w-4" />
+              Schedule
             </Button>
-          )}
-          <Button
-            type="button"
-            variant="secondary"
-            loading={isSubmitting}
-            onClick={submitWithStatus("scheduled")}
-          >
-            <CalendarClock />
-            Schedule
-          </Button>
-          {/* The only button that leaves the app. `loading` covers the save
-              *and* the LinkedIn round trip, and the Button component disables
-              itself while loading — which is the first of the three duplicate
-              guards. The other two are the mutation's own in-flight check and
-              the backend's conditional claim; only the last one is a
-              guarantee. See hooks/usePublish.ts. */}
-          <Button
-            type="button"
-            loading={isSubmitting || publish.isPending}
-            onClick={handlePublish}
-            className="shadow-glow"
-          >
-            <Send />
-            {publish.isPending ? "Publishing…" : "Publish"}
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              loading={isSubmitting || publish.isPending}
+              onClick={handlePublish}
+              className="shadow-glow flex-1 sm:flex-initial"
+            >
+              <Send className="h-4 w-4" />
+              {publish.isPending ? "Publishing…" : "Publish"}
+            </Button>
+          </div>
         </div>
       </div>
     </form>

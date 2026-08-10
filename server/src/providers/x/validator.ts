@@ -27,6 +27,32 @@ import type { ProviderMediaAsset } from '../provider.interface';
 export const X_MAX_TEXT_LENGTH = 280;
 
 /**
+ * How many images one post may carry.
+ *
+ * X's own limit, and it is not a FlowPost ceiling that could be raised later:
+ * a post takes up to four photos, or one video, or one GIF, and mixing them is
+ * not allowed either.
+ */
+export const X_MAX_MEDIA_ITEMS = 4;
+
+/**
+ * What the upload endpoint accepts for a photo.
+ *
+ * Wider than Instagram's JPEG-only and wider than LinkedIn's, which is why this
+ * is stated per provider — an image the media service would transcode for Meta
+ * is uploaded to X untouched.
+ */
+export const X_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
+/** X's documented ceiling for a photo upload. */
+export const X_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
  * True when a connection's *granted* scopes allow publishing.
  *
  * A member can decline a permission on the consent screen and still complete the
@@ -51,12 +77,13 @@ export function countCharacters(text: string): number {
 export function validatePost(input: {
   caption: string;
   media?: ProviderMediaAsset[];
-}): { text: string } {
+}): { text: string; media: ProviderMediaAsset[] } {
   const text = input.caption.trim();
+  const media = validateMedia(input.media);
 
-  if (!text) {
+  if (!text && media.length === 0) {
     throw new ProviderError(
-      'An X post needs some text — X has no image-only posts through this API.',
+      'An X post needs some text or an image.',
       400,
       'x',
     );
@@ -72,26 +99,77 @@ export function validatePost(input: {
     );
   }
 
-  // Media is refused, loudly, rather than dropped.
-  //
-  // Attaching an image to a post on X means uploading it first, and the upload
-  // endpoint is not part of the v2 surface this integration is built on — it is
-  // a separate media API whose availability depends on the app's access tier. We
-  // have not verified what this app's tier grants, and building an upload
-  // pipeline against an endpoint that may answer 403 would be inventing a
-  // capability rather than integrating one.
-  //
-  // So: a member who attached an image is told their image cannot go out, and
-  // nothing is published. A post that quietly lost its image would be a worse
-  // answer than one that fails with a reason.
-  if (input.media && input.media.length > 0) {
+  return { text, media };
+}
+
+/**
+ * Checks attached media is something X will take.
+ *
+ * Runs against the bytes the media service downloaded, which for X are also the
+ * bytes that get uploaded — unlike Meta, X does not fetch from a URL. So this is
+ * checking the exact file that will be sent, and a rejection here costs the
+ * member nothing but the time it took to say so.
+ *
+ * Anything over the ceiling is refused rather than trimmed to the first four.
+ * Publishing a subset of what someone attached, to a feed where fixing it means
+ * deleting the post, is the outcome this whole layer exists to prevent.
+ */
+export function validateMedia(
+  media: ProviderMediaAsset[] | undefined,
+): ProviderMediaAsset[] {
+  if (!media || media.length === 0) return [];
+
+  if (media.length > X_MAX_MEDIA_ITEMS) {
     throw new ProviderError(
-      'FlowPost can only publish text posts to X right now. ' +
-        'Remove the image, or publish this post to another network.',
+      `An X post holds ${X_MAX_MEDIA_ITEMS} images. ` +
+        `This post has ${media.length} — remove ${media.length - X_MAX_MEDIA_ITEMS} and try again.`,
       400,
       'x',
     );
   }
 
-  return { text };
+  for (const asset of media) {
+    if (asset.kind !== 'image') {
+      throw new ProviderError(
+        `${asset.kind === 'video' ? 'Videos' : 'That media'} can't be published to X from ` +
+          'FlowPost yet. Publish this post with images instead.',
+        400,
+        'x',
+      );
+    }
+
+    if (!X_IMAGE_MIME_TYPES.has(asset.mimeType)) {
+      throw new ProviderError(
+        `X does not accept ${asset.mimeType || 'that image format'}. ` +
+          'Use a JPEG, PNG, WEBP or GIF and try again.',
+        400,
+        'x',
+      );
+    }
+
+    if (asset.byteLength === 0) {
+      throw new ProviderError(
+        'That image file is empty. Re-upload it and try again.',
+        400,
+        'x',
+      );
+    }
+
+    if (asset.byteLength > X_MAX_IMAGE_BYTES) {
+      throw new ProviderError(
+        `That image is ${formatMegabytes(asset.byteLength)}, over X's ` +
+          `${formatMegabytes(X_MAX_IMAGE_BYTES)} limit. Compress it and try again.`,
+        400,
+        'x',
+      );
+    }
+  }
+
+  return media;
+}
+
+/** "5MB", "2.4MB" — sized for a sentence a member reads, not for precision. */
+function formatMegabytes(bytes: number): string {
+  const megabytes = bytes / (1024 * 1024);
+  return `${megabytes >= 10 ? Math.round(megabytes) : megabytes.toFixed(1)}MB`;
 }

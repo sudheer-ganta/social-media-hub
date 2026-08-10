@@ -1,423 +1,448 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Crop as CropIcon, Info, Sliders, TriangleAlert } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  Copy,
+  Crop as CropIcon,
+  Info,
+  RotateCcw,
+  Sliders,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { CropView } from "./CropView";
+import { cloudinaryService } from "@/services";
+import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES } from "@/constants";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { PlatformIcon } from "@/components/shared/PlatformIcon";
-import { PLATFORM_MAP } from "@/constants";
-import {
-  RATIO_LABEL,
-  RATIO_VALUE,
-  applyCropToAll,
   computeCrop,
   focusOf,
+  isFullFrame,
   isSoft,
-  ratiosFor,
-  reconcileCrops,
-  recommendedRatio,
   type AspectRatioId,
-  type PlatformCrop,
-  type PlatformMedia,
 } from "@/utils/crop";
+import {
+  COMPOSER_FORMATS,
+  activeFormat,
+  applyFormat,
+  cropFor,
+  itemAspect,
+} from "@/utils/media";
 import { cn } from "@/lib/utils";
-import type { Platform } from "@/types";
+import type { PostMediaItem } from "@/types";
 
 /**
- * Media & Format — one upload, framed per network.
+ * Format, and the crop editor for one image.
  *
- * The section that makes "FlowPost handles the platform formatting" true. It
- * shows the member what they actually uploaded, then one tab per selected
- * network where the framing can be adjusted. Nothing here touches the file:
- * every control edits a small crop record (see `utils/crop.ts`) that becomes a
- * delivery transformation at publish time.
+ * ─── Why the crop editor is contextual ───────────────────────────────────────
+ * It edits *the selected image*, and it is not on screen until asked for. The
+ * previous version of this panel put a permanent crop stage at the top of the
+ * composer, which made framing — a thing most posts never need — the largest
+ * element on the page. Selecting a thumbnail and pressing Crop is the same
+ * capability at the size of its actual importance.
  *
- * The original's dimensions are read from the browser's own decode of the
- * image — `naturalWidth`/`naturalHeight` — rather than asked of Cloudinary,
- * because it is one fewer request and it is the same number either way.
+ * ─── Where a crop lives ──────────────────────────────────────────────────────
+ * On the item. That is what makes it survive selection changes, reorders and a
+ * reload without any of this component tracking it: switching to image 3 and
+ * back to image 2 shows image 2's crop because it never went anywhere.
+ *
+ * ─── Mix ─────────────────────────────────────────────────────────────────────
+ * Mix is not a fourth crop. It clears every crop, so each picture publishes at
+ * the ratio it was uploaded at — a portrait stays portrait, a landscape stays
+ * landscape. See `utils/media.ts#applyFormat`.
  */
 
 interface MediaFormatPanelProps {
-  imageUrl: string;
-  platforms: Platform[];
-  value: PlatformMedia;
-  onChange: (next: PlatformMedia) => void;
+  items: PostMediaItem[];
+  onChange: (items: PostMediaItem[]) => void;
+  /** Index of the item under edit, or -1 when nothing is selected. */
+  selected: number;
+  onSelect: (index: number) => void;
 }
 
-/** Bytes of the stored asset, when the host will tell us without a download. */
-function useImageFacts(imageUrl: string) {
-  const [facts, setFacts] = useState<{
-    width: number;
-    height: number;
-    bytes: number | null;
-  } | null>(null);
+export function MediaFormatPanel({
+  items,
+  onChange,
+  selected,
+  onSelect,
+}: MediaFormatPanelProps) {
+  const [cropping, setCropping] = useState(false);
+  const replaceInput = useRef<HTMLInputElement>(null);
+  const [replacing, setReplacing] = useState(false);
 
-  useEffect(() => {
-    if (!imageUrl) {
-      setFacts(null);
+  const item = items[selected];
+  const format = activeFormat(items);
+
+  if (items.length === 0) return null;
+
+  const updateItem = (next: PostMediaItem) =>
+    onChange(items.map((entry, index) => (index === selected ? next : entry)));
+
+  const setFormat = (ratio: AspectRatioId) => {
+    onChange(applyFormat(items, ratio));
+  };
+
+  /**
+   * Re-frames the selected item, keeping its current shape.
+   *
+   * Zooming or re-centring an image under Mix necessarily gives it a crop —
+   * "keep the original ratio" is about the *shape*, and a zoomed picture is
+   * still that shape. So the ratio stays `original` and the rectangle shrinks
+   * inside it, which is exactly what `computeCrop` does with that id.
+   */
+  const reframe = (options: { zoom?: number; focusX?: number; focusY?: number }) => {
+    if (!item) return;
+    const focus = item.crop ? focusOf(item.crop) : { x: 0.5, y: 0.5 };
+    const ratio: AspectRatioId = item.crop?.ratio ?? "original";
+    const crop = computeCrop(ratio, itemAspect(item), {
+      zoom: options.zoom ?? item.crop?.zoom ?? 1,
+      focusX: options.focusX ?? focus.x,
+      focusY: options.focusY ?? focus.y,
+    });
+    // A full-frame rectangle under Mix is the state that has no crop at all —
+    // storing one would leave the format reading as "individually framed" for
+    // an image nobody actually framed.
+    updateItem({
+      ...item,
+      crop: ratio === "original" && isFullFrame(crop) ? null : crop,
+    });
+  };
+
+  /**
+   * Puts every other image on this one's format and framing.
+   *
+   * The *format and focal point* travel, not the rectangle: each image
+   * recomputes its own crop against its own dimensions, because a rectangle
+   * that frames a face in a landscape frames something else entirely in a
+   * portrait. Explicit, and never automatic — a member who cropped one image
+   * deliberately has not asked for the others to move.
+   */
+  const applyToAll = () => {
+    if (!item) return;
+    const ratio: AspectRatioId = item.crop?.ratio ?? "original";
+    const focus = item.crop ? focusOf(item.crop) : { x: 0.5, y: 0.5 };
+    onChange(
+      items.map((entry, index) => {
+        if (index === selected) return entry;
+        const crop = computeCrop(ratio, itemAspect(entry), {
+          zoom: item.crop?.zoom ?? 1,
+          focusX: focus.x,
+          focusY: focus.y,
+        });
+        return {
+          ...entry,
+          crop: ratio === "original" && isFullFrame(crop) ? null : crop,
+        };
+      }),
+    );
+    toast.success("Crop applied to every image");
+  };
+
+  const handleReplace = async (file: File | undefined) => {
+    if (!file || !item) return;
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      toast.error("Image is too large — maximum size is 20MB.");
       return;
     }
 
-    let cancelled = false;
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => {
-      if (cancelled) return;
-      setFacts({
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-        bytes: null,
+    setReplacing(true);
+    const previousUrl = item.url;
+    try {
+      const [{ url }, dimensions] = await Promise.all([
+        cloudinaryService.uploadImage(file),
+        readDimensions(file),
+      ]);
+
+      // Same id, same position — this is the same slot in the carousel with a
+      // different picture in it. The crop is recomputed rather than carried
+      // over: it was a rectangle over the old image's dimensions, and reusing
+      // it on a differently shaped file would frame something arbitrary.
+      updateItem({
+        ...item,
+        url,
+        width: dimensions.width,
+        height: dimensions.height,
+        crop: item.crop
+          ? cropFor(
+              { ...item, width: dimensions.width, height: dimensions.height },
+              item.crop.ratio,
+            )
+          : null,
       });
-      // Best effort, and deliberately after the dimensions are already shown:
-      // a HEAD that is blocked by CORS must cost the panel nothing.
-      fetch(imageUrl, { method: "HEAD" })
-        .then((response) => {
-          const length = Number(response.headers.get("content-length"));
-          if (!cancelled && Number.isFinite(length) && length > 0) {
-            setFacts((current) => (current ? { ...current, bytes: length } : current));
-          }
-        })
-        .catch(() => undefined);
-    };
-    image.onerror = () => {
-      if (!cancelled) setFacts(null);
-    };
-    image.src = imageUrl;
-
-    return () => {
-      cancelled = true;
-    };
-  }, [imageUrl]);
-
-  return facts;
-}
-
-function fileNameOf(url: string): string {
-  try {
-    return decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "image");
-  } catch {
-    return "image";
-  }
-}
-
-function formatBytes(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
-    : `${Math.round(bytes / 1024)} KB`;
-}
-
-/**
- * The crop, drawn.
- *
- * A window over the original rather than a re-rendered image: the `<img>` is
- * scaled and offset inside a fixed-ratio box so what is on screen is literally
- * the source pixels the crop selects. Clicking re-centres the frame, which is
- * the whole of the "crop control" — a drag-handle rectangle would be a second
- * way to express the same four numbers.
- */
-function CropView({
-  imageUrl,
-  crop,
-  onFocus,
-}: {
-  imageUrl: string;
-  crop: PlatformCrop;
-  onFocus?: (x: number, y: number) => void;
-}) {
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!onFocus || !boxRef.current) return;
-    const rect = boxRef.current.getBoundingClientRect();
-    // Where the click lands inside the visible window, mapped back onto the
-    // original's coordinate space through the crop currently on screen.
-    const withinX = (event.clientX - rect.left) / rect.width;
-    const withinY = (event.clientY - rect.top) / rect.height;
-    onFocus(crop.x + withinX * crop.w, crop.y + withinY * crop.h);
+      cloudinaryService.deleteImage(previousUrl);
+      toast.success("Image replaced");
+    } catch (error) {
+      toast.error("Replace failed", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setReplacing(false);
+    }
   };
 
+  const remove = () => {
+    if (!item) return;
+    onChange(items.filter((_, index) => index !== selected));
+    cloudinaryService.deleteImage(item.url);
+    onSelect(Math.min(selected, items.length - 2));
+    setCropping(false);
+  };
+
+  const soft =
+    item && item.crop && item.width && item.height
+      ? isSoft(item.crop, item.width, item.height)
+      : false;
+
   return (
-    <div
-      ref={boxRef}
-      onClick={handleClick}
-      role={onFocus ? "button" : undefined}
-      tabIndex={onFocus ? 0 : undefined}
-      aria-label={onFocus ? "Click to re-centre the crop" : undefined}
-      className={cn(
-        "relative w-full overflow-hidden rounded-lg border bg-muted/40",
-        onFocus && "cursor-crosshair",
+    <div className="space-y-4">
+      {/* ── Format ───────────────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <div>
+          <p className="text-sm font-medium">Format</p>
+          <p className="text-xs text-muted-foreground">
+            Choose how your media will appear on each platform
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {COMPOSER_FORMATS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={format === option.id}
+              onClick={() => setFormat(option.id)}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                format === option.id
+                  ? "border-primary bg-primary/10"
+                  : "hover:border-primary/40 hover:bg-accent/50",
+              )}
+            >
+              {option.id === "original" ? (
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+              ) : (
+                <FormatGlyph ratio={option.id} active={format === option.id} />
+              )}
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "block truncate text-sm font-medium",
+                    option.id === "original" && "text-primary",
+                  )}
+                >
+                  {option.label}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {option.hint}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {format === "original" && (
+          <p className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              &ldquo;Mix&rdquo; keeps each image at its original aspect ratio —
+              nothing is cropped and nothing is padded.
+            </span>
+          </p>
+        )}
+        {format === null && (
+          <p className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Your images are framed individually. Pick a format above to put
+              them all on the same one.
+            </span>
+          </p>
+        )}
+      </div>
+
+      {/* ── The selected image ───────────────────────────────────────────── */}
+      {item && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="mr-auto text-sm font-medium">
+              Selected media ·{" "}
+              <span className="tabular-nums text-muted-foreground">
+                {String(selected + 1).padStart(2, "0")}
+              </span>
+            </p>
+
+            <Button
+              type="button"
+              size="sm"
+              variant={cropping ? "secondary" : "outline"}
+              onClick={() => setCropping((open) => !open)}
+            >
+              <CropIcon />
+              Crop
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              loading={replacing}
+              onClick={() => replaceInput.current?.click()}
+            >
+              <RotateCcw />
+              Replace
+            </Button>
+            <input
+              ref={replaceInput}
+              type="file"
+              accept={Object.keys(ACCEPTED_IMAGE_TYPES).join(",")}
+              className="sr-only"
+              onChange={(event) => {
+                void handleReplace(event.target.files?.[0]);
+                // Cleared so choosing the same file twice still fires.
+                event.target.value = "";
+              }}
+            />
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={remove}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 />
+              Delete
+            </Button>
+          </div>
+
+          {cropping && (
+            <div className="grid gap-4 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[minmax(0,240px)_1fr]">
+              <CropView
+                imageUrl={item.url}
+                crop={item.crop}
+                imageAspect={itemAspect(item)}
+                onFocus={(x, y) => reframe({ focusX: x, focusY: y })}
+                className="rounded-lg border"
+              />
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="crop-zoom"
+                    className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    <Sliders className="h-3 w-3" />
+                    Zoom · {(item.crop?.zoom ?? 1).toFixed(1)}×
+                  </label>
+                  <input
+                    id="crop-zoom"
+                    type="range"
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    value={item.crop?.zoom ?? 1}
+                    onChange={(event) =>
+                      reframe({ zoom: Number(event.target.value) })
+                    }
+                    className="w-full accent-primary"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Click the image to choose what stays in frame.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => updateItem({ ...item, crop: null })}
+                  >
+                    <RotateCcw />
+                    Reset
+                  </Button>
+                  {items.length > 1 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={applyToAll}
+                    >
+                      <Copy />
+                      Apply to all
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setCropping(false)}
+                  >
+                    Done
+                  </Button>
+                </div>
+
+                {soft && (
+                  <p className="flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                    <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                    <span>
+                      This crop delivers about{" "}
+                      {Math.round(item.width * (item.crop?.w ?? 1))} ×{" "}
+                      {Math.round(item.height * (item.crop?.h ?? 1))}px, and
+                      feeds render around 1080px wide. FlowPost will not upscale
+                      it — a larger original, or less zoom, is the only real fix.
+                    </span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
-      style={{ aspectRatio: String(RATIO_VALUE[crop.ratio]) }}
-    >
-      <img
-        src={imageUrl}
-        alt=""
-        className="absolute max-w-none"
-        style={{
-          width: `${100 / crop.w}%`,
-          height: `${100 / crop.h}%`,
-          left: `${(-crop.x / crop.w) * 100}%`,
-          top: `${(-crop.y / crop.h) * 100}%`,
-        }}
-      />
     </div>
   );
 }
 
-export function MediaFormatPanel({
-  imageUrl,
-  platforms,
-  value,
-  onChange,
-}: MediaFormatPanelProps) {
-  const facts = useImageFacts(imageUrl);
-  const [active, setActive] = useState<Platform | null>(platforms[0] ?? null);
-
-  // Keep the open tab on a platform that is still selected.
-  useEffect(() => {
-    if (platforms.length === 0) setActive(null);
-    else if (!active || !platforms.includes(active)) setActive(platforms[0]);
-  }, [platforms, active]);
-
-  const imageAspect = facts ? facts.width / facts.height : 1;
-
-  /**
-   * Every selected platform has a crop, and only selected platforms do.
-   *
-   * Runs here rather than in the form because reconciling needs the original's
-   * aspect ratio, and this is the component that knows it. Waiting for `facts`
-   * matters: a crop built against a guessed 1:1 would be wrong for every
-   * landscape upload, and `reconcileCrops` deliberately never rebuilds an entry
-   * that already exists, so the wrong one would stick.
-   */
-  useEffect(() => {
-    if (!facts) return;
-    const next = reconcileCrops(value, platforms, facts.width / facts.height);
-    const changed =
-      Object.keys(next).length !== Object.keys(value).length ||
-      Object.keys(next).some((key) => next[key] !== value[key]);
-    if (changed) onChange(next);
-  }, [facts, platforms, value, onChange]);
-
-  const crop = active ? value[active] : undefined;
-
-  const soft = useMemo(
-    () =>
-      crop && facts ? isSoft(crop, facts.width, facts.height) : false,
-    [crop, facts],
-  );
-
-  if (!imageUrl) return null;
-
-  const update = (next: PlatformCrop) => {
-    if (!active) return;
-    onChange({ ...value, [active]: next });
-  };
-
-  const setRatio = (ratio: AspectRatioId) => {
-    if (!crop) return;
-    const focus = focusOf(crop);
-    update(computeCrop(ratio, imageAspect, { zoom: crop.zoom, focusX: focus.x, focusY: focus.y }));
-  };
-
-  const setZoom = (zoom: number) => {
-    if (!crop) return;
-    const focus = focusOf(crop);
-    update(computeCrop(crop.ratio, imageAspect, { zoom, focusX: focus.x, focusY: focus.y }));
-  };
-
-  const setFocus = (x: number, y: number) => {
-    if (!crop) return;
-    update(computeCrop(crop.ratio, imageAspect, { zoom: crop.zoom, focusX: x, focusY: y }));
-  };
+/** A rectangle in the option's own proportions. Cheaper than four icons. */
+function FormatGlyph({
+  ratio,
+  active,
+}: {
+  ratio: AspectRatioId;
+  active: boolean;
+}) {
+  const shape =
+    ratio === "4:5"
+      ? "h-5 w-4"
+      : ratio === "1:1"
+        ? "h-4.5 w-4.5"
+        : "h-3 w-5";
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CropIcon className="h-4 w-4 text-primary" />
-          Media &amp; Format
-        </CardTitle>
-        <CardDescription>
-          One upload, framed for each network. Your original file is never
-          changed — these are delivery settings.
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-5">
-        {/* ── The original ─────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-start gap-4 rounded-lg border bg-muted/20 p-3">
-          <img
-            src={imageUrl}
-            alt=""
-            className="h-20 w-20 shrink-0 rounded-md border object-cover"
-          />
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Original image
-            </p>
-            <p className="truncate text-sm font-medium">{fileNameOf(imageUrl)}</p>
-            <p className="text-xs text-muted-foreground">
-              {facts
-                ? `${facts.width} × ${facts.height}px${
-                    facts.bytes ? ` · ${formatBytes(facts.bytes)}` : ""
-                  }`
-                : "Reading dimensions…"}
-            </p>
-          </div>
-          {facts && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-[10px]",
-                Math.min(facts.width, facts.height) >= 1080
-                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
-                  : "border-amber-500/20 bg-amber-500/10 text-amber-600",
-              )}
-            >
-              {Math.min(facts.width, facts.height) >= 1080
-                ? "Good quality"
-                : "Low resolution"}
-            </Badge>
-          )}
-        </div>
-
-        {platforms.length === 0 ? (
-          <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            Choose a platform below and its format options appear here.
-          </p>
-        ) : (
-          <>
-            {/* ── Platform tabs ──────────────────────────────────────── */}
-            <div className="flex flex-wrap gap-1.5">
-              {platforms.map((platform) => (
-                <button
-                  key={platform}
-                  type="button"
-                  onClick={() => setActive(platform)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                    active === platform
-                      ? "border-primary/60 bg-primary/10 text-foreground"
-                      : "text-muted-foreground hover:bg-accent",
-                  )}
-                >
-                  <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
-                  {PLATFORM_MAP[platform]?.name ?? platform}
-                </button>
-              ))}
-            </div>
-
-            {active && crop && (
-              <div className="grid gap-4 sm:grid-cols-[minmax(0,260px)_1fr]">
-                <CropView imageUrl={imageUrl} crop={crop} onFocus={setFocus} />
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium">
-                      {PLATFORM_MAP[active]?.name ?? active}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Recommended: {RATIO_LABEL[recommendedRatio(active)]}
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Format
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {ratiosFor(active).map((ratio) => (
-                        <button
-                          key={ratio}
-                          type="button"
-                          onClick={() => setRatio(ratio)}
-                          className={cn(
-                            "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-                            crop.ratio === ratio
-                              ? "border-primary/60 bg-primary/10"
-                              : "text-muted-foreground hover:bg-accent",
-                          )}
-                        >
-                          {ratio}
-                          {ratio === recommendedRatio(active) && (
-                            <span className="ml-1 text-[9px] text-primary">★</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="crop-zoom"
-                      className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                    >
-                      <Sliders className="h-3 w-3" />
-                      Zoom · {crop.zoom.toFixed(1)}×
-                    </label>
-                    <input
-                      id="crop-zoom"
-                      type="range"
-                      min={1}
-                      max={3}
-                      step={0.1}
-                      value={crop.zoom}
-                      onChange={(event) => setZoom(Number(event.target.value))}
-                      className="w-full accent-primary"
-                    />
-                    <p className="text-[11px] text-muted-foreground">
-                      Click the preview to choose what stays in frame.
-                    </p>
-                  </div>
-
-                  {platforms.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        onChange(
-                          applyCropToAll(crop, platforms, imageAspect, active),
-                        )
-                      }
-                    >
-                      <Copy />
-                      Apply this crop to all
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {soft && facts && (
-              <p className="flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                <span>
-                  Original image may appear soft at this size. This crop delivers
-                  about {Math.round(facts.width * (crop?.w ?? 1))} ×{" "}
-                  {Math.round(facts.height * (crop?.h ?? 1))}px and feeds render
-                  around 1080px wide. FlowPost will not upscale it — a larger
-                  original, or less zoom, is the only real fix.
-                </span>
-              </p>
-            )}
-
-            <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Each platform gets an optimized version of your post. Your uploaded
-              file stays exactly as it is.
-            </p>
-          </>
-        )}
-      </CardContent>
-    </Card>
+    <span
+      className={cn(
+        "shrink-0 rounded-sm border-2",
+        shape,
+        active ? "border-primary" : "border-muted-foreground/60",
+      )}
+    />
   );
 }
 
-export { CropView };
+/** The replacement file's own dimensions, from the browser's decode. */
+function readDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      URL.revokeObjectURL(url);
+    };
+    image.onerror = () => {
+      resolve({ width: 0, height: 0 });
+      URL.revokeObjectURL(url);
+    };
+    image.src = url;
+  });
+}

@@ -3,8 +3,9 @@ import { ProviderError } from '../../provider.interface';
 import type { MetaErrorBody } from '../config';
 import { instagramConfig } from './config';
 import { REQUEST_TIMEOUT_MS, toProviderError } from './http';
-import { validatePost } from './validator';
+import { INSTAGRAM_MIN_CAROUSEL_ITEMS, validatePost } from './validator';
 import type {
+  InstagramCarouselContainerRequest,
   InstagramContainerStatusNode,
   InstagramCreatedNode,
   InstagramMediaContainerRequest,
@@ -35,6 +36,26 @@ import type {
  * what let us validate format and size before spending a request, and the URL
  * is what actually gets sent. Handing Meta a URL we have not fetched ourselves
  * would mean publishing an image nobody checked.
+ *
+ * ─── Two images or more: a carousel ──────────────────────────────────────────
+ *
+ * The same two steps with a layer in between, not a different API:
+ *
+ *   1. one container per image, each with `is_carousel_item=true` — these are
+ *      *children* and are never published on their own;
+ *   2. one more container with `media_type=CAROUSEL` and `children` naming them
+ *      in order, which is where the caption goes;
+ *   3. `media_publish` on that parent.
+ *
+ * Order is `children` order, which is the order the composer stored. Alt text
+ * belongs on each child, because that is the image it describes; a caption on a
+ * child is ignored by Meta, so it is only ever sent on the parent.
+ *
+ * Readiness is polled on every container, children included. A child that is
+ * still being fetched is exactly the condition that makes the parent fail with
+ * the same "media not ready" error a single image used to fail with, and it is
+ * cheaper to find out per child than to unpick which of ten Meta was unhappy
+ * about.
  *
  * ─── Ordering, and what a failure leaves behind ──────────────────────────────
  *
@@ -97,37 +118,112 @@ export async function publish(
     media: input.media,
   });
 
-  const [image] = media;
+  const accessToken = input.accessToken;
+  const igUserId = input.providerAccountId;
 
-  const containerId = await createMediaContainer({
-    accessToken: input.accessToken,
-    igUserId: input.providerAccountId,
-    body: {
-      image_url: image.sourceUrl,
-      ...(caption ? { caption } : {}),
-      ...(image.altText ? { alt_text: image.altText } : {}),
-    },
-  });
+  // Every image gets a container. For one image that container *is* the post;
+  // for several they are children and a parent is built over them below.
+  const isCarousel = media.length >= INSTAGRAM_MIN_CAROUSEL_ITEMS;
+  const childIds: string[] = [];
 
-  await waitForContainerReady({
-    accessToken: input.accessToken,
-    containerId,
-  });
+  for (const image of media) {
+    const containerId = await createMediaContainer({
+      accessToken,
+      igUserId,
+      body: {
+        image_url: image.sourceUrl,
+        // A child's caption is ignored by Meta — the parent carries the post's
+        // text — so it is only sent when this container is the post itself.
+        ...(caption && !isCarousel ? { caption } : {}),
+        ...(image.altText ? { alt_text: image.altText } : {}),
+        ...(isCarousel ? { is_carousel_item: true } : {}),
+      },
+    });
+
+    // Polled per child. A parent built over a container Meta is still fetching
+    // fails with the same not-ready error, and it does not say which child.
+    await waitForContainerReady({ accessToken, containerId });
+    childIds.push(containerId);
+  }
+
+  const publishableId = isCarousel
+    ? await createCarouselContainer({ accessToken, igUserId, childIds, caption })
+    : childIds[0];
+
+  if (isCarousel) {
+    // The parent has its own processing step: Meta assembles the carousel from
+    // children it has already fetched, and `media_publish` refuses it until
+    // that finishes.
+    await waitForContainerReady({ accessToken, containerId: publishableId });
+  }
 
   const mediaId = await publishContainer({
-    accessToken: input.accessToken,
-    igUserId: input.providerAccountId,
-    containerId,
+    accessToken,
+    igUserId,
+    containerId: publishableId,
   });
 
   return {
     urn: mediaId,
     // Best-effort: the post is already live, so a failed permalink read must
     // not fail the publish. See fetchPermalink.
-    url: await fetchPermalink(input.accessToken, mediaId),
+    url: await fetchPermalink(accessToken, mediaId),
     endpoint: 'media_publish',
-    mediaUrns: [containerId],
+    // Children first, then the container that was actually published — which
+    // for a single image is the one and only entry, exactly as before.
+    mediaUrns: isCarousel ? [...childIds, publishableId] : childIds,
   };
+}
+
+/**
+ * The carousel parent: the container that becomes the post.
+ *
+ * Carries no image of its own. `children` is a comma-delimited list of child
+ * container ids and its order is the order they render in, which is why the
+ * caller builds it from the stored media order rather than from anything Meta
+ * returns.
+ */
+async function createCarouselContainer(args: {
+  accessToken: string;
+  igUserId: string;
+  childIds: string[];
+  caption: string;
+}): Promise<string> {
+  const body: InstagramCarouselContainerRequest = {
+    media_type: 'CAROUSEL',
+    children: args.childIds.join(','),
+    ...(args.caption ? { caption: args.caption } : {}),
+  };
+
+  let response;
+  try {
+    response = await axios.post<InstagramCreatedNode>(
+      `${instagramConfig.graphUrl}/${encodeURIComponent(args.igUserId)}/media`,
+      null,
+      {
+        params: { ...body, access_token: args.accessToken },
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+    );
+  } catch (error) {
+    throw toProviderError(error, 'carousel container creation');
+  }
+
+  const id = response.data?.id;
+  if (!id) {
+    throw new ProviderError(
+      'Instagram accepted the carousel but did not return a container id',
+      502,
+      'instagram',
+      response.status,
+    );
+  }
+
+  console.info('[instagram] carousel container created', {
+    children: args.childIds.length,
+  });
+
+  return String(id);
 }
 
 /** Step 1 — Meta fetches the image and hands back a container id. */

@@ -130,6 +130,20 @@ export interface ProviderMediaRequirements {
    * API out of heap.
    */
   maxImageBytes: number;
+  /**
+   * How many items this network will carry on one post.
+   *
+   * Stated here so the *fetcher* knows it, for the same reason the formats are:
+   * a post carrying more than a network can take has already failed, and
+   * finding that out before downloading eleven images is the difference between
+   * a fast rejection and a slow one. The provider's own validator still checks
+   * it — this is an early exit, never the authority.
+   *
+   * The number itself comes from each provider's validator constant, so the
+   * catalogue the browser reads, the ceiling enforced here and the one the
+   * publisher enforces are all the same value. Absent means one.
+   */
+  maxItems?: number;
 }
 
 /**

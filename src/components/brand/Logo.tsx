@@ -75,7 +75,11 @@ export function Logo({
       <FlowPostIcon className={sizeClasses.icon} />
       {!iconOnly && (
         <span className={cn(sizeClasses.text, textColor, "font-extrabold tracking-tight")}>
-          Flow<span className="text-primary">Post</span>
+          {/* Pinned to the brand blue the wordmark has always rendered as.
+              It read `text-primary` when `--primary` happened to be this
+              colour; now that actions are ink, pinning is what preserves the
+              asset unchanged. */}
+          Flow<span className="text-[#2563EB]">Post</span>
         </span>
       )}
     </div>

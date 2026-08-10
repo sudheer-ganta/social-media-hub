@@ -27,6 +27,7 @@ export {
   isKnownProvider,
   type ProviderCatalogEntry,
   type ProviderPermission,
+  type ProviderMediaCapability,
 } from './catalog';
 
 /**

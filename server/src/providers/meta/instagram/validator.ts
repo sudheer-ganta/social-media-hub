@@ -43,14 +43,21 @@ export const INSTAGRAM_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
 export const INSTAGRAM_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 /**
- * One image per post today.
+ * How many images one post may carry.
  *
- * A second image needs Instagram's carousel flow — N child containers, each
- * created with `is_carousel_item`, then a parent container of type CAROUSEL —
- * which is a different sequence of calls, not a longer array on this one. Named
- * so the day it changes there is one place to change.
+ * Meta's Content Publishing documentation states a carousel holds **up to 10**
+ * items, and that ceiling is the API's rather than ours — an eleventh child is
+ * rejected when the parent container is created, so it is worth catching here
+ * where we can say how many to remove.
+ *
+ * One image still takes the plain container path; two or more take the carousel
+ * flow (N child containers with `is_carousel_item`, then a CAROUSEL parent).
+ * See `publisher.ts`.
  */
-export const INSTAGRAM_MAX_MEDIA_ITEMS = 1;
+export const INSTAGRAM_MAX_MEDIA_ITEMS = 10;
+
+/** Below this a post is a single image, not a carousel. Meta's minimum is 2. */
+export const INSTAGRAM_MIN_CAROUSEL_ITEMS = 2;
 
 /** Meta's ceiling for the `alt_text` field on a container. */
 export const INSTAGRAM_MAX_ALT_TEXT_LENGTH = 1000;
@@ -121,8 +128,8 @@ export function validateMedia(
 
   if (media.length > INSTAGRAM_MAX_MEDIA_ITEMS) {
     throw new ProviderError(
-      `Instagram posts from FlowPost support ${INSTAGRAM_MAX_MEDIA_ITEMS} image today. ` +
-        `This post has ${media.length} — remove the extras and try again.`,
+      `An Instagram carousel holds ${INSTAGRAM_MAX_MEDIA_ITEMS} images. ` +
+        `This post has ${media.length} — remove ${media.length - INSTAGRAM_MAX_MEDIA_ITEMS} and try again.`,
       400,
       'instagram',
     );
@@ -243,5 +250,6 @@ export const instagramValidator = {
   INSTAGRAM_MAX_HASHTAGS,
   INSTAGRAM_MAX_IMAGE_BYTES,
   INSTAGRAM_MAX_MEDIA_ITEMS,
+  INSTAGRAM_MIN_CAROUSEL_ITEMS,
   INSTAGRAM_IMAGE_MIME_TYPES,
 };

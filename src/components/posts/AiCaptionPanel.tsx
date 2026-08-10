@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
+  Check,
   Eye,
   Hash,
   ImageOff,
@@ -9,6 +10,7 @@ import {
   Sparkles,
   Wand2,
 } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -56,6 +58,8 @@ interface AiCaptionPanelProps {
   onAudienceChange: (audience: AudienceRegister) => void;
   /** Whether the form currently has an image, so the panel can say what it will do. */
   hasImage: boolean;
+  /** Current caption text in the main form editor */
+  currentCaption?: string;
   onGenerate: () => void;
   onUseCaption: (caption: string) => void;
   onAppendHashtags: (hashtags: string[]) => void;
@@ -64,6 +68,8 @@ interface AiCaptionPanelProps {
    * audio field simply omits it and no suggestions are shown.
    */
   onUseSong?: (song: string) => void;
+  /** Whether to show network-tailored caption cards (defaults to false for Personal). */
+  showPlatformVariations?: boolean;
 }
 
 /** A row of chips, or nothing at all when the list is empty. */
@@ -163,11 +169,20 @@ export function AiCaptionPanel({
   audience,
   onAudienceChange,
   hasImage,
+  currentCaption,
   onGenerate,
   onUseCaption,
   onAppendHashtags,
   onUseSong,
+  showPlatformVariations = false,
 }: AiCaptionPanelProps) {
+  const [selectedCaption, setSelectedCaption] = useState<string | null>(null);
+
+  const handleSelectCaption = (caption: string) => {
+    setSelectedCaption(caption);
+    onUseCaption(caption);
+  };
+
   const hasResult = Boolean(result && result.variations.length > 0);
   const platformEntries = Object.entries(result?.platformCaptions ?? {}) as [
     Platform,
@@ -179,11 +194,11 @@ export function AiCaptionPanel({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div>
+      <CardHeader className="flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0">
+        <div className="space-y-1">
           <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            AI Assistant
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            <span>AI Assistant</span>
           </CardTitle>
           <CardDescription>
             {isGenerating
@@ -198,13 +213,13 @@ export function AiCaptionPanel({
           </CardDescription>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 pt-2 sm:pt-0">
           <Select
             value={audience}
             onValueChange={(next) => onAudienceChange(next as AudienceRegister)}
             disabled={isGenerating}
           >
-            <SelectTrigger className="w-44" aria-label="Who this is written for">
+            <SelectTrigger className="w-full sm:w-44" aria-label="Who this is written for">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -224,6 +239,7 @@ export function AiCaptionPanel({
             disabled={Boolean(blockedReason)}
             title={blockedReason ?? undefined}
             onClick={onGenerate}
+            className="w-full sm:w-auto"
           >
             {hasResult ? <RefreshCw /> : <Sparkles />}
             {hasResult ? "Regenerate" : "Generate"}
@@ -285,44 +301,56 @@ export function AiCaptionPanel({
             )}
 
             <div className="space-y-3">
-              {result.variations.map((variation, index) => (
-                <div
-                  key={`${variation.tone}-${index}`}
-                  className="rounded-md border p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {variation.angle && (
-                        <Badge className="text-[10px]">{variation.angle}</Badge>
-                      )}
-                      <Badge variant="secondary" className="text-[10px]">
-                        {variation.tone}
-                      </Badge>
-                      <span className="text-[11px] text-muted-foreground">
-                        {variation.wordCount}{" "}
-                        {variation.wordCount === 1 ? "word" : "words"}
-                      </span>
+              {result.variations.map((variation, index) => {
+                const isSelected = Boolean(
+                  currentCaption
+                    ? currentCaption.includes(variation.caption.trim()) || variation.caption.trim().includes(currentCaption.trim())
+                    : selectedCaption
+                      ? selectedCaption === variation.caption
+                      : result.caption === variation.caption,
+                );
+                return (
+                  <div
+                    key={`${variation.tone}-${index}`}
+                    className={`rounded-md border p-4 transition-colors ${isSelected
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : ""
+                      }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {variation.angle && (
+                          <Badge className="text-[10px]">{variation.angle}</Badge>
+                        )}
+                        <Badge variant="secondary" className="text-[10px]">
+                          {variation.tone}
+                        </Badge>
+                        <span className="text-[11px] text-muted-foreground">
+                          {variation.wordCount}{" "}
+                          {variation.wordCount === 1 ? "word" : "words"}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handleSelectCaption(variation.caption)}
+                      >
+                        {isSelected ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}
+                        {isSelected ? "Applied" : "Apply to Post"}
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onUseCaption(variation.caption)}
-                    >
-                      <Wand2 />
-                      Apply to Post
-                    </Button>
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-                    {variation.caption}
-                  </p>
-                  {variation.whyItWorks && (
-                    <p className="mt-3 border-t pt-2 text-[11px] leading-relaxed text-muted-foreground">
-                      {variation.whyItWorks}
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                      {variation.caption}
                     </p>
-                  )}
-                </div>
-              ))}
+                    {variation.whyItWorks && (
+                      <p className="mt-3 border-t pt-2 text-[11px] leading-relaxed text-muted-foreground">
+                        {variation.whyItWorks}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {result.hashtags.length > 0 && (
@@ -402,30 +430,39 @@ export function AiCaptionPanel({
               </div>
             ) : null}
 
-            {platformEntries.length > 0 && (
+            {showPlatformVariations && platformEntries.length > 0 && (
               <div className="grid gap-3 lg:grid-cols-2">
-                {platformEntries.map(([platform, caption]) => (
-                  <div key={platform} className="rounded-md border p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
-                        {PLATFORM_MAP[platform]?.name ?? platform}
+                {platformEntries.map(([platform, caption]) => {
+                  const isSelected = selectedCaption === caption;
+                  return (
+                    <div
+                      key={platform}
+                      className={`rounded-md border p-4 transition-colors ${isSelected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary"
+                          : ""
+                        }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
+                          {PLATFORM_MAP[platform]?.name ?? platform}
+                        </p>
+                        <Button
+                          type="button"
+                          variant={isSelected ? "default" : "ghost"}
+                          size="sm"
+                          onClick={() => handleSelectCaption(caption)}
+                        >
+                          {isSelected ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}
+                          {isSelected ? "Applied" : "Use"}
+                        </Button>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                        {caption}
                       </p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onUseCaption(caption)}
-                      >
-                        <Wand2 />
-                        Use
-                      </Button>
                     </div>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-                      {caption}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

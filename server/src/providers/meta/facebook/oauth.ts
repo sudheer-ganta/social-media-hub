@@ -21,6 +21,7 @@ import {
   canPublish,
   FACEBOOK_IMAGE_MIME_TYPES,
   FACEBOOK_MAX_IMAGE_BYTES,
+  FACEBOOK_MAX_MEDIA_ITEMS,
 } from './validator';
 import { socialConnectionService } from '../../../services/social-connection.service';
 import { socialAccountRepository } from '../../../repositories/social-account.repository';
@@ -511,6 +512,7 @@ export const facebookProvider: Provider = {
   mediaRequirements: {
     imageMimeTypes: FACEBOOK_IMAGE_MIME_TYPES,
     maxImageBytes: FACEBOOK_MAX_IMAGE_BYTES,
+    maxItems: FACEBOOK_MAX_MEDIA_ITEMS,
   },
   canPublish,
 };

@@ -35,12 +35,23 @@ import type { Post } from '../../generated/prisma/client';
  * Instagram arrived: LinkedIn takes JPEG, PNG and GIF, Instagram takes JPEG and
  * nothing else. See `Provider.mediaRequirements`.
  *
- * ─── Today's shape, and tomorrow's ───────────────────────────────────────────
- * A post has a single `image_url` column, so this returns an array of zero or
- * one. The array is not premature: it is the shape the provider interface and
- * `providers/linkedin/media.ts` already speak, so the day `posts` grows a
- * `media` relation the change is {@link resolvePostMedia} reading a different
- * column — not a new argument threaded through four layers.
+ * ─── One post, N images ──────────────────────────────────────────────────────
+ * `posts.media` is an ordered JSON array of everything attached, and its order
+ * *is* the publish order — an Instagram carousel, a Facebook multi-photo story
+ * and a LinkedIn multi-image post all render in it. {@link resolvePostMedia}
+ * turns that array into assets in the same order.
+ *
+ * A post written before that column existed has a single `image_url` and a null
+ * `media`, and reads here as exactly one item framed by `platform_media`. That
+ * fallback is not legacy debt to be cleaned up later: it is what keeps every
+ * post already in the database publishable, and it is the path a single-image
+ * post still takes today.
+ *
+ * ─── Nothing is dropped quietly ──────────────────────────────────────────────
+ * A post carrying more images than the target network accepts fails here, with
+ * a message naming both numbers. It is tempting to send the first N instead —
+ * that is precisely the silent data loss this service exists to prevent, on a
+ * feed where correcting it means deleting and reposting.
  */
 
 /**
@@ -94,21 +105,83 @@ export async function resolvePostMedia(
     providerId?: string;
   } = {},
 ): Promise<ProviderMediaAsset[]> {
+  const requirements = options.requirements ?? DEFAULT_REQUIREMENTS;
+  const items = readMediaItems(post, options.providerId);
+  if (items.length === 0) return [];
+
+  const maxItems = requirements.maxItems ?? 1;
+  if (items.length > maxItems) {
+    // Checked before a single byte is downloaded, and *not* by taking the
+    // first `maxItems`. See the header: quietly publishing a subset of what
+    // someone attached is the one outcome worth failing to avoid.
+    throw new MediaResolutionError(
+      maxItems === 0
+        ? 'This network cannot publish images from FlowPost yet. Remove them, or publish this post to another network.'
+        : `This post has ${items.length} images and this network takes ${maxItems}. ` +
+          'Remove the extras, or publish it to a network that takes them all.',
+      `post ${post.id} carries ${items.length} media items, provider ceiling ${maxItems}`,
+    );
+  }
+
+  // Sequential: the bytes of every image are held in memory at once by the time
+  // this resolves, and a network taking ten of them is a reason to be careful
+  // with heap rather than to race the downloads.
+  // ponytail: sequential downloads, parallelise if publish latency is measured
+  // to matter for large carousels.
+  const assets: ProviderMediaAsset[] = [];
+  for (const item of items) {
+    assets.push(await resolveImage(item.url, requirements, options.caption));
+  }
+  return assets;
+}
+
+/** One attached image, already framed for the network being published to. */
+interface ResolvedMediaItem {
+  url: string;
+}
+
+/**
+ * The post's images, in publish order, each as a delivery URL.
+ *
+ * **Every value here is member-supplied.** `posts.media` is written by the
+ * browser under RLS, so this reads it the way {@link applyStoredCrop} reads a
+ * crop: shape-checked field by field, and anything malformed is skipped rather
+ * than trusted. An entry with no usable URL is not an error worth failing a
+ * publish over — it is an entry that carries nothing.
+ *
+ * Falls back to `image_url` + `platform_media` when `media` is absent or holds
+ * nothing usable, which is every post written before the multi-image composer
+ * and every client that still writes one image.
+ */
+function readMediaItems(post: Post, providerId?: string): ResolvedMediaItem[] {
+  const items: ResolvedMediaItem[] = [];
+
+  if (Array.isArray(post.media)) {
+    for (const entry of post.media) {
+      if (!entry || typeof entry !== 'object') continue;
+      const record = entry as Record<string, unknown>;
+
+      const url = typeof record.url === 'string' ? record.url.trim() : '';
+      if (!url) continue;
+
+      // Each item carries its own framing — this is the multi-image model,
+      // where `platform_media` frames one shared image per network.
+      items.push({ url: applyStoredCropValue(url, record.crop) });
+    }
+  }
+
+  if (items.length > 0) return items;
+
   const imageUrl = post.image_url?.trim();
   if (!imageUrl) return [];
 
-  // The member's per-network framing, applied as a delivery transformation.
-  // The stored asset is untouched: this derives a rendition of it.
-  const framed = options.providerId
-    ? applyStoredCrop(imageUrl, post.platform_media, options.providerId)
-    : imageUrl;
-
-  const asset = await resolveImage(
-    framed,
-    options.requirements ?? DEFAULT_REQUIREMENTS,
-    options.caption,
-  );
-  return [asset];
+  return [
+    {
+      url: providerId
+        ? applyStoredCrop(imageUrl, post.platform_media, providerId)
+        : imageUrl,
+    },
+  ];
 }
 
 /**
@@ -132,7 +205,21 @@ export function applyStoredCrop(
 ): string {
   if (!platformMedia || typeof platformMedia !== 'object') return url;
 
-  const entry = (platformMedia as Record<string, unknown>)[providerId];
+  return applyStoredCropValue(
+    url,
+    (platformMedia as Record<string, unknown>)[providerId],
+  );
+}
+
+/**
+ * The same rewrite, given the crop itself rather than the map it lives in.
+ *
+ * Two callers, two storage shapes, one trust boundary: `platform_media` holds
+ * one crop per network for a single shared image, and each entry in `media`
+ * holds its own. Both are browser-written JSON and neither is trusted, so the
+ * validation lives here once instead of once per shape.
+ */
+export function applyStoredCropValue(url: string, entry: unknown): string {
   if (!entry || typeof entry !== 'object') return url;
 
   const crop = entry as Record<string, unknown>;
@@ -536,4 +623,5 @@ export const mediaService = {
   probeImageSize,
   toJpegDeliveryUrl,
   applyStoredCrop,
+  applyStoredCropValue,
 };

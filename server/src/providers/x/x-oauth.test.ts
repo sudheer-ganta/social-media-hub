@@ -292,7 +292,7 @@ describe('buildAuthorizationUrl', () => {
     expect(url.searchParams.get('code_challenge')).toBe('the-challenge');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     expect(url.searchParams.get('scope')).toBe(
-      'tweet.read tweet.write users.read offline.access',
+      'tweet.read tweet.write users.read media.write offline.access',
     );
   });
 
@@ -586,27 +586,77 @@ describe('X publish request construction', () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
-  it('refuses media rather than silently dropping it', async () => {
+  /** One attached image, already through the media service. */
+  const image = (name: string) => ({
+    kind: 'image' as const,
+    mimeType: 'image/jpeg',
+    data: Buffer.alloc(4),
+    byteLength: 4,
+    sourceUrl: `https://cdn.example.com/${name}.jpg`,
+    width: 100,
+    height: 100,
+    altText: null,
+  });
+
+  it('uploads each image and attaches the ids in order', async () => {
+    postSpy
+      .mockResolvedValueOnce({ data: { data: { id: 'media-1' } } })
+      .mockResolvedValueOnce({ data: { media_id_string: 'media-2' } })
+      .mockResolvedValueOnce({ data: { data: { id: '1799999999' } } });
+
+    const result = await publish({
+      accessToken: 'access-1',
+      providerAccountId: '12345',
+      caption: 'two pictures',
+      media: [image('a'), image('b')],
+    });
+
+    // Uploads first, post last — an id that never arrived cannot be referenced.
+    expect(postSpy.mock.calls[0][0]).toBe('https://api.x.com/2/media/upload');
+    expect(postSpy.mock.calls[1][0]).toBe('https://api.x.com/2/media/upload');
+
+    const [url, body] = postSpy.mock.calls[2];
+    expect(url).toBe('https://api.x.com/2/tweets');
+    // Upload order is render order, and the string id is the one used.
+    expect(body).toEqual({
+      text: 'two pictures',
+      media: { media_ids: ['media-1', 'media-2'] },
+    });
+    expect(result.mediaUrns).toEqual(['media-1', 'media-2']);
+  });
+
+  it('refuses a fifth image rather than publishing the first four', async () => {
+    await expect(
+      publish({
+        accessToken: 'a',
+        providerAccountId: '1',
+        caption: 'five pictures',
+        media: [image('a'), image('b'), image('c'), image('d'), image('e')],
+      }),
+    ).rejects.toThrow(/holds 4 images/i);
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('asks for a reconnect when the upload is refused for want of a scope', async () => {
+    // `axios` is mocked wholesale here, so the type guard has to be told too.
+    vi.mocked(axios.isAxiosError).mockReturnValue(true);
+    postSpy.mockRejectedValueOnce(
+      Object.assign(new Error('Forbidden'), {
+        isAxiosError: true,
+        response: { status: 403, data: {} },
+      }),
+    );
+
     await expect(
       publish({
         accessToken: 'a',
         providerAccountId: '1',
         caption: 'with a picture',
-        media: [
-          {
-            kind: 'image',
-            mimeType: 'image/jpeg',
-            data: Buffer.alloc(1),
-            byteLength: 1,
-            sourceUrl: 'https://cdn.example.com/a.jpg',
-            width: 1,
-            height: 1,
-            altText: null,
-          },
-        ],
+        media: [image('a')],
       }),
-    ).rejects.toThrow(/only publish text posts to X/i);
-    expect(postSpy).not.toHaveBeenCalled();
+    ).rejects.toThrow(/Reconnect your X account/i);
+    // The post itself was never attempted, so nothing went out without its image.
+    expect(postSpy).toHaveBeenCalledTimes(1);
   });
 
   it('validates a 400 with no upstream status, so the publish service surfaces it', () => {

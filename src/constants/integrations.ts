@@ -144,9 +144,56 @@ export interface Integration {
   /** What to do about it, or null when there is nothing to fix. */
   guidance: string | null;
   permissions: IntegrationPermission[];
+  /** What this network takes on one post. Drives the composer's compatibility list. */
+  media: MediaCapability;
   health: ConnectionHealth | null;
   account: ConnectedAccount | null;
 }
+
+/**
+ * How much media a network carries on one post.
+ *
+ * Read from the API, never written here. The server takes these numbers from
+ * the same validator constants its publishers enforce, so a limit shown in the
+ * composer is by construction the limit a publish will hold to — which is the
+ * whole reason this is not a table of literals in the browser.
+ */
+export interface MediaCapability {
+  /** Maximum images on one post. Zero means this network takes none. */
+  maxItems: number;
+  /** "Carousel", "Multi-photo post" — null when the network takes at most one. */
+  multiLabel: string | null;
+  /** True when the network refuses a post with no image at all (Instagram). */
+  requiresMedia: boolean;
+}
+
+/**
+ * What the composer assumes about a network the API has not described.
+ *
+ * One image, no multi-image label. Deliberately the cautious answer: a network
+ * we know nothing about is not one to promise a carousel for.
+ */
+export const DEFAULT_MEDIA_CAPABILITY: MediaCapability = {
+  maxItems: 1,
+  multiLabel: null,
+  requiresMedia: false,
+};
+
+/**
+ * How many images the composer accepts before it knows any network's limit.
+ *
+ * Used only while `GET /api/integrations` has not answered — a slow request, or
+ * a page opened before any account is connected. Capping at one there would
+ * refuse a second upload for a limit no network has actually imposed, which is
+ * a worse error than allowing an upload the compatibility panel then flags.
+ *
+ * Ten is the largest carousel any connected network takes today, and it is a
+ * *fallback*, never the authority: the moment capabilities arrive, the real
+ * per-network numbers replace it. If a network ever exceeds this, the effect is
+ * that the composer briefly offers fewer slots than it could — not that it
+ * promises something a publish would reject.
+ */
+export const MEDIA_LIMIT_BEFORE_CAPABILITIES_LOAD = 10;
 
 /** One entry in the Activity Timeline. */
 export interface ActivityEvent {

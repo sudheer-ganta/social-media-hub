@@ -1,7 +1,41 @@
 import type { AiStudioInput, AiStudioOutput } from "@/ai/types";
-import type { PlatformMedia } from "@/utils/crop";
+import type { PlatformCrop, PlatformMedia } from "@/utils/crop";
 
 export type { PlatformCrop, PlatformMedia } from "@/utils/crop";
+
+/**
+ * One image attached to a post.
+ *
+ * Position in `Post.media` is publish order — an Instagram carousel, a Facebook
+ * multi-photo story and a LinkedIn multi-image post all render in it — so
+ * reordering in the composer is a reordering of that array and nothing else.
+ *
+ * `type` exists so video can be added later without reshaping the record.
+ * Today the uploader and every provider accept `"image"` only, and nothing in
+ * the app writes anything else.
+ */
+export interface PostMediaItem {
+  /** Stable across reorders, crops and reloads. Identifies the item, not its place. */
+  id: string;
+  /** The stored Cloudinary asset. Never rewritten — crops are delivery settings. */
+  url: string;
+  type: "image";
+  /**
+   * The original's own pixel dimensions, read from the browser's decode at
+   * upload time. Kept so a crop can be computed, and its softness judged,
+   * without re-downloading the image on every render.
+   */
+  width: number;
+  height: number;
+  /**
+   * How this image is framed, or null to deliver it whole.
+   *
+   * Per item, where {@link Post.platform_media} is per network. A post composed
+   * with several images frames each one here; a single-image post written
+   * before this existed still frames per network, and both still publish.
+   */
+  crop: PlatformCrop | null;
+}
 
 /**
  * Mirrors the `post_status` enum in the database (see prisma/schema.prisma).
@@ -126,6 +160,15 @@ export interface Post {
    * post delivered whole. See `utils/crop.ts`.
    */
   platform_media: PlatformMedia | null;
+  /**
+   * Every image on this post, in publish order.
+   *
+   * Null on posts written before the multi-image composer, which carry their
+   * one image in `image_url` alone. `image_url` is still written on every save
+   * as a mirror of `media[0].url`, so the post list, the dashboard, the AI
+   * pipeline and any older client keep reading one image exactly as they did.
+   */
+  media: PostMediaItem[] | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -159,6 +202,7 @@ export type PostInsert = Pick<
   | "cta"
   | "link_url"
   | "platform_media"
+  | "media"
 >;
 
 export type PostUpdate = Partial<

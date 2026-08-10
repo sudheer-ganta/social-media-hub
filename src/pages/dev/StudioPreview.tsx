@@ -22,6 +22,9 @@ const MOCK_POST: Post = {
   id: "00000000-0000-0000-0000-000000000000",
   title: "Aurora Serum — launch",
   platform_media: null,
+  // Null exercises the fallback a pre-multi-image post takes: one image, read
+  // from `image_url`.
+  media: null,
   caption: "",
   image_url: "https://placehold.co/600x600/1A1A2E/E94560?text=Aurora",
   platforms: ["instagram", "linkedin", "x"],

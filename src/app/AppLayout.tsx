@@ -1,37 +1,30 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
+import { Masthead } from "@/components/layout/Masthead";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Topbar } from "@/components/layout/Topbar";
+import { FlowRail } from "@/components/layout/FlowRail";
+import { MobileNav } from "@/components/layout/MobileNav";
 import { Footer } from "@/components/layout/Footer";
-
-const COLLAPSE_KEY = "sch-sidebar-collapsed";
+import { BootSequence } from "@/components/brand/BootSequence";
 
 export function AppLayout() {
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(COLLAPSE_KEY) === "1",
-  );
-
-  const toggleCollapse = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-      return next;
-    });
-  }, []);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapse} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
-        <main className="flex-1 flex flex-col">
+      <BootSequence />
+      <Sidebar collapsed={collapsed} onToggleCollapse={() => setCollapsed(!collapsed)} />
+      <div className="flex min-h-screen flex-1 flex-col min-w-0">
+        {/* Bottom padding clears the mobile nav. */}
+        <main className="flex flex-1 flex-col pb-20 lg:pb-0">
           <AnimatePresence mode="wait">
             <Outlet key={location.pathname} />
           </AnimatePresence>
         </main>
         <Footer />
+        <MobileNav />
       </div>
     </div>
   );

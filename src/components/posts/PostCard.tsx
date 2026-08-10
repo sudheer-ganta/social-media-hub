@@ -29,9 +29,10 @@ interface PostCardProps {
   onDelete: (post: Post) => void;
   onDuplicate: (post: Post) => void;
   onPublish: (post: Post) => void;
+  onClick?: (post: Post) => void;
 }
 
-export function PostCard({ post, onDelete, onDuplicate, onPublish }: PostCardProps) {
+export function PostCard({ post, onDelete, onDuplicate, onPublish, onClick }: PostCardProps) {
   return (
     <motion.article
       layout
@@ -39,7 +40,8 @@ export function PostCard({ post, onDelete, onDuplicate, onPublish }: PostCardPro
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.25 }}
-      className="group flex flex-col overflow-hidden rounded-lg border bg-card shadow-soft transition-shadow hover:shadow-elevated"
+      onClick={() => onClick?.(post)}
+      className="group flex flex-col overflow-hidden rounded-lg border bg-card shadow-soft transition-shadow hover:shadow-elevated cursor-pointer"
     >
       <div className="relative aspect-[16/9] overflow-hidden bg-muted">
         {post.image_url ? (
@@ -63,7 +65,7 @@ export function PostCard({ post, onDelete, onDuplicate, onPublish }: PostCardPro
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-1 text-sm font-semibold">{post.title}</h3>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="ghost"
                 size="icon-sm"

@@ -42,21 +42,39 @@ export const X_API_VERSION = env.X_API_VERSION;
 export const X_API_URL = `${X_API_HOST}/${X_API_VERSION}`;
 
 /**
+ * Where image bytes go before they can be attached to a post.
+ *
+ * Unlike Meta, X does not fetch an image from a URL we hand it — the bytes are
+ * uploaded first and the post then references the id that comes back. This is
+ * the v2 upload endpoint, on the same host and version as everything else here,
+ * so it needs no separate host constant.
+ */
+export const X_MEDIA_UPLOAD_URL = `${X_API_URL}/media/upload`;
+
+/**
  * The permissions FlowPost asks for.
  *
  *  - `tweet.read`     — required by `users.read`; X rejects the pair separated
  *  - `tweet.write`    — create posts
  *  - `users.read`     — read the connected account's own profile
+ *  - `media.write`    — upload images to attach to a post
  *  - `offline.access` — issue a refresh token
  *
  * `offline.access` is not optional for us. Without it X returns an access token
  * good for **two hours** and no way to renew it, which is a connection that
  * works during testing and is dead before anything is scheduled.
+ *
+ * `media.write` is newer than the others, and every X connection made before it
+ * was added lacks it. Those tokens post text exactly as they always did and are
+ * refused — with a message saying to reconnect — only when a post actually
+ * carries an image. Nothing is silently downgraded to a text post. See
+ * `publisher.ts`.
  */
 export const X_SCOPES: XScope[] = [
   'tweet.read',
   'tweet.write',
   'users.read',
+  'media.write',
   'offline.access',
 ];
 
@@ -65,6 +83,9 @@ export const X_SCOPE_STRING = X_SCOPES.join(' ');
 
 /** The scope a connection must actually hold to publish. */
 export const X_PUBLISH_SCOPE = 'tweet.write';
+
+/** The scope a connection must hold to attach images. Text posts do not need it. */
+export const X_MEDIA_SCOPE = 'media.write';
 
 /** How long a minted OAuth state stays valid. */
 export const X_STATE_TTL_MS = 10 * 60 * 1000;
@@ -108,6 +129,7 @@ export const xConfig = {
   tokenUrl: X_TOKEN_URL,
   revokeUrl: X_REVOKE_URL,
   apiUrl: X_API_URL,
+  mediaUploadUrl: X_MEDIA_UPLOAD_URL,
   apiVersion: X_API_VERSION,
   clientId: X_CLIENT_ID,
   clientSecret: X_CLIENT_SECRET,
@@ -115,5 +137,6 @@ export const xConfig = {
   scopes: X_SCOPES,
   scopeString: X_SCOPE_STRING,
   publishScope: X_PUBLISH_SCOPE,
+  mediaScope: X_MEDIA_SCOPE,
   stateTtlMs: X_STATE_TTL_MS,
 };

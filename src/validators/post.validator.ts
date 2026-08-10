@@ -14,6 +14,18 @@ export const postSchema = z
       .min(3, "Give your post a title of at least 3 characters.")
       .max(120, "Keep the title under 120 characters."),
     caption: z.string().trim().min(1, "Caption is required."),
+    /**
+     * The first attached image, mirrored from the composer's media list.
+     *
+     * Still the column every older read path uses, so the composer keeps it in
+     * step rather than replacing it — and it is what this message is really
+     * asking for: at least one image.
+     *
+     * The list itself is deliberately *not* a form field: it is machine-written
+     * from completed uploads, so there is nothing in it to validate. The
+     * composer holds it in ordinary state and mirrors the first URL into this
+     * field, which is the only part a member's input can invalidate.
+     */
     image_url: z.string().min(1, "Add an image before saving."),
     platforms: z
       .array(z.enum(["linkedin", "instagram", "facebook", "x", "threads"]))

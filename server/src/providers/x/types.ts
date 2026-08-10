@@ -15,6 +15,7 @@ export type XScope =
   | 'tweet.read'
   | 'tweet.write'
   | 'users.read'
+  | 'media.write'
   | 'offline.access';
 
 /** Query parameters on the authorization request. All required by X. */
@@ -87,9 +88,25 @@ export interface XProfile {
   profileImage: string | null;
 }
 
-/** `POST /2/tweets` request body. Text-only today — see `publisher.ts`. */
+/** `POST /2/tweets` request body. */
 export interface XCreateTweetRequest {
   text: string;
+  /** Ids from {@link XMediaUploadResponse}, in the order they should render. */
+  media?: { media_ids: string[] };
+}
+
+/**
+ * `POST /2/media/upload` — the id an uploaded image is referenced by.
+ *
+ * Two field names because X changed one: the v2 endpoint answers with
+ * `data.id`, and the v1.1 endpoint it grew out of answered with a top-level
+ * `media_id_string`. Both are read so an account served by either shape works.
+ * The *string* form is what matters — the numeric `media_id` loses precision in
+ * JavaScript, which is exactly why X publishes a string alongside it.
+ */
+export interface XMediaUploadResponse {
+  data?: { id?: string; media_key?: string };
+  media_id_string?: string;
 }
 
 /** `POST /2/tweets` response. */

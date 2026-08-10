@@ -17,16 +17,50 @@
  * `node` with no test runner.
  */
 
-export type AspectRatioId = "4:5" | "1:1" | "16:9" | "9:16" | "1.91:1";
+/**
+ * The shapes the composer can frame to, plus `original`.
+ *
+ * `original` is not a sixth crop. It means *do not impose a ratio* — keep the
+ * picture the shape it was uploaded as — and it is what the composer's "Mix"
+ * format is built from. It is expressed as a ratio id rather than as a separate
+ * mode because everything downstream (the crop record, the preview, the
+ * delivery URL) already knows how to carry one, and a parallel "no crop" flag
+ * would be a second thing to keep in step with the first.
+ */
+export type AspectRatioId =
+  | "4:5"
+  | "1:1"
+  | "16:9"
+  | "9:16"
+  | "1.91:1"
+  | "original";
 
-/** width / height for each ratio the composer offers. */
+/**
+ * width / height for each ratio the composer offers.
+ *
+ * `original` has no fixed value — that is the point of it — and reads as 0,
+ * which callers must not divide by. Use {@link ratioValue}, which takes the
+ * image's own aspect and answers correctly for every id.
+ */
 export const RATIO_VALUE: Record<AspectRatioId, number> = {
   "4:5": 4 / 5,
   "1:1": 1,
   "16:9": 16 / 9,
   "9:16": 9 / 16,
   "1.91:1": 1.91,
+  original: 0,
 };
+
+/**
+ * The width/height a crop of this ratio renders at, for this image.
+ *
+ * The one place `original` is resolved: it is whatever the source itself is, so
+ * a portrait stays portrait and a landscape stays landscape while every other
+ * id answers the same number for every image.
+ */
+export function ratioValue(ratio: AspectRatioId, imageAspect: number): number {
+  return ratio === "original" ? imageAspect : RATIO_VALUE[ratio];
+}
 
 export const RATIO_LABEL: Record<AspectRatioId, string> = {
   "4:5": "Portrait 4:5",
@@ -34,6 +68,7 @@ export const RATIO_LABEL: Record<AspectRatioId, string> = {
   "16:9": "Landscape 16:9",
   "9:16": "Vertical 9:16",
   "1.91:1": "Landscape 1.91:1",
+  original: "Original ratio",
 };
 
 /**
@@ -110,7 +145,12 @@ export function computeCrop(
   options: { zoom?: number; focusX?: number; focusY?: number } = {},
 ): PlatformCrop {
   const zoom = clamp(options.zoom ?? 1, 1, 3);
-  const target = RATIO_VALUE[ratio];
+  // `original` resolves to the source's own aspect, which makes the largest
+  // fitting rectangle the whole frame — so at zoom 1 this returns a full-frame
+  // crop, `isFullFrame` is true, and no transformation is emitted at all. That
+  // is exactly what "keep this image's own ratio" has to mean, and it is why
+  // Mix needs no separate code path anywhere below this line.
+  const target = ratioValue(ratio, imageAspect);
 
   // The largest rectangle of `target` ratio that fits in a source of
   // `imageAspect`. One dimension is always the full extent; the other shrinks.

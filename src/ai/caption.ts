@@ -276,3 +276,61 @@ export function toStudioOutput(
     ...(Object.keys(platformVariations).length > 0 && { platformVariations }),
   };
 }
+
+/**
+ * Reconstructs a {@link CaptionResult} from a saved {@link AiStudioOutput}.
+ * Enables restoring AI Assistant generated options when opening an existing post or refreshing.
+ */
+export function fromStudioOutput(
+  output: AiStudioOutput | null | undefined,
+): CaptionResult | null {
+  if (!output || !output.contentVariations?.variations?.length) {
+    return null;
+  }
+
+  const variations = output.contentVariations.variations.map((v) => ({
+    tone: v.tone ?? "friendly",
+    caption: v.caption,
+    wordCount: v.wordCount ?? v.caption.split(/\s+/).filter(Boolean).length,
+    hook: v.hook,
+  }));
+
+  const hashtags: string[] = [];
+  if (output.hashtagGroups?.groups) {
+    for (const group of output.hashtagGroups.groups) {
+      for (const item of group.hashtags) {
+        if (!hashtags.includes(item.tag)) {
+          hashtags.push(item.tag);
+        }
+      }
+    }
+  }
+
+  const platformCaptions: Record<string, string> = {};
+  if (output.platformVariations) {
+    for (const [p, v] of Object.entries(output.platformVariations)) {
+      if (v?.caption) {
+        platformCaptions[p] = v.caption;
+      }
+    }
+  }
+
+  return {
+    caption: variations[0]?.caption ?? "",
+    variations,
+    hashtags,
+    platformCaptions,
+    ...(output.imageAnalysis && { imageAnalysis: output.imageAnalysis }),
+    ...(output.seo && { seo: output.seo }),
+    ...(output.campaign && { campaign: output.campaign }),
+    ...(output.competitor && { competitor: output.competitor }),
+    meta: {
+      provider: "saved",
+      model: output.meta?.model ?? "saved-generation",
+      durationMs: output.meta?.durationMs ?? 0,
+      generatedAt: output.meta?.generatedAt ?? new Date().toISOString(),
+      promptVersion: 1,
+    },
+  };
+}
+

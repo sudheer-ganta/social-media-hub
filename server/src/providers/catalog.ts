@@ -2,6 +2,13 @@ import type { ProviderId } from './provider.interface';
 import { LINKEDIN_API_VERSION } from './linkedin/config';
 import { META_API_VERSION } from './meta/config';
 import { X_API_VERSION } from './x/config';
+// The media ceilings, taken from the code that enforces them. Importing rather
+// than restating is what keeps the composer's promise and the publisher's
+// behaviour the same number.
+import { LINKEDIN_MAX_MEDIA_ITEMS } from './linkedin/validator';
+import { INSTAGRAM_MAX_MEDIA_ITEMS } from './meta/instagram/validator';
+import { FACEBOOK_MAX_MEDIA_ITEMS } from './meta/facebook/validator';
+import { X_MAX_MEDIA_ITEMS } from './x/validator';
 
 /**
  * Everything the Integrations UI needs to *describe* a network, whether or not
@@ -74,6 +81,35 @@ export interface ProviderCatalogEntry {
    */
   expiryWarningMs?: number;
   permissions: ProviderPermission[];
+  /** What this network will carry on one post. See {@link ProviderMediaCapability}. */
+  media: ProviderMediaCapability;
+}
+
+/**
+ * How much media one post may carry on a network, as the composer needs to know
+ * it *before* anything is published.
+ *
+ * Every value here is imported from the provider's own validator constant
+ * rather than written out again. That is the whole point: the number the
+ * composer shows, the number the media service refuses to exceed and the number
+ * the publisher enforces are one value, so the UI cannot promise a carousel the
+ * publish path will reject.
+ */
+export interface ProviderMediaCapability {
+  /** Maximum images on one post. Zero means this network takes none. */
+  maxItems: number;
+  /**
+   * How several images are rendered, in the member's language — "Carousel",
+   * "Multi-photo post". Shown beside the count in the composer's compatibility
+   * list, and null for a network that takes at most one.
+   */
+  multiLabel: string | null;
+  /**
+   * True when the network refuses a post that carries no image at all.
+   * Instagram is the only one today: its publishing flow starts with a media
+   * container and has no text-only edge.
+   */
+  requiresMedia: boolean;
 }
 
 /**
@@ -280,6 +316,13 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     // an account connected under an older version stays identifiable.
     apiVersion: LINKEDIN_API_VERSION,
     permissions: LINKEDIN_PERMISSIONS,
+    media: {
+      maxItems: LINKEDIN_MAX_MEDIA_ITEMS,
+      // `content.multiImage` — LinkedIn's own name for two or more images on
+      // one post, which is a different content type from a single image.
+      multiLabel: 'Multi-image post',
+      requiresMedia: false,
+    },
   },
   {
     id: 'instagram',
@@ -293,6 +336,13 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     // sends and the value we display can never drift apart.
     apiVersion: META_API_VERSION,
     permissions: INSTAGRAM_PERMISSIONS,
+    media: {
+      maxItems: INSTAGRAM_MAX_MEDIA_ITEMS,
+      multiLabel: 'Carousel',
+      // No text-only post exists on this API: publishing starts with a media
+      // container, so a caption on its own has nowhere to go.
+      requiresMedia: true,
+    },
   },
   {
     id: 'facebook',
@@ -309,6 +359,11 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     // drift apart.
     apiVersion: META_API_VERSION,
     permissions: FACEBOOK_PERMISSIONS,
+    media: {
+      maxItems: FACEBOOK_MAX_MEDIA_ITEMS,
+      multiLabel: 'Multi-photo post',
+      requiresMedia: false,
+    },
   },
   {
     id: 'x',
@@ -332,6 +387,11 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     // refreshing has stopped working.
     expiryWarningMs: 15 * 60 * 1000,
     permissions: X_PERMISSIONS,
+    media: {
+      maxItems: X_MAX_MEDIA_ITEMS,
+      multiLabel: 'Up to 4 photos',
+      requiresMedia: false,
+    },
   },
   {
     id: 'youtube',
@@ -342,6 +402,9 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     connectPath: null,
     apiVersion: null,
     permissions: VIDEO_PERMISSIONS,
+    // Nothing is publishable to a network with no implementation, and saying
+    // it takes images would be a promise no code behind it can keep.
+    media: { maxItems: 0, multiLabel: null, requiresMedia: false },
   },
 ];
 

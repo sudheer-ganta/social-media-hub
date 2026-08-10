@@ -21,6 +21,15 @@ import type { XErrorBody } from './types';
 export const REQUEST_TIMEOUT_MS = 15_000;
 
 /**
+ * Longer, for the one call that carries bytes.
+ *
+ * An image upload is bounded by the member's connection to us and ours to X,
+ * not by how quickly X can think — the same reason LinkedIn's upload has its own
+ * budget rather than sharing the API timeout.
+ */
+export const UPLOAD_TIMEOUT_MS = 60_000;
+
+/**
  * Turns an axios failure into a ProviderError with a log-safe message.
  *
  * X answers with two different error envelopes — `{ error, error_description }`

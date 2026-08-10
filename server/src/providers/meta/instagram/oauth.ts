@@ -15,6 +15,7 @@ import {
   canPublish,
   INSTAGRAM_IMAGE_MIME_TYPES,
   INSTAGRAM_MAX_IMAGE_BYTES,
+  INSTAGRAM_MAX_MEDIA_ITEMS,
   INSTAGRAM_PUBLISHABLE_ACCOUNT_TYPES,
 } from './validator';
 import { socialConnectionService } from '../../../services/social-connection.service';
@@ -254,6 +255,7 @@ export const instagramProvider: Provider = {
   mediaRequirements: {
     imageMimeTypes: INSTAGRAM_IMAGE_MIME_TYPES,
     maxImageBytes: INSTAGRAM_MAX_IMAGE_BYTES,
+    maxItems: INSTAGRAM_MAX_MEDIA_ITEMS,
   },
   canPublish,
 };

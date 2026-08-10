@@ -93,6 +93,7 @@ async function request<T>(
       body && typeof body === "object" && typeof body.error === "string"
         ? body.error
         : fallback;
+    console.error(`[Publish API Error ${response.status}]:`, message, body);
     throw new Error(message);
   }
 

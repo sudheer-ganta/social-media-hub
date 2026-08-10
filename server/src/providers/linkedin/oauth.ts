@@ -17,7 +17,12 @@ import { publish } from './publisher';
 import { getCatalogEntry } from '../catalog';
 import { socialConnectionService } from '../../services/social-connection.service';
 import { buildIntegrationsRedirect } from '../../services/oauth-redirect';
-import { LINKEDIN_IMAGE_MIME_TYPES, LINKEDIN_MAX_IMAGE_BYTES, canPublish } from './validator';
+import {
+  LINKEDIN_IMAGE_MIME_TYPES,
+  LINKEDIN_MAX_IMAGE_BYTES,
+  LINKEDIN_MAX_MEDIA_ITEMS,
+  canPublish,
+} from './validator';
 import type { LinkedInAuthorizationParams } from './types';
 
 /**
@@ -219,6 +224,7 @@ export const linkedinProvider: Provider = {
   mediaRequirements: {
     imageMimeTypes: LINKEDIN_IMAGE_MIME_TYPES,
     maxImageBytes: LINKEDIN_MAX_IMAGE_BYTES,
+    maxItems: LINKEDIN_MAX_MEDIA_ITEMS,
   },
   // Was a `providerId === 'linkedin'` branch in the publish service. Same
   // check, asked of the provider instead of hardcoded against it.

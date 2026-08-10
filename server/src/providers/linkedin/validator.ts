@@ -97,14 +97,17 @@ export const LINKEDIN_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const LINKEDIN_MAX_ALT_TEXT_LENGTH = 4086;
 
 /**
- * How many media items one post may carry today.
+ * How many images one post may carry.
  *
- * One. A second image needs LinkedIn's MultiImage content shape rather than
- * `content.media`, and video needs the Videos API — both are extensions of the
- * layer below, not of this constant. It is a named limit so the day it changes
- * there is one place to change and a message that was always honest about it.
+ * LinkedIn's MultiImage content takes **2 to 20**, and one image uses
+ * `content.media` instead — so 20 is the API's ceiling rather than a number we
+ * picked. Video still needs the Videos API and is an extension of the layer
+ * below, not of this constant.
  */
-export const LINKEDIN_MAX_MEDIA_ITEMS = 1;
+export const LINKEDIN_MAX_MEDIA_ITEMS = 20;
+
+/** Below this a post uses `content.media`; at or above it, `content.multiImage`. */
+export const LINKEDIN_MIN_MULTI_IMAGE_ITEMS = 2;
 
 /** Kinds `media.ts` can actually upload right now. */
 const SUPPORTED_MEDIA_KINDS: ReadonlySet<LinkedInMediaKind> = new Set<LinkedInMediaKind>([
@@ -137,8 +140,8 @@ export function validateMedia(
 
   if (media.length > LINKEDIN_MAX_MEDIA_ITEMS) {
     throw new ProviderError(
-      `LinkedIn posts from FlowPost support ${LINKEDIN_MAX_MEDIA_ITEMS} image today. ` +
-        `This post has ${media.length} — remove the extras and try again.`,
+      `A LinkedIn post holds ${LINKEDIN_MAX_MEDIA_ITEMS} images. ` +
+        `This post has ${media.length} — remove ${media.length - LINKEDIN_MAX_MEDIA_ITEMS} and try again.`,
       400,
       'linkedin',
     );
@@ -259,6 +262,7 @@ export const linkedinValidator = {
   LINKEDIN_MAX_IMAGE_BYTES,
   LINKEDIN_MAX_IMAGE_PIXELS,
   LINKEDIN_MAX_MEDIA_ITEMS,
+  LINKEDIN_MIN_MULTI_IMAGE_ITEMS,
   LINKEDIN_IMAGE_MIME_TYPES,
   LINKEDIN_PUBLISH_SCOPE,
 };

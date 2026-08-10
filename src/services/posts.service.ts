@@ -161,6 +161,9 @@ export const postsService = {
       // to reuse the setup, and re-cropping for every network by hand is
       // exactly the work this feature removes.
       platform_media: source.platform_media,
+      // Same list, same order. The copy is a starting point for another post,
+      // and its images are most of what makes it one.
+      media: source.media,
     });
   },
 

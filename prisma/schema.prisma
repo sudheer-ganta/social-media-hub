@@ -71,6 +71,23 @@ model Post {
   /// See src/utils/crop.ts.
   platform_media Json?
 
+  /// Every image attached to this post, in the order it should be published:
+  /// [{"id":"…","url":"…","type":"image","width":1600,"height":900,
+  ///   "crop":{"ratio":"4:5","x":0.1,"y":0,"w":0.8,"h":1,"zoom":1}}, …]
+  ///
+  /// Null on every post written before the multi-image composer existed. Those
+  /// read as a single item derived from `image_url`, which is still written on
+  /// every save as a mirror of `media[0].url` — so the AI pipeline, the post
+  /// list, the dashboard and any client that predates this column keep working
+  /// against one image exactly as they did.
+  ///
+  /// `type` is present so video can be added later without reshaping the
+  /// column; today the composer and every provider accept `"image"` only.
+  /// The crop is per item here, where `platform_media` above is per network —
+  /// the two coexist: an item's own crop frames it, and a post that has never
+  /// been through the multi-image composer still frames per network.
+  media Json?
+
   // AI pipeline. Written by the backend AI module via the posts API —
   // see server/src/ai/ and src/services/posts.service.ts.
   ai_status           String    @default("pending")

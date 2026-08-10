@@ -14,6 +14,7 @@
     "db:generate": "prisma generate",
     "verify:hashtags": "node --experimental-strip-types scripts/verify-hashtags.ts",
     "verify:crop": "node --experimental-strip-types scripts/verify-crop.ts",
+    "verify:media": "node --experimental-strip-types scripts/verify-media.ts",
     "verify:reach": "node --experimental-strip-types scripts/verify-reach-apply.ts"
   },
   "dependencies": {

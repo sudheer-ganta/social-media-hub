@@ -176,10 +176,11 @@ export function buildLegacyTextPostBody(input: {
 /**
  * The body for a post with media attached, on the versioned Posts API.
  *
- * `content.media` takes a single asset: `{ id, altText }`. A second image is
- * not "another entry in this object" — it is LinkedIn's separate MultiImage
- * content shape — which is why the validator caps media at one and this
- * function asserts rather than silently publishing the first of several.
+ * Two shapes, and which one is used is decided by the count rather than by the
+ * caller: `content.media` carries exactly one asset as an object, and
+ * `content.multiImage` carries two or more as an array. They are separate
+ * content types in LinkedIn's schema — a second image is not another entry in
+ * the first one — so this function branches instead of the publisher.
  *
  * `altText` is omitted entirely when absent. Sending an empty string is not the
  * same thing to a screen reader: it marks the image as decorative, which a
@@ -190,20 +191,31 @@ export function buildMediaPostBody(input: {
   caption: string;
   media: Array<{ urn: string; altText: string | null }>;
 }): Record<string, unknown> {
-  const [asset] = input.media;
-  if (!asset) throw new Error('buildMediaPostBody called with no media');
-  if (input.media.length > 1) {
-    throw new Error(
-      'buildMediaPostBody takes one asset; multiple images need content.multiImage',
-    );
+  if (input.media.length === 0) {
+    throw new Error('buildMediaPostBody called with no media');
+  }
+
+  const text = buildTextPostBody({
+    authorUrn: input.authorUrn,
+    caption: input.caption,
+  });
+
+  const toImage = (asset: { urn: string; altText: string | null }) => ({
+    id: asset.urn,
+    ...(asset.altText ? { altText: asset.altText } : {}),
+  });
+
+  if (input.media.length === 1) {
+    return { ...text, content: { media: toImage(input.media[0]) } };
   }
 
   return {
-    ...buildTextPostBody({ authorUrn: input.authorUrn, caption: input.caption }),
+    ...text,
     content: {
-      media: {
-        id: asset.urn,
-        ...(asset.altText ? { altText: asset.altText } : {}),
+      multiImage: {
+        // Array order is render order, which is the order the composer stored
+        // and the order `media.ts` uploaded in.
+        images: input.media.map(toImage),
       },
     },
   };

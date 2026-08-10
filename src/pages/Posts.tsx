@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { FileText, Plus } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PostCard } from "@/components/posts/PostCard";
+import { PostDetailModal } from "@/components/posts/PostDetailModal";
 import { PostFilters } from "@/components/posts/PostFilters";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Pagination } from "@/components/shared/Pagination";
@@ -39,9 +40,22 @@ const DEFAULT_FILTERS: Filters = {
 };
 
 export default function Posts() {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  // The Flow Rail navigates here carrying the stage that was clicked, so
+  // "8 Scheduled" on the rail lands on those eight and nothing else.
+  const railStatus = (useLocation().state as { status?: string } | null)?.status;
+  const [filters, setFilters] = useState<Filters>(() =>
+    railStatus ? { ...DEFAULT_FILTERS, status: railStatus as Filters["status"] } : DEFAULT_FILTERS,
+  );
   const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<Post | null>(null);
+  const [selectedPostForView, setSelectedPostForView] = useState<Post | null>(null);
+
+  // The rail is on this page too, so a click while already here has to land.
+  useEffect(() => {
+    if (!railStatus) return;
+    setFilters((f) => ({ ...f, status: railStatus as Filters["status"] }));
+    setPage(1);
+  }, [railStatus]);
 
   const debouncedSearch = useDebouncedValue(filters.search);
 
@@ -89,14 +103,6 @@ export default function Posts() {
       description={
         isLoading ? "Loading your posts…" : `${total} ${total === 1 ? "post" : "posts"} in your workspace.`
       }
-      actions={
-        <Button asChild>
-          <Link to="/posts/new">
-            <Plus />
-            New Post
-          </Link>
-        </Button>
-      }
     >
       <div className="mb-6">
         <PostFilters value={filters} onChange={handleFiltersChange} />
@@ -139,6 +145,7 @@ export default function Posts() {
                   <PostCard
                     key={post.id}
                     post={post}
+                    onClick={(p) => setSelectedPostForView(p)}
                     onDelete={setPendingDelete}
                     onDuplicate={(p) => duplicatePost.mutate(p.id)}
                     onPublish={(p) => publishPost.mutate(p.id)}
@@ -182,6 +189,12 @@ export default function Posts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PostDetailModal
+        post={selectedPostForView}
+        open={Boolean(selectedPostForView)}
+        onOpenChange={(open) => !open && setSelectedPostForView(null)}
+      />
     </PageContainer>
   );
 }

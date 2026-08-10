@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { postsService } from "@/services";
 import { aiService } from "@/services/ai.service";
@@ -49,10 +49,36 @@ export interface UseAiCaption {
   reset: () => void;
 }
 
-export function useAiCaption(): UseAiCaption {
-  const [result, setResult] = useState<CaptionResult | null>(null);
+export function useAiCaption(
+  initialResult?: CaptionResult | null,
+  storageKey?: string,
+): UseAiCaption {
+  const [result, setResult] = useState<CaptionResult | null>(() => {
+    if (initialResult) return initialResult;
+    if (storageKey) {
+      try {
+        const raw = sessionStorage.getItem(storageKey);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return null;
+  });
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync result to sessionStorage whenever it changes
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      if (result) sessionStorage.setItem(storageKey, JSON.stringify(result));
+      else sessionStorage.removeItem(storageKey);
+    } catch (e) {
+      // ignore
+    }
+  }, [result, storageKey]);
 
   const generate = useCallback(
     async (draft: UseAiCaptionDraft): Promise<CaptionResult | null> => {

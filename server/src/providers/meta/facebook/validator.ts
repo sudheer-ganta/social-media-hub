@@ -48,15 +48,21 @@ export const FACEBOOK_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
 export const FACEBOOK_MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 
 /**
- * One image per post today.
+ * How many images one Page post may carry.
  *
- * A second image needs Facebook's unpublished-photo flow — each photo POSTed to
- * `/{page-id}/photos` with `published=false`, then their ids passed to
- * `/{page-id}/feed` as `attached_media` — which is a different sequence of
- * calls, not a longer array on this one. Named so the day it changes there is
- * one place to change.
+ * `attached_media` on `/{page-id}/feed` is documented to take up to 10 entries,
+ * which is the same ceiling Instagram puts on a carousel — a coincidence worth
+ * not relying on, hence a constant per provider.
+ *
+ * One image still takes the single `/photos` call that creates a photo story;
+ * two or more take the unpublished-photo flow (each photo POSTed with
+ * `published=false`, then their ids attached to one feed post). See
+ * `publisher.ts`.
  */
-export const FACEBOOK_MAX_MEDIA_ITEMS = 1;
+export const FACEBOOK_MAX_MEDIA_ITEMS = 10;
+
+/** Below this a post is a photo story, not a multi-photo feed post. */
+export const FACEBOOK_MIN_MULTI_PHOTO_ITEMS = 2;
 
 /**
  * Checks a caption is publishable.
@@ -99,8 +105,8 @@ export function validateMedia(
 
   if (media.length > FACEBOOK_MAX_MEDIA_ITEMS) {
     throw new ProviderError(
-      `Facebook posts from FlowPost support ${FACEBOOK_MAX_MEDIA_ITEMS} image today. ` +
-        `This post has ${media.length} — remove the extras and try again.`,
+      `A Facebook post holds ${FACEBOOK_MAX_MEDIA_ITEMS} images. ` +
+        `This post has ${media.length} — remove ${media.length - FACEBOOK_MAX_MEDIA_ITEMS} and try again.`,
       400,
       'facebook',
     );
@@ -212,5 +218,6 @@ export const facebookValidator = {
   FACEBOOK_MAX_CAPTION_LENGTH,
   FACEBOOK_MAX_IMAGE_BYTES,
   FACEBOOK_MAX_MEDIA_ITEMS,
+  FACEBOOK_MIN_MULTI_PHOTO_ITEMS,
   FACEBOOK_IMAGE_MIME_TYPES,
 };

@@ -8,7 +8,12 @@ import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode, refreshAccessToken } from './token';
 import { verify } from './verify';
 import { publish } from './publisher';
-import { canPublish } from './validator';
+import {
+  canPublish,
+  X_IMAGE_MIME_TYPES,
+  X_MAX_IMAGE_BYTES,
+  X_MAX_MEDIA_ITEMS,
+} from './validator';
 import { socialConnectionService } from '../../services/social-connection.service';
 import { readContext, assertContextOwned } from '../../services/account-context';
 import { buildIntegrationsRedirect } from '../../services/oauth-redirect';
@@ -210,8 +215,10 @@ export const xProvider: Provider = {
   // the day after it was made. No other provider implements it yet: LinkedIn's
   // tokens last sixty days and Meta's are extended by presenting themselves.
   refreshTokens: refreshAccessToken,
-  // No `mediaRequirements`: nothing is publishable with media, and declaring
-  // formats we cannot upload would tell the media service to go and fetch bytes
-  // this provider is going to refuse. See `validator.ts`.
+  mediaRequirements: {
+    imageMimeTypes: X_IMAGE_MIME_TYPES,
+    maxImageBytes: X_MAX_IMAGE_BYTES,
+    maxItems: X_MAX_MEDIA_ITEMS,
+  },
   canPublish,
 };

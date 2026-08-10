@@ -120,7 +120,7 @@ export interface InstagramProfile {
   accountType: string | null;
 }
 
-/** `POST /{ig-id}/media` — creates the container. */
+/** `POST /{ig-id}/media` — creates an image container. */
 export interface InstagramMediaContainerRequest {
   /**
    * A publicly reachable URL Meta's servers fetch the image from. There is no
@@ -129,6 +129,30 @@ export interface InstagramMediaContainerRequest {
   image_url: string;
   caption?: string;
   alt_text?: string;
+  /**
+   * Marks this container as a member of a carousel rather than a post of its
+   * own.
+   *
+   * A child container is never published directly — it exists only to be named
+   * in the parent's `children`. Meta ignores `caption` on one, which is why the
+   * caption goes on the parent and only the alt text stays here.
+   */
+  is_carousel_item?: boolean;
+}
+
+/**
+ * `POST /{ig-id}/media` — creates the carousel container that holds the
+ * children.
+ *
+ * A separate shape from the image container above because it carries no
+ * `image_url` at all: the pictures are already uploaded as children, and this
+ * request only says which ones, in which order, under what caption.
+ */
+export interface InstagramCarouselContainerRequest {
+  media_type: 'CAROUSEL';
+  /** Child container ids, comma-delimited. Order is the order they render in. */
+  children: string;
+  caption?: string;
 }
 
 /** Both `/media` and `/media_publish` answer with just an id. */
@@ -194,6 +218,9 @@ export interface InstagramPublishResult {
    */
   url: string | null;
   endpoint: 'media_publish';
-  /** The container id that produced the post. One entry, for now. */
+  /**
+   * The containers that produced the post: one id for a single image, and for a
+   * carousel every child followed by the parent that was published.
+   */
   mediaUrns: string[];
 }

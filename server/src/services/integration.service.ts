@@ -31,6 +31,7 @@ import {
   getCatalogEntry,
   type ProviderCatalogEntry,
   type ProviderId,
+  type ProviderMediaCapability,
 } from '../providers';
 
 /**
@@ -97,6 +98,15 @@ export interface IntegrationDto {
   /** What to do about it, or null when there is nothing to fix. */
   guidance: string | null;
   permissions: GrantedPermission[];
+  /**
+   * How much media this network takes on one post.
+   *
+   * Sent to the browser so the composer can say, before anything is published,
+   * what each selected network will actually receive. Straight from the
+   * catalogue, which takes it from the validators — so the composer cannot
+   * offer a carousel the publish path would reject.
+   */
+  media: ProviderMediaCapability;
   /** Null when there is no connection to assess. */
   health: ConnectionHealth | null;
   account: IntegrationAccountDto | null;
@@ -147,6 +157,7 @@ function toIntegrationDto(
     tone: statusTone(status),
     guidance: account ? statusGuidance(status, catalog.displayName) : null,
     permissions,
+    media: catalog.media,
     health: account ? assessHealth(account, permissions, now, warningMs) : null,
     account: account ? toAccountDto(account) : null,
   };

@@ -1,5 +1,5 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3,
   Calendar,
@@ -9,13 +9,16 @@ import {
   LogOut,
   Monitor,
   Moon,
+  PenLine,
   Plug,
   Settings,
+  Sparkles,
   Sun,
 } from "lucide-react";
 import { toast } from "sonner";
-import { FlowPostIcon } from "@/components/brand/Logo";
+import { Logo } from "@/components/brand/Logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,12 +41,10 @@ import type { Theme } from "@/types";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  // One answer to "where do I create content?" — AI Studio folded into
-  // Create Post, so there is no second destination to choose between.
-  { to: "/posts", label: "Content Studio", icon: FileText },
-  { to: "/calendar", label: "Calendar", icon: Calendar },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/integrations", label: "Integrations", icon: Plug },
+  { to: "/calendar", label: "Plan", icon: Calendar },
+  { to: "/posts", label: "Library", icon: FileText },
+  { to: "/analytics", label: "Insights", icon: BarChart3 },
+  { to: "/integrations", label: "Accounts", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -86,36 +87,47 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
 
   return (
     <motion.aside
-      animate={{ width: collapsed ? 72 : 248 }}
+      animate={{ width: collapsed ? 72 : 240 }}
       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
       className="sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r bg-card lg:flex"
     >
       {/* Brand */}
-      <div className={cn("flex h-16 items-center gap-3 border-b px-4", collapsed && "justify-center px-0")}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 p-1 border border-primary/20 shadow-sm">
-          <FlowPostIcon className="h-7 w-7" />
-        </div>
-        <AnimatePresence initial={false}>
-          {!collapsed && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="min-w-0"
-            >
-              <p className="truncate text-base font-extrabold leading-tight tracking-tight">
-                Flow<span className="text-blue-600 dark:text-blue-400">Post</span>
-              </p>
-              <p className="truncate text-[11px] text-muted-foreground font-medium">
-                Content Workspace
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <div
+        className={cn(
+          "flex h-12 items-center gap-3 border-b px-6",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        <Link to="/" className="flex items-center gap-2.5" aria-label="FlowPost Home">
+          <Logo iconOnly={collapsed} size="md" />
+        </Link>
+      </div>
+
+      {/* Compose Button */}
+      <div className="p-3">
+        {collapsed ? (
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <Button asChild size="icon" className="w-full shadow-glow">
+                <Link to="/posts/new" aria-label="Compose">
+                  <PenLine className="h-4 w-4" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Compose</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button asChild className="w-full shadow-glow">
+            <Link to="/posts/new" className="flex items-center gap-2">
+              <PenLine className="h-4 w-4" />
+              Compose
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3 scrollbar-thin">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 scrollbar-thin">
         {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
           const active =
             to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
@@ -127,7 +139,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
                 "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 collapsed && "justify-center px-0",
                 active
-                  ? "text-primary"
+                  ? "text-primary font-semibold"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               )}
             >
@@ -177,7 +189,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
                 onClick={() => setTheme(value)}
                 className={cn(theme === value && "bg-accent text-accent-foreground")}
               >
-                <Icon />
+                <Icon className="h-4 w-4 mr-2" />
                 {label}
               </DropdownMenuItem>
             ))}
@@ -236,7 +248,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
               className="text-destructive focus:text-destructive"
               onClick={handleSignOut}
             >
-              <LogOut />
+              <LogOut className="h-4 w-4 mr-2" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>

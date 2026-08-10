@@ -2,9 +2,10 @@ import axios from 'axios';
 import { ProviderError } from '../../provider.interface';
 import { facebookConfig } from './config';
 import { REQUEST_TIMEOUT_MS, toProviderError } from './http';
-import { validatePost } from './validator';
+import { FACEBOOK_MIN_MULTI_PHOTO_ITEMS, validatePost } from './validator';
 import type {
   FacebookCreatedNode,
+  FacebookMediaAsset,
   FacebookPostNode,
   FacebookPublishInput,
   FacebookPublishResult,
@@ -27,10 +28,24 @@ import type {
  * container, no `status_code` poll, no not-ready retry — and adding any of that
  * "for symmetry" would be inventing a state machine the API does not have.
  *
- * Two endpoints, chosen by whether the draft carries an image:
+ * Three shapes, chosen by how many images the draft carries:
  *
- *   • text only   → `POST /{page-id}/feed`   with `message`
- *   • with image  → `POST /{page-id}/photos` with `url` + `caption`
+ *   • text only    → `POST /{page-id}/feed`   with `message`
+ *   • one image    → `POST /{page-id}/photos` with `url` + `caption`
+ *   • two or more  → one `POST /{page-id}/photos` per image with
+ *                    `published=false`, then `POST /{page-id}/feed` with
+ *                    `message` + `attached_media`
+ *
+ * The third is Facebook's own multi-photo story and not a workaround: an
+ * unpublished photo is an object that exists on the Page without appearing in
+ * the feed, and `attached_media` is the documented way to gather several of
+ * them into one post. Order is `attached_media` order, which is the order the
+ * composer stored.
+ *
+ * An unpublished photo that never gets attached — because the feed call fails —
+ * is invisible to followers and expires from the Page's unpublished pool on
+ * Meta's own schedule. That is why the photos go up first: the reverse order
+ * cannot be expressed, and this one leaves nothing visible behind on failure.
  *
  * The image is **pulled, not pushed**, exactly like Instagram's: `url` is the
  * public address Meta fetches from, which is why `ProviderMediaAsset` carries
@@ -67,37 +82,142 @@ export async function publish(
     media: input.media,
   });
 
-  const [image] = media;
+  const accessToken = input.accessToken;
+  const pageId = input.providerAccountId;
+  const isMultiPhoto = media.length >= FACEBOOK_MIN_MULTI_PHOTO_ITEMS;
 
-  const created = image
-    ? await createPhotoPost({
-        accessToken: input.accessToken,
-        pageId: input.providerAccountId,
-        imageUrl: image.sourceUrl,
-        caption,
-      })
-    : await createFeedPost({
-        accessToken: input.accessToken,
-        pageId: input.providerAccountId,
-        message: caption,
-      });
+  const created = isMultiPhoto
+    ? await createMultiPhotoPost({ accessToken, pageId, media, caption })
+    : media.length === 1
+      ? await createPhotoPost({
+          accessToken,
+          pageId,
+          imageUrl: media[0].sourceUrl,
+          altText: media[0].altText,
+          caption,
+        })
+      : await createFeedPost({ accessToken, pageId, message: caption });
 
   return {
     urn: created.postId,
     // Best-effort: the post is already live, so a failed permalink read must
     // not fail the publish. See fetchPermalink.
-    url: await fetchPermalink(input.accessToken, created.postId),
-    endpoint: image ? 'photos' : 'feed',
-    mediaUrns: created.photoId ? [created.photoId] : [],
+    url: await fetchPermalink(accessToken, created.postId),
+    // A multi-photo story is created on `/feed`, same as a text post — the
+    // photos went up separately and unpublished.
+    endpoint: media.length === 1 ? 'photos' : 'feed',
+    mediaUrns: created.photoIds,
   };
 }
 
-/** Text-only. `POST /{page-id}/feed` with `message`. */
+/**
+ * Two or more images: upload each unpublished, then attach them to one post.
+ *
+ * The photos are uploaded in order and attached in that order, because that is
+ * the order Facebook renders them in and the order the member arranged in the
+ * composer.
+ */
+async function createMultiPhotoPost(args: {
+  accessToken: string;
+  pageId: string;
+  media: FacebookMediaAsset[];
+  caption: string;
+}): Promise<{ postId: string; photoIds: string[] }> {
+  const photoIds: string[] = [];
+
+  for (const image of args.media) {
+    photoIds.push(
+      await uploadUnpublishedPhoto({
+        accessToken: args.accessToken,
+        pageId: args.pageId,
+        imageUrl: image.sourceUrl,
+        altText: image.altText,
+      }),
+    );
+  }
+
+  console.info('[facebook] photos uploaded for a multi-photo post', {
+    count: photoIds.length,
+  });
+
+  const created = await createFeedPost({
+    accessToken: args.accessToken,
+    pageId: args.pageId,
+    message: args.caption,
+    attachedMedia: photoIds,
+  });
+
+  return { postId: created.postId, photoIds };
+}
+
+/**
+ * One photo on the Page but not in the feed. Returns its id, for `attached_media`.
+ *
+ * `published=false` is the whole difference from {@link createPhotoPost}: the
+ * object is created and returns an id, and nothing appears on the Page until a
+ * feed post references it.
+ */
+async function uploadUnpublishedPhoto(args: {
+  accessToken: string;
+  pageId: string;
+  imageUrl: string;
+  altText: string | null;
+}): Promise<string> {
+  let response;
+  try {
+    response = await axios.post<FacebookCreatedNode>(
+      `${facebookConfig.graphUrl}/${encodeURIComponent(args.pageId)}/photos`,
+      null,
+      {
+        params: {
+          url: args.imageUrl,
+          published: false,
+          ...(args.altText ? { alt_text_custom: args.altText } : {}),
+          access_token: args.accessToken,
+        },
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+    );
+  } catch (error) {
+    throw toProviderError(error, 'photo upload');
+  }
+
+  const photoId = readId(response.data?.id);
+  if (!photoId) {
+    throw new ProviderError(
+      'Facebook accepted an image but did not return its id',
+      502,
+      'facebook',
+      response.status,
+    );
+  }
+
+  return photoId;
+}
+
+/**
+ * `POST /{page-id}/feed` — a text post, or the story that gathers already
+ * uploaded photos.
+ *
+ * `attached_media` goes on the wire as indexed parameters —
+ * `attached_media[0]={"media_fbid":"…"}` — which is the form Meta documents.
+ * Index order is render order.
+ */
 async function createFeedPost(args: {
   accessToken: string;
   pageId: string;
   message: string;
-}): Promise<{ postId: string; photoId: string | null }> {
+  /** Unpublished photo ids to attach, in render order. */
+  attachedMedia?: string[];
+}): Promise<{ postId: string; photoIds: string[] }> {
+  const attached = args.attachedMedia ?? [];
+  const attachedParams = Object.fromEntries(
+    attached.map((photoId, index) => [
+      `attached_media[${index}]`,
+      JSON.stringify({ media_fbid: photoId }),
+    ]),
+  );
+
   let response;
   try {
     response = await axios.post<FacebookCreatedNode>(
@@ -106,7 +226,13 @@ async function createFeedPost(args: {
       {
         // Meta takes these as query parameters on the publishing edges. The
         // token rides along here, which is why nothing logs a Graph URL.
-        params: { message: args.message, access_token: args.accessToken },
+        params: {
+          // Omitted rather than sent empty: photos with no words is a valid
+          // post, and a blank `message` is a parameter Meta has no use for.
+          ...(args.message ? { message: args.message } : {}),
+          ...attachedParams,
+          access_token: args.accessToken,
+        },
         timeout: REQUEST_TIMEOUT_MS,
       },
     );
@@ -126,7 +252,7 @@ async function createFeedPost(args: {
     );
   }
 
-  return { postId, photoId: null };
+  return { postId, photoIds: attached };
 }
 
 /**
@@ -140,8 +266,9 @@ async function createPhotoPost(args: {
   accessToken: string;
   pageId: string;
   imageUrl: string;
+  altText: string | null;
   caption: string;
-}): Promise<{ postId: string; photoId: string | null }> {
+}): Promise<{ postId: string; photoIds: string[] }> {
   let response;
   try {
     response = await axios.post<FacebookCreatedNode>(
@@ -153,6 +280,10 @@ async function createPhotoPost(args: {
           // Omitted rather than sent empty: a blank `caption` is a parameter
           // Meta has no use for, and an image with no words is a valid post.
           ...(args.caption ? { caption: args.caption } : {}),
+          // The description a screen reader announces. Generated by the media
+          // service for every network; Facebook is simply the one that names
+          // the field `alt_text_custom`.
+          ...(args.altText ? { alt_text_custom: args.altText } : {}),
           access_token: args.accessToken,
         },
         timeout: REQUEST_TIMEOUT_MS,
@@ -176,7 +307,7 @@ async function createPhotoPost(args: {
     );
   }
 
-  return { postId, photoId };
+  return { postId, photoIds: photoId ? [photoId] : [] };
 }
 
 /** Meta sends ids as either a string or a number depending on the field. */

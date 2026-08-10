@@ -2,58 +2,107 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * FlowPost design tokens — the Masthead contract.
+ *
+ * FlowPost is achromatic. Surfaces, type, chrome and actions are paper and
+ * ink; the only hue in the product belongs to the user's connected networks
+ * and to semantic state. There is deliberately no accent colour to drift.
+ *
+ * Every component reads these through Tailwind's semantic names, so the
+ * palette changes here and nowhere else.
+ */
 @layer base {
   :root {
-    --background: 216 30% 98%;
-    --foreground: 215 25% 12%;
+    /* Paper stack — neutral, very slightly warm so it is not a screen grey */
+    --background: 60 9% 96%;
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 12%;
-    --primary: 217 91% 54%;
+    --secondary: 60 7% 93%;
+    --muted: 60 7% 94%;
+
+    /* Ink */
+    --foreground: 240 3% 7%;
+    --card-foreground: 240 3% 7%;
+    --popover-foreground: 240 3% 7%;
+    --secondary-foreground: 240 3% 16%;
+    --muted-foreground: 240 2% 42%;
+
+    /* Brand-infused Primary Actions (Indigo / Electric Cyan accent from Logo) */
+    --primary: 239 84% 67%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 214 32% 94%;
-    --secondary-foreground: 215 25% 20%;
-    --muted: 214 25% 95%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 214 95% 95%;
-    --accent-foreground: 217 91% 40%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --success: 152 60% 40%;
-    --success-foreground: 0 0% 100%;
-    --warning: 36 92% 48%;
-    --warning-foreground: 0 0% 100%;
-    --border: 214 25% 90%;
-    --input: 214 25% 88%;
-    --ring: 217 91% 54%;
-    --radius: 0.75rem;
+    --accent: 239 84% 96%;
+    --accent-foreground: 239 84% 35%;
+
+    /* Semantic state. Small type, indicators and trends only — never a fill. */
+    --success: 158 55% 27%;
+    --success-foreground: 60 9% 98%;
+    --warning: 39 100% 27%;
+    --warning-foreground: 60 9% 98%;
+    --destructive: 4 76% 41%;
+    --destructive-foreground: 60 9% 98%;
+    --info: 239 84% 67%;
+    --info-foreground: 60 9% 98%;
+
+    /* Rules */
+    --border: 50 8% 85%;
+    --input: 50 8% 80%;
+    --ring: 239 84% 67%;
+
+    --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 40% 10.5%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 40% 10.5%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 10%;
-    --secondary: 217 28% 16%;
-    --secondary-foreground: 210 40% 90%;
-    --muted: 217 28% 15%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 45% 18%;
-    --accent-foreground: 214 95% 85%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --success: 152 55% 46%;
-    --success-foreground: 152 60% 8%;
-    --warning: 36 92% 56%;
-    --warning-foreground: 36 80% 10%;
-    --border: 217 25% 18%;
-    --input: 217 25% 20%;
-    --ring: 217 91% 60%;
+    --background: 240 4% 6%;
+    --card: 240 4% 10%;
+    --popover: 240 4% 11%;
+    --secondary: 240 4% 14%;
+    --muted: 240 4% 13%;
+
+    --foreground: 60 6% 95%;
+    --card-foreground: 60 6% 95%;
+    --popover-foreground: 60 6% 95%;
+    --secondary-foreground: 60 4% 87%;
+    --muted-foreground: 240 3% 62%;
+
+    /* Brand-infused Dark Mode Primary (Vibrant Indigo-Violet from Logo) */
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 239 45% 18%;
+    --accent-foreground: 239 84% 85%;
+
+    --success: 158 39% 49%;
+    --success-foreground: 158 40% 7%;
+    --warning: 38 63% 57%;
+    --warning-foreground: 38 50% 8%;
+    --destructive: 4 85% 66%;
+    --destructive-foreground: 4 40% 8%;
+    --info: 239 84% 67%;
+    --info-foreground: 239 40% 8%;
+
+    --border: 240 4% 17%;
+    --input: 240 4% 21%;
+    --ring: 239 84% 67%;
+  }
+
+  /**
+   * Where all the colour in FlowPost lives. A screen showing three networks
+   * shows exactly three colours — on badges, card caps, the Flow Rail's
+   * travelling item and chart series. Never a surface.
+   */
+  :root,
+  .dark {
+    --platform-instagram: 340 75% 54%;
+    --platform-linkedin: 201 100% 35%;
+    --platform-facebook: 221 44% 41%;
+    --platform-x: 0 0% 9%;
+    --platform-youtube: 0 100% 50%;
+    --platform-threads: 0 0% 9%;
+  }
+
+  .dark {
+    --platform-x: 0 0% 96%;
+    --platform-threads: 0 0% 96%;
   }
 
   * {
@@ -68,11 +117,18 @@
 
   body {
     @apply bg-background text-foreground font-sans;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Hierarchy is weight, size and tracking — never colour or a box. */
+  h1,
+  h2,
+  h3 {
+    font-family: theme("fontFamily.display");
+    @apply font-semibold tracking-[-0.02em];
   }
 
   ::selection {
-    @apply bg-primary/20;
+    @apply bg-foreground/15;
   }
 }
 
@@ -96,11 +152,26 @@
     background: transparent;
   }
 
+  /* The sticky masthead only. Not a decorative surface treatment. */
   .glass {
-    @apply bg-background/70 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60;
+    @apply bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75;
   }
 
+  /**
+   * Metadata voice: timestamps, counts, network names, publishing states.
+   * Mono + tracking is what makes this read as a studio rather than a page.
+   */
+  .text-meta {
+    @apply font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground;
+  }
+
+  /* Numbers that line up in columns, everywhere. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Deprecated — was a violet AI gradient. Kept so old call sites stay flat. */
   .text-gradient {
-    @apply bg-gradient-to-r from-primary via-primary to-accent-foreground bg-clip-text text-transparent;
+    @apply text-foreground;
   }
 }
