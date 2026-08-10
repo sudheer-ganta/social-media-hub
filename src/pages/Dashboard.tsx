@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   return (
     <PageContainer title="Dashboard" description="Your content at a glance.">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Posts"
           value={counts.total}

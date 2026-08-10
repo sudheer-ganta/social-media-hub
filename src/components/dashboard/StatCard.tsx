@@ -30,25 +30,25 @@ export function StatCard({
       transition={{ delay: index * 0.06, duration: 0.3 }}
     >
       <Card className="transition-shadow hover:shadow-elevated">
-        <CardContent className="flex items-start justify-between gap-3 p-5">
+        <CardContent className="flex items-start justify-between gap-3 p-4 sm:p-5">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-muted-foreground">{label}</p>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">{label}</p>
             {loading ? (
-              <Skeleton className="mt-2 h-8 w-16" />
+              <Skeleton className="mt-2 h-7 w-16" />
             ) : (
-              <p className="mt-1 text-3xl font-bold tabular-nums tracking-tight">
+              <p className="mt-0.5 sm:mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
                 {value.toLocaleString()}
               </p>
             )}
-            <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p>
+            <p className="mt-0.5 truncate text-[11px] sm:text-xs text-muted-foreground">{hint}</p>
           </div>
           <div
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+              "flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg",
               accentClassName ?? "bg-accent text-accent-foreground",
             )}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </CardContent>
       </Card>
