@@ -58,7 +58,7 @@ export function Logo({
   variant = "default",
 }: LogoProps) {
   const sizeClasses = {
-    sm: { icon: "h-6 w-6", text: "text-base" },
+    sm: { icon: "h-7 w-7", text: "text-lg" },
     md: { icon: "h-8 w-8", text: "text-xl" },
     lg: { icon: "h-10 w-10", text: "text-2xl" },
     xl: { icon: "h-16 w-16", text: "text-4xl" },
