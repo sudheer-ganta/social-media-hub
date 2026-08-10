@@ -53,7 +53,7 @@ export function ActivityChart({ posts, loading }: ActivityChartProps) {
   const data = buildSeries(posts ?? [], daysCount);
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle>Activity</CardTitle>
         <CardDescription>
@@ -66,7 +66,7 @@ export function ActivityChart({ posts, loading }: ActivityChartProps) {
             <Skeleton className="h-full w-full" />
           </div>
         ) : (
-          <div style={{ height: isMobile ? 180 : 220, width: "100%" }}>
+          <div style={{ height: isMobile ? 180 : 220, width: "100%", minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <defs>

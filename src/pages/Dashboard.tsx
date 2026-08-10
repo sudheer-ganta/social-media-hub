@@ -66,12 +66,12 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           <ActivityChart posts={activity.data} loading={activity.isLoading} />
           <RecentPosts posts={recent.data} loading={recent.isLoading} />
         </div>
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-4">
           <QuickActions />
           <UpcomingPosts posts={upcoming.data} loading={upcoming.isLoading} />
         </div>
