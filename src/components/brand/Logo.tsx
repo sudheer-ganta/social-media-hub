@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { cn } from "@/lib/utils";
 
 interface LogoProps {
@@ -8,6 +9,11 @@ interface LogoProps {
 }
 
 export function FlowPostIcon({ className = "h-8 w-8" }: { className?: string }) {
+  const uid = useId().replace(/:/g, "");
+  const g1 = `fpG1${uid}`;
+  const g2 = `fpG2${uid}`;
+  const gGlow = `fpGlow${uid}`;
+
   return (
     <svg
       viewBox="0 0 100 100"
@@ -16,37 +22,36 @@ export function FlowPostIcon({ className = "h-8 w-8" }: { className?: string }) 
       className={className}
     >
       <defs>
-        {/* Primary UI Gradient (Violet - Indigo - Electric Cyan) */}
-        <linearGradient id="fpUiGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id={g1} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#4F46E5" />
           <stop offset="50%" stopColor="#6366F1" />
           <stop offset="100%" stopColor="#818CF8" />
         </linearGradient>
-        <linearGradient id="fpUiGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+        <linearGradient id={g2} x1="100%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor="#3730A3" />
           <stop offset="100%" stopColor="#818CF8" />
         </linearGradient>
-        <linearGradient id="fpUiGradGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id={gGlow} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#6366F1" />
           <stop offset="100%" stopColor="#C084FC" />
         </linearGradient>
       </defs>
 
       {/* Outer subtle guide ring */}
-      <circle cx="50" cy="50" r="42" stroke="url(#fpUiGrad2)" strokeWidth="1.5" strokeOpacity="0.4" fill="none" />
+      <circle cx="50" cy="50" r="42" stroke={`url(#${g2})`} strokeWidth="1.5" strokeOpacity="0.4" fill="none" />
 
       {/* Overlapping Spiraling Rings (Swirl Node Pattern) */}
-      <circle cx="50" cy="38" r="26" stroke="url(#fpUiGrad1)" strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="60" cy="46" r="26" stroke="url(#fpUiGrad1)" strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="54" cy="58" r="26" stroke="url(#fpUiGradGlow)" strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="42" cy="54" r="26" stroke="url(#fpUiGrad1)" strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="38" cy="44" r="26" stroke="url(#fpUiGrad1)" strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
+      <circle cx="50" cy="38" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
+      <circle cx="60" cy="46" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
+      <circle cx="54" cy="58" r="26" stroke={`url(#${gGlow})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
+      <circle cx="42" cy="54" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
+      <circle cx="38" cy="44" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
 
       {/* Inner ring */}
-      <circle cx="50" cy="50" r="18" stroke="url(#fpUiGradGlow)" strokeWidth="2.5" fill="none" />
+      <circle cx="50" cy="50" r="18" stroke={`url(#${gGlow})`} strokeWidth="2.5" fill="none" />
 
       {/* Central Solid Circle matching UI Accent/Primary */}
-      <circle cx="50" cy="50" r="12" fill="url(#fpUiGrad1)" />
+      <circle cx="50" cy="50" r="12" fill={`url(#${g1})`} />
     </svg>
   );
 }
