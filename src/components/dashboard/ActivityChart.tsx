@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import {
   Area,
@@ -23,10 +24,10 @@ interface ActivityChartProps {
   loading: boolean;
 }
 
-/** Posts created per day across the last 14 days. */
-function buildSeries(posts: Post[]) {
-  const days = Array.from({ length: 14 }, (_, i) =>
-    dayjs().subtract(13 - i, "day"),
+/** Posts created per day across 7 or 14 days based on space. */
+function buildSeries(posts: Post[], daysCount: number = 7) {
+  const days = Array.from({ length: daysCount }, (_, i) =>
+    dayjs().subtract((daysCount - 1) - i, "day"),
   );
   return days.map((day) => ({
     label: day.format("MMM D"),
@@ -38,21 +39,36 @@ function buildSeries(posts: Post[]) {
 }
 
 export function ActivityChart({ posts, loading }: ActivityChartProps) {
-  const data = buildSeries(posts ?? []);
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 640,
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const daysCount = isMobile ? 7 : 14;
+  const data = buildSeries(posts ?? [], daysCount);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Activity</CardTitle>
-        <CardDescription>Created vs scheduled — last 14 days</CardDescription>
+        <CardDescription>
+          Created vs scheduled — last {daysCount} days
+        </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-0 pb-4 overflow-hidden">
         {loading ? (
-          <Skeleton className="h-[220px] w-full" />
+          <div style={{ height: isMobile ? 180 : 220 }} className="px-4">
+            <Skeleton className="h-full w-full" />
+          </div>
         ) : (
-          <div className="h-[220px] w-full">
+          <div style={{ height: isMobile ? 180 : 220, width: "100%" }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+              <AreaChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="fillPosts" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(248 90% 66%)" stopOpacity={0.35} />

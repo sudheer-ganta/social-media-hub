@@ -57,9 +57,9 @@ export function RecentPosts({ posts, loading }: RecentPostsProps) {
             <Link
               key={post.id}
               to={`/posts/${post.id}/edit`}
-              className="flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent/50"
+              className="flex items-center gap-2.5 sm:gap-3 rounded-md border p-2.5 sm:p-3 transition-colors hover:bg-accent/50 min-w-0"
             >
-              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-muted">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 overflow-hidden rounded-md bg-muted">
                 {post.image_url ? (
                   <img
                     src={post.image_url}
@@ -74,13 +74,13 @@ export function RecentPosts({ posts, loading }: RecentPostsProps) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{post.title}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {truncate(post.caption, 60) || "No caption"} ·{" "}
+                <p className="truncate text-xs sm:text-sm font-medium">{post.title}</p>
+                <p className="truncate text-[11px] sm:text-xs text-muted-foreground">
+                  {truncate(post.caption, 40) || "No caption"} ·{" "}
                   {formatRelative(post.created_at)}
                 </p>
               </div>
-              <StatusBadge post={post} className="shrink-0" />
+              <StatusBadge post={post} className="shrink-0 text-[10px] sm:text-xs px-2 py-0.5" />
             </Link>
           ))}
       </CardContent>

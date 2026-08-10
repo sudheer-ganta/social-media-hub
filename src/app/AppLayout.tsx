@@ -12,12 +12,12 @@ export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen w-full">
       <BootSequence />
       <Sidebar collapsed={collapsed} onToggleCollapse={() => setCollapsed(!collapsed)} />
-      <div className="flex min-h-screen flex-1 flex-col min-w-0">
+      {/* Inner column fills all remaining width via flex-1 */}
+      <div className="flex min-h-screen flex-1 flex-col" style={{ minWidth: 0, maxWidth: "100%" }}>
         <MobileHeader />
-        {/* Bottom padding clears mobile navigation bar & iOS Safari address bar. */}
         <main className="flex flex-1 flex-col pb-28 lg:pb-0">
           <AnimatePresence mode="wait">
             <Outlet key={location.pathname} />
