@@ -72,8 +72,8 @@ export function ActivityChart({ posts, loading }: ActivityChartProps) {
                   dataKey="label"
                   tickLine={false}
                   axisLine={false}
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  interval="preserveStartEnd"
+                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  minTickGap={24}
                 />
                 <YAxis
                   allowDecimals={false}

@@ -9,8 +9,7 @@ export function MobileHeader() {
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:hidden">
       <Link to="/" className="flex items-center gap-2">
-        <Logo className="h-6 w-6 text-primary" />
-        <span className="font-bold tracking-tight text-sm">FlowPost</span>
+        <Logo size="sm" />
       </Link>
 
       <div className="flex items-center gap-2">
