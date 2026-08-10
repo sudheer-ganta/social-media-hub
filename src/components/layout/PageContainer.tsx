@@ -26,7 +26,7 @@ export function PageContainer({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-      className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8", className)}
+      className={cn("mx-auto w-full max-w-[1600px] px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8", className)}
     >
       {(title || actions) && (
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">

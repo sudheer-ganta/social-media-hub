@@ -829,7 +829,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
       {/* Composer left, preview right. The preview column is fixed-width and
           sticky on desktop down the entire form length. */}
-      <div className="grid gap-6 items-start xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-6 items-start xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader>
