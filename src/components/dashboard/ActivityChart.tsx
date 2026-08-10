@@ -60,7 +60,7 @@ export function ActivityChart({ posts, loading }: ActivityChartProps) {
           Created vs scheduled — last {daysCount} days
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0 pb-4 overflow-hidden">
+      <CardContent className="px-4 pb-4 pt-0 overflow-hidden">
         {loading ? (
           <div style={{ height: isMobile ? 180 : 220 }} className="px-4">
             <Skeleton className="h-full w-full" />
@@ -68,7 +68,7 @@ export function ActivityChart({ posts, loading }: ActivityChartProps) {
         ) : (
           <div style={{ height: isMobile ? 180 : 220, width: "100%", minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <AreaChart data={data} margin={{ top: 4, right: 20, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="fillPosts" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(248 90% 66%)" stopOpacity={0.35} />
