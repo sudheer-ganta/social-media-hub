@@ -7,7 +7,7 @@ import {
 import { firstQueryValue } from '../../oauth-state';
 import { createCookieStateStore } from '../../oauth-state-cookie';
 import { assertFacebookConfigured, facebookConfig } from './config';
-import { exchangeAuthorizationCode } from './token';
+import { exchangeAuthorizationCode, logGranularScopes } from './token';
 import {
   fetchPublishablePages,
   noPublishablePagesError,
@@ -220,6 +220,13 @@ async function callback(req: Request, res: Response): Promise<void> {
     console.log('[facebook] granted permissions', {
       granted: userToken.scope ? userToken.scope.split(',') : null,
     });
+
+    // Diagnostic, and the one above cannot replace it: `/me/permissions` says
+    // `pages_show_list: granted` whether the member selected every Page in the
+    // business-login dialog or none of them. This reads the asset ids behind
+    // that grant. Awaited so it lands in the log *before* the Page list it
+    // explains. Never throws, never logs the token.
+    await logGranularScopes(userToken.accessToken);
 
     // Only ever called with the *long-lived* user token: the Page tokens it
     // returns inherit that lifetime, and inheriting the short-lived one would

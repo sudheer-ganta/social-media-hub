@@ -100,6 +100,23 @@ export interface FacebookPermissionsResponse {
   data?: Array<{ permission?: string; status?: string }>;
 }
 
+/**
+ * `GET /debug_token`. Diagnostic only — see `token.logGranularScopes`.
+ *
+ * `granular_scopes` is the Business-Login-specific part: the assets each
+ * permission was granted over. It is absent entirely on a consumer-login token,
+ * where a permission has no asset set to speak of.
+ */
+export interface FacebookDebugTokenResponse {
+  data?: {
+    app_id?: string;
+    is_valid?: boolean;
+    /** Unix seconds. `0` means the token does not expire. */
+    expires_at?: number;
+    granular_scopes?: Array<{ scope?: string; target_ids?: string[] }>;
+  };
+}
+
 /** One entry of `GET /me/accounts`. */
 export interface FacebookPageNode {
   id?: string;

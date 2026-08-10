@@ -3,6 +3,7 @@ import { ProviderError } from '../../provider.interface';
 import { facebookConfig } from './config';
 import { REQUEST_TIMEOUT_MS, toProviderError } from './http';
 import type {
+  FacebookDebugTokenResponse,
   FacebookPermissionsResponse,
   FacebookTokenResponse,
   FacebookUserAccessToken,
@@ -157,6 +158,68 @@ export async function readGrantedScopes(
       error: error instanceof Error ? error.message : error,
     });
     return null;
+  }
+}
+
+/**
+ * Diagnostic — logs the token's *granular* scopes, never the token.
+ *
+ * Under Facebook Login for Business a permission is granted against a set of
+ * assets chosen in the dialog, and `/me/permissions` cannot show that: it
+ * reports `pages_show_list: granted` identically whether the member selected
+ * every Page or none. `debug_token` is the only endpoint that returns the
+ * `target_ids` behind each permission, which is the difference between "the app
+ * was not allowed to read Pages" and "the app was allowed to read a set of
+ * Pages that is empty" — the two causes of a 200 with `data: []`.
+ *
+ * Safe to log, and nothing else is: permission names, the Page ids the member
+ * selected, the app id, validity and expiry. The token, the secret and the
+ * `debug_token` URL (which carries both) never appear.
+ *
+ * Never throws, for the same reason `readGrantedScopes` does not — a connection
+ * must not fail because a diagnostic read did.
+ */
+export async function logGranularScopes(accessToken: string): Promise<void> {
+  try {
+    const response = await axios.get<FacebookDebugTokenResponse>(
+      `${facebookConfig.graphUrl}/debug_token`,
+      {
+        params: {
+          input_token: accessToken,
+          // The app access token. Meta's convention on this endpoint; it is the
+          // only credential that may inspect our own tokens.
+          access_token: `${facebookConfig.appId}|${facebookConfig.appSecret}`,
+        },
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+    );
+
+    const data = response.data?.data;
+
+    console.log('[facebook] token debug', {
+      appId: data?.app_id ?? null,
+      isValid: data?.is_valid ?? null,
+      // 0 means "never expires", which is what a Page token minted from this
+      // one inherits. Rendered as a date so it is readable next to the rest.
+      expiresAt:
+        typeof data?.expires_at === 'number'
+          ? data.expires_at === 0
+            ? 'never'
+            : new Date(data.expires_at * 1000).toISOString()
+          : null,
+      // The answer. An entry whose `targetIds` is null or empty is a permission
+      // granted over no assets — the app may read Pages, and there are no Pages
+      // it may read.
+      granularScopes:
+        data?.granular_scopes?.map((entry) => ({
+          scope: entry.scope ?? null,
+          targetIds: entry.target_ids ?? null,
+        })) ?? null,
+    });
+  } catch (error) {
+    console.warn('[facebook] token debug could not be read', {
+      error: error instanceof Error ? error.message : error,
+    });
   }
 }
 
