@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { Footer } from "@/components/layout/Footer";
+import { BootSequence } from "@/components/brand/BootSequence";
 
 export function AppLayout() {
   const location = useLocation();
@@ -12,6 +13,7 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen w-full">
+      <BootSequence />
       <Sidebar collapsed={collapsed} onToggleCollapse={() => setCollapsed(!collapsed)} />
       {/* Inner column fills all remaining width via flex-1 */}
       <div className="flex min-h-screen flex-1 flex-col" style={{ minWidth: 0, maxWidth: "100%" }}>
