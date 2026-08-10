@@ -80,6 +80,27 @@ export const env = {
   // Unknown values are dropped rather than sent — see facebook/config.ts.
   FACEBOOK_SCOPES: process.env.FACEBOOK_SCOPES || '',
 
+  // ── X (formerly Twitter) ───────────────────────────────────────────────────
+  //
+  // OAuth 2.0 Authorization Code with PKCE. The Client ID and Client Secret
+  // come from the app's "User authentication settings" in the X Developer
+  // Portal — *not* the API Key/Secret pair, which belong to the older OAuth 1.0a
+  // surface and are rejected by the /2/oauth2/token endpoint.
+  //
+  // The secret is present because FlowPost registers X as a **confidential**
+  // client, which is what makes refresh tokens usable from a backend. PKCE is
+  // still mandatory on top of it — X requires code_challenge on every
+  // authorization request regardless of client type.
+  X_CLIENT_ID: process.env.X_CLIENT_ID || '',
+  X_CLIENT_SECRET: process.env.X_CLIENT_SECRET || '',
+  // Must match a Callback URI registered on the app, character for character.
+  X_REDIRECT_URI: process.env.X_REDIRECT_URI || '',
+  // The X API major version every call is pinned to (`/2/tweets`,
+  // `/2/users/me`). In the environment for the same reason LINKEDIN_API_VERSION
+  // and META_API_VERSION are: it is displayed on the Integrations card and
+  // recorded per connection, and moving off v2 must not require a redeploy.
+  X_API_VERSION: process.env.X_API_VERSION || '2',
+
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY || '',
 
   // AI generation. The Gemini key is read here and used only by

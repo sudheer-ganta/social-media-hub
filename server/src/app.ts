@@ -62,10 +62,12 @@ app.get('/me', requireAuth, (req, res) => {
 import linkedinRoutes from './routes/linkedin.routes';
 import instagramRoutes from './routes/instagram.routes';
 import facebookRoutes from './routes/facebook.routes';
+import xRoutes from './routes/x.routes';
 
 app.use('/auth/linkedin', linkedinRoutes);
 app.use('/auth/instagram', instagramRoutes);
 app.use('/auth/facebook', facebookRoutes);
+app.use('/auth/x', xRoutes);
 
 // Provider-agnostic read API for the Integrations page
 import integrationsRoutes from './routes/integrations.routes';

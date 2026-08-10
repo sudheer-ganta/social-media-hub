@@ -139,6 +139,15 @@ export async function publishPost(
       );
     }
 
+    // Renewed here if the network's tokens are short-lived and this one is
+    // spent. A no-op for every provider that does not implement `refreshTokens`.
+    const accessToken = await ensureFreshAccessToken(
+      account.id,
+      provider,
+      networkName,
+      tokens,
+    );
+
     await postRepository.updateStatus(postId, PostStatus.PUBLISHING);
     await activityService.logPublishStarted(userId, providerId, {
       postId,
@@ -158,7 +167,7 @@ export async function publishPost(
     // lives in the provider (it is network-specific) and throws a ProviderError,
     // which the catch below translates.
     const result = await provider.publish({
-      accessToken: tokens.accessToken,
+      accessToken,
       providerAccountId: account.providerAccountId,
       caption,
       media,
@@ -254,7 +263,18 @@ async function loadPublishableAccount(
 
   // A stored expiry already in the past. Worth catching here rather than
   // spending a request to be told the same thing, and it lets us name the fix.
-  if (account.expiresAt && account.expiresAt.getTime() <= Date.now()) {
+  //
+  // Skipped for a provider that can refresh: X's access tokens last two hours,
+  // so a past-due expiry there is the *normal* state of a connection between
+  // publishes, not a broken one. `ensureFreshAccessToken` renews it below, and
+  // a refresh that fails still lands the member on the same "reconnect it"
+  // message. Providers without `refreshTokens` — LinkedIn, Instagram,
+  // Facebook — take exactly the branch they always did.
+  if (
+    !provider.refreshTokens &&
+    account.expiresAt &&
+    account.expiresAt.getTime() <= Date.now()
+  ) {
     throw new PublishError(
       `Your ${networkName} connection has expired. Reconnect it and try again.`,
       400,
@@ -277,6 +297,93 @@ async function loadPublishableAccount(
   }
 
   return account;
+}
+
+/**
+ * How close to expiry counts as expired.
+ *
+ * A token with thirty seconds left will very likely be dead by the time the
+ * request lands, and a refresh is one cheap call against a publish that would
+ * otherwise fail after the post was already claimed.
+ */
+const TOKEN_REFRESH_SKEW_MS = 60_000;
+
+/**
+ * The access token to publish with — renewed first if it is spent and the
+ * network can renew it.
+ *
+ * Returns the stored token untouched for every provider without
+ * `refreshTokens`, which is all of them but X: LinkedIn's tokens last sixty
+ * days and Meta's are extended by presenting themselves, so neither has
+ * anything for this to do.
+ *
+ * The new tokens are stored *before* the publish, not after. A refresh
+ * invalidates the refresh token it consumed on rotating networks — X among
+ * them — so a token pair that was used and not persisted is a connection that
+ * can never refresh again, whether or not the publish that followed succeeded.
+ *
+ * Nothing here logs a token, and a failure names the fix rather than what X
+ * said about it.
+ */
+async function ensureFreshAccessToken(
+  accountId: string,
+  provider: Provider,
+  networkName: string,
+  tokens: { accessToken: string; refreshToken: string | null; expiresAt: Date | null },
+): Promise<string> {
+  if (!provider.refreshTokens) return tokens.accessToken;
+
+  const expiresSoon =
+    !!tokens.expiresAt &&
+    tokens.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
+  if (!expiresSoon) return tokens.accessToken;
+
+  if (!tokens.refreshToken) {
+    // The member declined the network's offline-access scope, or connected
+    // before we asked for it. Nothing to renew with.
+    throw new PublishError(
+      `Your ${networkName} connection has expired. Reconnect it and try again.`,
+      400,
+      true,
+    );
+  }
+
+  try {
+    const refreshed = await provider.refreshTokens(tokens.refreshToken);
+    await socialAccountRepository.updateTokens(accountId, {
+      accessToken: refreshed.accessToken,
+      // Undefined leaves the stored one alone; a rotating network sends a new
+      // one and it replaces the spent value.
+      refreshToken: refreshed.refreshToken ?? undefined,
+      expiresAt: refreshed.expiresAt,
+    });
+
+    console.log('[publish] access token refreshed', {
+      accountId,
+      provider: provider.id,
+      rotatedRefreshToken: refreshed.refreshToken !== null,
+    });
+
+    return refreshed.accessToken;
+  } catch (error) {
+    // The network's own words stay in the log; the member gets the one thing
+    // they can act on.
+    console.error('[publish] token refresh failed', {
+      accountId,
+      provider: provider.id,
+      upstreamStatus:
+        error instanceof ProviderError ? error.upstreamStatus : undefined,
+      error: error instanceof Error ? error.message : error,
+    });
+
+    // Nothing was published, so the claim is handed back rather than the post
+    // being marked FAILED.
+    throw new PublishError(
+      `Your ${networkName} connection needs reconnecting before you can publish.`,
+      400,
+      true,
+    );
+  }
 }
 
 /**

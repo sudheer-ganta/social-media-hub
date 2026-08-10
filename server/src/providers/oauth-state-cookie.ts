@@ -65,6 +65,19 @@ export interface PendingCookieState {
   userId: string;
   contextType: string;
   brandId: string | null;
+  /**
+   * The PKCE `code_verifier`, for providers that use it. Null for the ones that
+   * do not — LinkedIn, Instagram and Facebook mint no verifier and this field
+   * is absent from their cookies.
+   *
+   * It lives in the same signed cookie as the state rather than in a second one
+   * for the reason the state does: it has to survive the provider's redirect on
+   * a stateless backend, it must not be readable by JavaScript, and one cookie
+   * means one place that gets HMAC, expiry and single-use right. Binding it to
+   * the state also makes the pair inseparable — a verifier cannot be replayed
+   * against a different authorization code.
+   */
+  codeVerifier: string | null;
 }
 
 /** Ten minutes. Long enough for a consent screen, short enough to bound replay. */
@@ -82,6 +95,11 @@ interface StateCookiePayload {
   b: string | null;
   /** Absolute expiry — milliseconds since Unix epoch. */
   exp: number;
+  /**
+   * PKCE `code_verifier`. Optional — only PKCE providers set it, so the cookies
+   * every other provider already mints keep exactly the bytes they had.
+   */
+  v?: string;
 }
 
 export interface CookieStateStore {
@@ -95,6 +113,11 @@ export interface CookieStateStore {
     userId: string,
     context: { contextType: string; brandId: string | null },
     ttlMs?: number,
+    /**
+     * PKCE `code_verifier` to carry through the redirect. Omitted by providers
+     * that do not use PKCE — see {@link PendingCookieState.codeVerifier}.
+     */
+    codeVerifier?: string,
   ): string;
   /**
    * Reads, verifies and clears the state cookie. Returns null for a missing,
@@ -169,7 +192,8 @@ function isStateCookiePayload(v: unknown): v is StateCookiePayload {
     typeof p.u === 'string' &&
     typeof p.ct === 'string' &&
     (p.b === null || typeof p.b === 'string') &&
-    typeof p.exp === 'number'
+    typeof p.exp === 'number' &&
+    (p.v === undefined || typeof p.v === 'string')
   );
 }
 
@@ -265,7 +289,7 @@ export function createCookieStateStore(
   }
 
   return {
-    create(res, userId, context, ttlMs = defaultTtlMs) {
+    create(res, userId, context, ttlMs = defaultTtlMs, codeVerifier) {
       const state = crypto.randomBytes(32).toString('base64url');
       const payload: StateCookiePayload = {
         s: state,
@@ -273,6 +297,9 @@ export function createCookieStateStore(
         ct: context.contextType,
         b: context.brandId,
         exp: Date.now() + ttlMs,
+        // Spread rather than `v: codeVerifier` so a non-PKCE provider's payload
+        // has no `v` key at all and its cookie is byte-identical to before.
+        ...(codeVerifier ? { v: codeVerifier } : {}),
       };
 
       const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString(
@@ -304,6 +331,7 @@ export function createCookieStateStore(
         userId: payload.u,
         contextType: payload.ct,
         brandId: payload.b,
+        codeVerifier: payload.v ?? null,
       };
     },
   };

@@ -1,6 +1,7 @@
 import type { ProviderId } from './provider.interface';
 import { LINKEDIN_API_VERSION } from './linkedin/config';
 import { META_API_VERSION } from './meta/config';
+import { X_API_VERSION } from './x/config';
 
 /**
  * Everything the Integrations UI needs to *describe* a network, whether or not
@@ -169,6 +170,57 @@ const FACEBOOK_PERMISSIONS: ProviderPermission[] = [
   },
 ];
 
+/**
+ * Permissions X's OAuth 2.0 consent screen grants. Mirrors `x/config.ts` — that
+ * file decides what to *ask* for, this one explains what each one means to a
+ * member.
+ *
+ * `offline.access` is listed and marked required even though it grants no
+ * capability of its own: X access tokens expire after two hours, and without it
+ * a connection stops working the same day it was made. A member who declines it
+ * does not get a degraded connection, they get one with a short fuse — so it
+ * belongs in the list they can see.
+ *
+ * The planned entry is honest about the real limit here: attaching an image
+ * needs X's separate media upload API, whose availability depends on the app's
+ * access tier. See `x/validator.ts`.
+ */
+const X_PERMISSIONS: ProviderPermission[] = [
+  {
+    scope: 'tweet.write',
+    label: 'Publish Posts',
+    description: 'Post to your X timeline on your behalf.',
+    required: true,
+  },
+  {
+    scope: 'users.read',
+    label: 'Read Profile',
+    description: 'Read your name, handle and photo so FlowPost can show the account.',
+    required: true,
+  },
+  {
+    scope: 'tweet.read',
+    label: 'Read Posts',
+    description: 'Required by X alongside profile access — FlowPost reads no timelines.',
+    required: true,
+  },
+  {
+    scope: 'offline.access',
+    label: 'Stay Connected',
+    description:
+      'Keep the connection alive. Without it, X signs FlowPost out after two hours.',
+    required: true,
+  },
+  {
+    scope: null,
+    label: 'Attach Images',
+    description:
+      "Images need X's separate media upload API, which depends on the app's access tier.",
+    required: false,
+    planned: true,
+  },
+];
+
 /** Capabilities a video-first network will grant once it is implemented. */
 const VIDEO_PERMISSIONS: ProviderPermission[] = [
   {
@@ -247,25 +299,13 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     displayName: 'X',
     description: 'Real-time conversation',
     brandColor: '#111111',
-    available: false,
-    connectPath: null,
-    apiVersion: null,
-    permissions: [
-      {
-        scope: null,
-        label: 'Publish Posts',
-        description: 'Post to your timeline.',
-        required: false,
-        planned: true,
-      },
-      {
-        scope: null,
-        label: 'Read Profile',
-        description: 'Read your account name and photo.',
-        required: false,
-        planned: true,
-      },
-    ],
+    available: true,
+    connectPath: '/auth/x/connect',
+    // X versions its API by path segment (`/2/tweets`), not by header. Read
+    // from the provider config for the same reason LinkedIn's and Meta's are:
+    // the value publishing sends and the value we display can never drift apart.
+    apiVersion: X_API_VERSION,
+    permissions: X_PERMISSIONS,
   },
   {
     id: 'youtube',

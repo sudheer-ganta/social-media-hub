@@ -2,6 +2,7 @@ import type { Provider, ProviderId } from './provider.interface';
 import { linkedinProvider } from './linkedin/oauth';
 import { instagramProvider } from './meta/instagram/oauth';
 import { facebookProvider } from './meta/facebook/oauth';
+import { xProvider } from './x/oauth';
 
 export type {
   Provider,
@@ -13,11 +14,13 @@ export type {
   ProviderMediaAsset,
   ProviderMediaKind,
   ProviderMediaRequirements,
+  ProviderTokenRefresh,
 } from './provider.interface';
 export { ProviderError, notImplemented } from './provider.interface';
 export { linkedinProvider } from './linkedin/oauth';
 export { instagramProvider } from './meta/instagram/oauth';
 export { facebookProvider } from './meta/facebook/oauth';
+export { xProvider } from './x/oauth';
 export {
   PROVIDER_CATALOG,
   getCatalogEntry,
@@ -39,6 +42,10 @@ export const providers = {
   // share no host, credential or token. See `providers/meta/config.ts`.
   instagram: instagramProvider,
   facebook: facebookProvider,
+  // The first provider on OAuth 2.0 with PKCE, and the first whose access
+  // tokens are short-lived enough to need refreshing. Both live entirely inside
+  // `providers/x/` — see its `oauth.ts`.
+  x: xProvider,
 } satisfies Partial<Record<ProviderId, Provider>>;
 
 export function getProvider(id: ProviderId): Provider | undefined {

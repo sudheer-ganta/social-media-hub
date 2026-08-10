@@ -74,6 +74,25 @@ export interface Provider {
   publish?(input: ProviderPublishInput): Promise<ProviderPublishResult>;
 
   /**
+   * Optional. Trades a refresh token for a fresh access token.
+   *
+   * Present only for networks whose access tokens expire fast enough that a
+   * member cannot be asked to reconnect each time — X's last two hours, where
+   * LinkedIn's last sixty days and Meta's are extended by presenting
+   * themselves. Its absence is what tells the publish service to treat a
+   * past-due expiry as "reconnect", exactly as it did before this existed.
+   *
+   * Like {@link Provider.publish}, this is *not* an HTTP handler: it takes an
+   * already-decrypted refresh token and returns plaintext tokens for the caller
+   * to store. Storing them — and encrypting them — is the caller's job.
+   *
+   * Throws on failure. A refresh token the network rejects is a connection the
+   * member has to remake, and swallowing that would produce a publish that
+   * fails later with a less useful message.
+   */
+  refreshTokens?(refreshToken: string): Promise<ProviderTokenRefresh>;
+
+  /**
    * Optional. What this network will accept as media, so the *fetcher* can
    * enforce it.
    *
@@ -204,6 +223,24 @@ export interface ProviderPublishResult {
   endpoint?: string;
   /** The network's ids for any media attached, in post order. */
   mediaUrns?: string[];
+}
+
+/**
+ * The result of {@link Provider.refreshTokens}. Plaintext, for exactly as long
+ * as it takes the caller to hand it to the repository.
+ */
+export interface ProviderTokenRefresh {
+  accessToken: string;
+  /**
+   * The refresh token to store from here on.
+   *
+   * Non-null for networks that rotate — X issues a new one on every refresh and
+   * invalidates the one presented, so storing the old value bricks the
+   * connection at the *next* refresh rather than this one. Null means the
+   * network gave us nothing new and the stored one still stands.
+   */
+  refreshToken: string | null;
+  expiresAt: Date | null;
 }
 
 /** The provider-neutral profile shape a verification hands back. */
