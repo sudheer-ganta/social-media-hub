@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
-import { Masthead } from "@/components/layout/Masthead";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { FlowRail } from "@/components/layout/FlowRail";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Footer } from "@/components/layout/Footer";
 import { BootSequence } from "@/components/brand/BootSequence";

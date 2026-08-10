@@ -326,9 +326,7 @@ export function PlatformPreview({
                           ? "1st · Professional Network"
                           : active === "facebook"
                             ? "Public post"
-                            : active === "youtube"
-                              ? "Channel"
-                              : PLATFORM_MAP[active]?.name ?? active}
+                            : PLATFORM_MAP[active]?.name ?? active}
                     </span>
                     <span>·</span>
                     <span>

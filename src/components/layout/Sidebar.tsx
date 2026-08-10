@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3,
@@ -12,7 +12,6 @@ import {
   PenLine,
   Plug,
   Settings,
-  Sparkles,
   Sun,
 } from "lucide-react";
 import { toast } from "sonner";

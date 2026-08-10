@@ -2,13 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CalendarClock,
-  ExternalLink,
-  ImageIcon,
   Pencil,
-  Sparkles,
-  Share2,
-  CheckCircle2,
-  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
@@ -161,7 +155,7 @@ export function PostDetailModal({ post, open, onOpenChange }: PostDetailModalPro
             <div className="rounded-xl border bg-muted/20 p-3">
               <PlatformPreview
                 platforms={post.platforms.length > 0 ? post.platforms : [currentPlatform]}
-                media={post.media ?? (post.image_url ? [{ id: "1", url: post.image_url, aspectRatio: "1:1" }] : [])}
+                media={post.media ?? (post.image_url ? [{ id: "1", url: post.image_url, type: "image", width: 800, height: 600, crop: null }] : [])}
                 caption={post.caption}
                 music={post.music ?? undefined}
                 capabilities={{}}
