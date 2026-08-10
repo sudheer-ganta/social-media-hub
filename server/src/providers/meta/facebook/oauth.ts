@@ -210,6 +210,17 @@ async function callback(req: Request, res: Response): Promise<void> {
 
     const userToken = await exchangeAuthorizationCode(code);
 
+    // Diagnostic. `exchangeAuthorizationCode` already reads `/me/permissions`
+    // for the row it will write; this is that same result, surfaced before Page
+    // discovery so a permission the business-login configuration did not
+    // actually grant is visible next to the Page list it produces.
+    //
+    // Permission *names* only — the value that carries them is a scope string,
+    // not a credential. The token itself never appears here.
+    console.log('[facebook] granted permissions', {
+      granted: userToken.scope ? userToken.scope.split(',') : null,
+    });
+
     // Only ever called with the *long-lived* user token: the Page tokens it
     // returns inherit that lifetime, and inheriting the short-lived one would
     // produce a connection that dies within hours. See `token.ts`.

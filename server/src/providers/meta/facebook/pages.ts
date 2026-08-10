@@ -108,7 +108,7 @@ async function fetchAllPageNodes(
   };
 
   for (let page = 0; page < MAX_PAGES_OF_RESULTS && url; page++) {
-    let response: { data: FacebookAccountsResponse };
+    let response: { data: FacebookAccountsResponse; status: number };
     try {
       response = await axios.get<FacebookAccountsResponse>(url, {
         ...(params && { params }),
@@ -118,7 +118,30 @@ async function fetchAllPageNodes(
       throw toProviderError(error, 'page list request');
     }
 
-    nodes.push(...(response.data?.data ?? []));
+    const batch = response.data?.data ?? [];
+
+    // Diagnostic. A 200 with a Page the member fully controls, dropped by one of
+    // the two filters below, is indistinguishable from a 200 with no Pages at
+    // all — both end at `noPublishablePagesError`. This is the only record of
+    // which one happened.
+    //
+    // `hasAccessToken` is a boolean on purpose: `/me/accounts` omits the Page
+    // token when the granted permissions do not cover it, and that absence is
+    // the thing worth knowing. The token itself is never logged, and no URL is
+    // logged either — the access token travels in the query string.
+    console.log('[facebook] page list response', {
+      status: response.status,
+      resultPage: page + 1,
+      nodeCount: batch.length,
+      nodes: batch.map((node) => ({
+        id: node.id ?? null,
+        name: node.name ?? null,
+        hasAccessToken: Boolean(node.access_token),
+        tasks: node.tasks ?? null,
+      })),
+    });
+
+    nodes.push(...batch);
 
     url = response.data?.paging?.next;
     params = undefined;
