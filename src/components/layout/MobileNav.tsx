@@ -27,7 +27,7 @@ export function MobileNav() {
   const composing = location.pathname.startsWith("/posts/new");
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 backdrop-blur-md lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 backdrop-blur-md lg:hidden pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto grid max-w-lg grid-cols-5 items-center px-2 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5">
         {ITEMS.slice(0, 2).map((item) => (
           <Item key={item.to} {...item} />

@@ -15,8 +15,8 @@ export function AppLayout() {
       <BootSequence />
       <Sidebar collapsed={collapsed} onToggleCollapse={() => setCollapsed(!collapsed)} />
       <div className="flex min-h-screen flex-1 flex-col min-w-0">
-        {/* Bottom padding clears the mobile nav. */}
-        <main className="flex flex-1 flex-col pb-20 lg:pb-0">
+        {/* Bottom padding clears mobile navigation bar & iOS Safari address bar. */}
+        <main className="flex flex-1 flex-col pb-28 lg:pb-0">
           <AnimatePresence mode="wait">
             <Outlet key={location.pathname} />
           </AnimatePresence>
