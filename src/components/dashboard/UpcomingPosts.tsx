@@ -70,7 +70,7 @@ export function UpcomingPosts({ posts, loading }: UpcomingPostsProps) {
                 </span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{post.title}</p>
+                <p className="truncate text-sm font-medium">{post.title || "Untitled"}</p>
                 <p className="truncate text-xs text-muted-foreground">
                   {formatDisplayDate(post.publish_date)}
                 </p>

@@ -2,6 +2,12 @@ import { resolveBrandProfile } from '../brand/brand-profile';
 import { buildCaptionPrompt, wantsSongSuggestions } from '../prompts/caption.prompt';
 import { AiProviderError, type AiTextProvider } from '../providers';
 import { analyseImage } from './image-analysis.generator';
+import { writePersonalCaption } from './personal-caption.generator';
+import {
+  loadStyleContext,
+  refreshStyleProfileInBackground,
+} from '../style/profile.service';
+import { situationForRequest } from '../style/retrieve';
 import type {
   BrandProfile,
   CaptionRequest,
@@ -188,6 +194,15 @@ export interface CaptionGeneratorDeps {
    * the vision-role provider so the two stages can run on different models.
    */
   visionProvider?: AiTextProvider;
+  /**
+   * Builds the style profile, off the request path. Defaults to `provider`.
+   *
+   * Its own role because it is the cheapest work in the module — describing
+   * six behaviours from a list of captions, with nobody waiting — and paying
+   * the writing model's rate for it on every fifth post is waste. The service
+   * passes the `light` provider.
+   */
+  lightProvider?: AiTextProvider;
 }
 
 /**
@@ -200,7 +215,7 @@ export interface CaptionGeneratorDeps {
  */
 export async function generateCaption(
   request: CaptionRequest,
-  { provider, visionProvider = provider }: CaptionGeneratorDeps,
+  { provider, visionProvider = provider, lightProvider }: CaptionGeneratorDeps,
 ): Promise<CaptionResult> {
   const startedAt = Date.now();
 
@@ -215,12 +230,53 @@ export async function generateCaption(
       topic: request.topic,
       brandName: request.brandVoice?.name,
       brandDescription: request.brandVoice?.description,
+      // Personal asks the same call four extra questions — see the v2 note in
+      // `prompts/vision.prompt.ts`. Same download, same round trip.
+      mode: request.mode,
     });
 
     if (outcome) {
       analysis = outcome.analysis;
       image = outcome.image;
     }
+  }
+
+  // ── The fork ──────────────────────────────────────────────────────────────
+  //
+  // Everything above is shared because it is the same work in both modes: the
+  // image is fetched once and looked at once. Everything below is Brand's, and
+  // Personal reaches none of it — no brand profile, no marketing brief, no
+  // hooks, no hashtags, no platform rewrites. See
+  // `generators/personal-caption.generator.ts`.
+  //
+  if (request.mode === 'personal') {
+    const scope = { userId: request.userId, contextType: 'personal' as const };
+
+    // Two reads and no model call — see `style/profile.service.ts`. A member
+    // with no history gets `section: null`, which the prompt renders as the
+    // cold-start block rather than as an invented personality.
+    const situation = situationForRequest(analysis, request.title ?? request.topic);
+    const style = await loadStyleContext(scope, situation);
+
+    const result = await writePersonalCaption({
+      request,
+      provider,
+      analysis,
+      image,
+      styleSection: style.section,
+      evidenceSection: style.evidence,
+      history: style.history,
+      style: style.measured,
+      startedAt,
+    });
+
+    // After the caption, never before it. Rebuilding reads two hundred posts
+    // and makes a model call, and nobody should wait for that to find out what
+    // to caption their photo. The next generation picks up whatever this
+    // leaves behind.
+    refreshStyleProfileInBackground(scope, lightProvider ?? provider, style.signals);
+
+    return result;
   }
 
   // ── Brand Intelligence: reconcile what the brand said with what was seen ──

@@ -18,7 +18,7 @@ export function AppLayout() {
       {/* Inner column fills all remaining width via flex-1 and scrolls independently */}
       <div className="flex h-screen flex-1 flex-col overflow-y-auto scrollbar-thin" style={{ minWidth: 0, maxWidth: "100%" }}>
         <MobileHeader />
-        <main className="flex flex-1 flex-col pb-28 lg:pb-8 min-h-full">
+        <main className="flex flex-1 flex-col pb-20 lg:pb-4">
           <AnimatePresence mode="wait">
             <Outlet key={location.pathname} />
           </AnimatePresence>

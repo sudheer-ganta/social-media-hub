@@ -99,13 +99,13 @@ export function PublishStatus({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Publishing</CardTitle>
-        <CardDescription>
+      <CardHeader className="p-4 pb-3">
+        <CardTitle className="text-base font-semibold">Publishing</CardTitle>
+        <CardDescription className="text-xs">
           Where this post stands on each connected network.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2 p-4 pt-0">
         {rows.map((platform) => {
           // An in-flight request outranks the stored row: the database still
           // reads PUBLISHING (or PENDING) until the response lands.

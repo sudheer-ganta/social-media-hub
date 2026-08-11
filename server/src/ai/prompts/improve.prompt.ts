@@ -147,6 +147,8 @@ export function buildImproveResponseSchema(
 }
 
 export function buildImprovePrompt(request: ImprovementRequest): BuiltPrompt {
+  const personal = request.mode === 'personal';
+
   const prompt = [
     section('## The caption as it stands', [
       '"""',
@@ -157,16 +159,32 @@ export function buildImprovePrompt(request: ImprovementRequest): BuiltPrompt {
         : 'It carries no hashtags.',
     ]),
 
-    section('## Where it is going', [
-      request.platforms.length > 0
-        ? `- Networks: ${request.platforms.map(platformLabel).join(', ')}`
-        : '- No network chosen yet. Keep it neutral.',
-      `- Written for: ${request.audience.replace(/_/g, ' and ')}`,
-      `- Language: ${request.language}`,
-      // Context only. The song is the member's decision and nothing here
-      // changes it — it is in the prompt so the tone can match, no more.
-      request.music && `- The member chose this song for the post: ${request.music}. Match its mood; do not mention or change it.`,
-    ]),
+    // The register rule at the top of this prompt already says to match what
+    // is there. On a personal caption that is not enough: "improve the hook"
+    // reads, to any model, as licence to tidy — and the fragments, the missing
+    // capitals and the absent full stop are not defects waiting to be fixed,
+    // they are the thing that makes it sound like a person. Only `hook` and
+    // `hashtags` can even be requested here; `readability` and `cta` are
+    // refused in the service before they reach this file.
+    personal
+      ? section('## Whose post this is', [
+          '- A personal post on somebody’s own account. There is no brand and no campaign.',
+          '- Their lowercase, their fragments, their missing punctuation and their spelling are the voice. Preserve every one of them exactly. Correcting any of it is a worse answer than doing nothing.',
+          '- Match their length. If they write in three words, three words is what you return.',
+          '- No marketing language, no hype, no motivational filler, and nothing that could sit under any other photo.',
+          `- Language: ${request.language}`,
+        ])
+      : section('## Where it is going', [
+          request.platforms.length > 0
+            ? `- Networks: ${request.platforms.map(platformLabel).join(', ')}`
+            : '- No network chosen yet. Keep it neutral.',
+          `- Written for: ${request.audience.replace(/_/g, ' and ')}`,
+          `- Language: ${request.language}`,
+          // Context only. The song is the member's decision and nothing here
+          // changes it — it is in the prompt so the tone can match, no more.
+          request.music &&
+            `- The member chose this song for the post: ${request.music}. Match its mood; do not mention or change it.`,
+        ]),
 
     imageSection(request.imageAnalysis, request.hasImage),
 

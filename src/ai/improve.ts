@@ -20,7 +20,7 @@
  */
 
 import type { ImageAnalysis } from "@/ai/types";
-import type { AudienceRegister } from "@/ai/caption";
+import type { AudienceRegister, CaptionMode } from "@/ai/caption";
 
 /**
  * The parts of a post that can be regenerated.
@@ -37,6 +37,13 @@ export type ImprovementTarget = "hook" | "readability" | "cta" | "hashtags";
 export type ImprovementKind = "lead" | "replace" | "line" | "hashtags";
 
 export interface ImprovementBrief {
+  /**
+   * Omitted means `brand`. In personal mode the register rule hardens and two
+   * targets are refused outright: `readability` would iron out the fragments
+   * that make it sound like a person, and `cta` would bolt an ask onto a post
+   * that is not asking for anything.
+   */
+  mode?: CaptionMode;
   target: ImprovementTarget;
   /** The caption as it stands right now, edits included. */
   caption: string;

@@ -6,10 +6,13 @@ import { looksLikeCta, measureCaption } from '../analysis/metrics';
 import { checkPlatforms, platformFitScore } from '../analysis/platform-rules';
 import { computeReachScore, explainScore } from '../analysis/scoring';
 import { ANALYSIS_VERSION } from '../analysis/version';
-import { DEFAULT_WEIGHTS, WEIGHTS_VERSION } from '../analysis/weights';
+import { loadStyleContext } from '../style/profile.service';
+import { situationForRequest } from '../style/retrieve';
+import { DEFAULT_WEIGHTS, PERSONAL_DIMENSIONS, WEIGHTS_VERSION } from '../analysis/weights';
 import type {
   AnalysisRequest,
   CaptionAnalysis,
+  CaptionMode,
   Confidence,
   DimensionScore,
   EngagementForecast,
@@ -45,8 +48,18 @@ import type {
  * Provider-injected and not a class, matching the other generator.
  */
 
-/** A caption shorter than this cannot be meaningfully judged. */
-const MIN_ANALYSABLE_LENGTH = 12;
+/**
+ * A caption shorter than this cannot be meaningfully judged.
+ *
+ * Mode-dependent because the two modes disagree about what "too short to judge"
+ * means. Twelve characters of marketing copy is a failed generation. Two
+ * characters of personal copy can be the whole post and entirely deliberate —
+ * see `MIN_CAPTION_LENGTH_BY_MODE` in `services/ai.service.ts`.
+ */
+const MIN_ANALYSABLE_LENGTH: Record<CaptionMode, number> = {
+  brand: 12,
+  personal: 2,
+};
 
 const CONFIDENCES: Confidence[] = ['High', 'Medium', 'Low'];
 const LIKELIHOODS: Likelihood[] = ['Low', 'Medium', 'High'];
@@ -85,6 +98,15 @@ function applicableDimensions(
   request: AnalysisRequest,
   hashtagCount: number,
 ): ScoreDimension[] {
+  // A personal caption is judged on a different set entirely — see
+  // PERSONAL_DIMENSIONS. `visual` drops out the same way it does for a
+  // text-only brand post, through the same renormalisation.
+  if (request.mode === 'personal') {
+    return PERSONAL_DIMENSIONS.filter(
+      (dimension) => dimension !== 'visual' || request.hasImage,
+    );
+  }
+
   return [
     'hook',
     ...(request.hasImage ? (['visual'] as const) : []),
@@ -215,7 +237,7 @@ export async function analyseCaption(
 ): Promise<CaptionAnalysis> {
   const startedAt = Date.now();
 
-  if (request.caption.trim().length < MIN_ANALYSABLE_LENGTH) {
+  if (request.caption.trim().length < MIN_ANALYSABLE_LENGTH[request.mode]) {
     throw new AiProviderError(
       'There is not enough caption here to analyse yet. Write a line or two first.',
       422,
@@ -257,6 +279,17 @@ export async function analyseCaption(
   // ── The one model call ────────────────────────────────────────────────────
   const dimensions = applicableDimensions(request, hashtagCount);
 
+  // How this member writes, so `voiceMatch` is judged against them. Two reads
+  // and no model call; a failure leaves the judge without it rather than
+  // failing the analysis — see `style/profile.service.ts`.
+  const style =
+    request.mode === 'personal' && request.userId
+      ? await loadStyleContext(
+          { userId: request.userId, contextType: 'personal' },
+          situationForRequest(request.imageAnalysis ?? null, request.caption),
+        )
+      : null;
+
   const built = buildAnalysisPrompt({
     request,
     brand,
@@ -264,6 +297,8 @@ export async function analyseCaption(
     platforms,
     hashtagCount,
     dimensions,
+    styleSection: style?.section ?? null,
+    history: style?.history ?? [],
   });
 
   const payload = (await provider.generateJson({
@@ -324,6 +359,7 @@ export async function analyseCaption(
     platforms,
     scores,
     brand,
+    mode: request.mode,
   });
 
   const durationMs = Date.now() - startedAt;

@@ -171,6 +171,45 @@ model BrandVoice {
   @@map("brand_voices")
 }
 
+/// How one member writes, in one publishing context.
+///
+/// Not a cache of their captions and not a copy of anything. The payload holds
+/// measured distributions (how long, how punctuated, how often a mix of
+/// scripts) and short behavioural descriptions — never vocabulary. A profile
+/// that remembered the words somebody uses would produce captions that reuse
+/// them, which is a template generator wearing a style profile. See
+/// `server/src/ai/style/types.ts` for the shape and the guard that enforces it.
+///
+/// One row per (user, context, brand): a member has one personal profile and
+/// one per brand they post for, all built by the same code. The uniqueness
+/// index needs COALESCE over the nullable brand_id, so it lives in migration
+/// SQL alongside the RLS statement — this table is backend-only and, like
+/// social_accounts, has RLS enabled with no policies so PostgREST cannot see it.
+model StyleProfile {
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  contextType String  @default("personal") @map("context_type")
+  brandId     String? @map("brand_id") @db.Uuid
+
+  /// StyleProfile — see server/src/ai/style/types.ts.
+  profile Json
+
+  /// How many weighted signals went into it. Below STYLE_MIN_SAMPLES the
+  /// profile reports itself as unusable and the prompt takes the cold-start
+  /// path instead of rendering a personality inferred from four captions.
+  sampleCount Int @default(0) @map("sample_count")
+
+  /// The posts already folded in, so a rebuild knows what is new and a deleted
+  /// post can be spotted as a reason to rebuild.
+  sourcePostIds String[] @default([]) @map("source_post_ids") @db.Uuid
+
+  builtAt   DateTime @default(now()) @map("built_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("style_profiles")
+}
+
 // ─── Integrations (backend-only, via Prisma Client) ──────────────────────────
 //
 // These three tables are written exclusively by the Express backend. They have

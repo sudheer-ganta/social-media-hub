@@ -48,18 +48,17 @@ import { PLATFORM_MAP } from "@/constants";
 import { usePublishPostToProvider, usePublishState } from "@/hooks/usePublish";
 import { useSchedulePost } from "@/hooks/useScheduledPosts";
 import { postsService, ScheduleApiError } from "@/services";
+import { aiService } from "@/services/ai.service";
 import { fromStudioOutput } from "@/ai/caption";
 import { currentTime, today } from "@/utils/date";
-import { withHashtags } from "@/utils/hashtags";
 import { withCrop } from "@/utils/crop";
 import { itemUrl, mediaFromImageUrl } from "@/utils/media";
 import {
   DEFAULT_MEDIA_CAPABILITY,
-  MEDIA_LIMIT_BEFORE_CAPABILITIES_LOAD,
 } from "@/constants/integrations";
 import { MediaFormatPanel } from "./MediaFormatPanel";
 import { PlatformPreview } from "./PlatformPreview";
-import type { AudienceRegister } from "@/ai/caption";
+import type { AudienceRegister, CaptionResult } from "@/ai/caption";
 // `validateFutureSchedule` is deliberately no longer used here: whether a time
 // is in the future depends on the timezone the member picked, not the
 // browser's, and the server is the only place that knows both.
@@ -112,6 +111,18 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const DRAFT_KEY = `flowpost_draft_${post?.id ?? "new"}_${context.contextType}_${context.brandId ?? "personal"}`;
   const AI_DRAFT_KEY = `flowpost_ai_draft_${post?.id ?? "new"}_${context.contextType}_${context.brandId ?? "personal"}`;
   const ai = useAiCaption(initialAiResult, AI_DRAFT_KEY);
+
+  /**
+   * The generation the composer is showing.
+   *
+   * This session's run when there is one, otherwise whatever is stored on the
+   * post row. The fallback is what makes two paths work: the Brand strategy
+   * run, which writes to the row rather than to this hook, and the remount that
+   * follows saving a new post, which lands on a different draft key and would
+   * otherwise come back empty.
+   */
+  const aiResult = ai.result ?? initialAiResult;
+
   const studio = useMarketingStudio();
   const generateStrategy = useGenerateWithSettings();
   const publish = usePublishPostToProvider();
@@ -336,11 +347,18 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
    * image, because the scenario's first step was analysing one — the caption
    * generator writes from the brief, so an image is context when it exists and
    * nothing more.
+   *
+   * The second clause is a context guard, not a nicety. In a brand context the
+   * generation writes *as* that brand, and the brand arrives one render after
+   * the composer does; without this, a click landing in that window generated
+   * against the personal voice and silently filed the result under the brand.
    */
   const blockedReason =
     (title ?? "").trim().length < 3
       ? "Add a title first — that's what the AI writes about."
-      : null;
+      : isBrand && !brand
+        ? "Loading this brand — generation writes as the brand, so it waits for it."
+        : null;
 
   /**
    * The one AI button.
@@ -359,7 +377,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
    */
   /** Either path counts: one button, so one in-flight and one "done" flag. */
   const generating = ai.isGenerating || generateStrategy.isPending;
-  const hasGenerated = Boolean(ai.result) || post?.ai_status === "ready";
+  const hasGenerated = Boolean(aiResult) || post?.ai_status === "ready";
 
   const handleGenerate = () => {
     if (blockedReason) {
@@ -403,7 +421,26 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const runCaptionOnly = async () => {
     const values = getValues();
 
+    // A regenerate is the member saying "none of these". It is the clearest
+    // negative signal style memory can get, and the only one that leaves no
+    // trace in the post row — so it is recorded here, before the options it
+    // refers to are replaced. Fire and forget.
+    if (aiResult?.caption) {
+      aiService.recordCaptionFeedback({
+        action: "regenerated",
+        mode: isBrand ? "brand" : "personal",
+        caption: aiResult.caption,
+        ...(context.brandId && { brandId: context.brandId }),
+        ...(post?.id && { postId: post.id }),
+      });
+    }
+
     const generated = await ai.generate({
+      // The publishing context decides which brain writes it. Personal reaches
+      // none of the marketing pipeline: no goal, no funnel, no audience
+      // register, no hook, no hashtags.
+      mode: context.contextType === "brand" ? "brand" : "personal",
+      ...(context.brandId && { brandId: context.brandId }),
       title: values.title,
       caption: values.caption,
       image_url: values.image_url,
@@ -420,7 +457,10 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         music: values.music,
         suggestSongs: !values.music.trim(),
       }),
-      audience,
+      // Brand-only. A register is a marketing decision about who the copy is
+      // pitched at; Personal infers how to write from the member's own history
+      // instead of asking them to pick a voice for their own account.
+      ...(isBrand && { audience }),
       brand: brandIdentity,
     });
 
@@ -429,16 +469,18 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     // already written or chosen is left alone; the panel's "Use as caption"
     // buttons are how it gets replaced.
     if (generated && !values.caption.trim()) {
-      setValue("caption", applyCaption(generated.caption, generated.hashtags), {
-        shouldValidate: true,
-      });
+      setValue("caption", generated.caption, { shouldValidate: true });
     }
 
     // On a new post (/posts/new), save the draft automatically after generation
     // and route to /posts/:id/edit so refreshing preserves all generated state.
     if (!post && generated) {
       try {
-        const saved = await persist({ ...values, caption: getValues("caption") }, "draft");
+        const saved = await persist(
+          { ...values, caption: getValues("caption") },
+          "draft",
+          generated,
+        );
         navigate(`/posts/${saved.id}/edit`, { replace: true });
       } catch (cause) {
         console.error("[ai] auto-save on generation failed", cause);
@@ -449,19 +491,25 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   /**
    * An AI caption as it should land in the editor.
    *
-   * Personal gets the hashtags folded in; Brand gets the caption exactly as it
-   * did before, because Brand's hashtags are reviewed in the Marketing Studio
-   * and appended deliberately from there.
+   * The caption arrives exactly as written, in both modes.
    *
-   * This is the fix for hashtags never reaching Instagram. They were only ever
-   * in `result.hashtags` — a metadata array beside the caption — and reached
-   * the published post only if someone happened to press "Add to caption".
-   * The publisher sends `post.caption` and nothing else, so an untouched
-   * generation published with zero hashtags. The caption field is the single
-   * source of truth, so that is where they have to be.
+   * ─── Why Personal stopped folding hashtags in ────────────────────────────
+   * It used to, and Brand did not — the condition was the wrong way round for
+   * what each mode is. Brand's hashtags are a marketing asset: researched,
+   * reviewed in the Marketing Studio and appended deliberately from there.
+   * Personal's did not exist to begin with. A member posting a photo of their
+   * own gym session is not running a tag strategy, and three tags stapled to
+   * "unfortunately i ate" is the single loudest tell that a machine wrote it.
+   *
+   * The backend now returns no hashtags at all in personal mode — see
+   * `hashtagCount` in `services/ai.service.ts` — so this had become a call to
+   * append an empty array. Removing it keeps the two halves honest.
+   *
+   * The original reason for this function still holds for Brand: hashtags kept
+   * only in `result.hashtags` never reach a network, because the publisher
+   * sends `post.caption` and nothing else. That is what "Add to caption" is
+   * for, and it is still there — see `handleAppendHashtags` below.
    */
-  const applyCaption = (caption: string, hashtags: string[]) =>
-    isBrand ? caption : withHashtags(caption, hashtags, watch("platforms"));
 
   /** Appends the generated hashtags to whatever is in the editor. */
   const handleAppendHashtags = (hashtags: string[]) => {
@@ -507,19 +555,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
    * With nothing selected yet it is the most generous network available, so an
    * empty composer never refuses an upload for a limit no platform has imposed.
    */
-  const maxMedia = useMemo(() => {
-    const relevant = selectedPlatforms.length
-      ? selectedPlatforms.map((platform) => mediaCapabilities[platform])
-      : Object.values(mediaCapabilities);
-    const limits = relevant
-      .filter(Boolean)
-      .map((capability) => capability!.maxItems);
-    // Nothing known yet — the integrations request has not answered, or no
-    // account is connected. See the constant for why this is not 1.
-    return limits.length
-      ? Math.max(...limits)
-      : MEDIA_LIMIT_BEFORE_CAPABILITIES_LOAD;
-  }, [selectedPlatforms, mediaCapabilities]);
+  const maxMedia = 20;
 
   /**
    * Writes the media list, keeping `image_url` on the first item.
@@ -565,7 +601,17 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
    * the browser puts in the request, so an unsaved caption edit would silently
    * publish the previous version.
    */
-  const persist = async (values: PostFormValues, status: PostStatus) => {
+  const persist = async (
+    values: PostFormValues,
+    status: PostStatus,
+    /**
+     * The generation to attach. Defaults to whatever the panel is showing, but
+     * the auto-save that follows a generation has to pass its own result: the
+     * `ai.result` captured in this closure is the one from the render the click
+     * came from, which is still null on the very first Generate.
+     */
+    generation: CaptionResult | null = aiResult,
+  ) => {
     const input = {
       title: values.title,
       caption: values.caption,
@@ -604,13 +650,15 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     setMediaDirty(false);
     setIsSaved(true);
 
-    // Clear temporary drafts from sessionStorage since the post is now saved to the database
+    // Clear the pre-save scratch copies: they are keyed to the "new" post and
+    // the row is the source of truth from here on. The *state* is deliberately
+    // left alone — resetting it here is what used to make a generated result
+    // vanish the moment the auto-save after generation ran.
     if (!post) {
       try {
         sessionStorage.removeItem(DRAFT_KEY);
         sessionStorage.removeItem(MEDIA_DRAFT_KEY);
         sessionStorage.removeItem(AI_DRAFT_KEY);
-        ai.reset();
       } catch (e) {
         console.error("Failed to clear session drafts", e);
       }
@@ -620,9 +668,9 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     // Storing it keeps the AI panels populated on reload and preserves which
     // model wrote what — the caption itself is already in `input`, edits and
     // all, because the editor is the source of truth for that.
-    if (ai.result) {
+    if (generation) {
       try {
-        await postsService.applyAiResult(saved.id, ai.result, saved);
+        await postsService.applyAiResult(saved.id, generation, saved);
       } catch (cause) {
         // The post is saved; only its AI provenance failed to attach. Worth
         // saying, not worth turning a successful save into an error.
@@ -945,8 +993,13 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
       {/* Composer left, preview right. The preview column is fixed-width and
-          sticky on desktop down the entire form length. */}
-      <div className="grid gap-4 items-start xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] pb-24 lg:pb-28">
+          sticky on desktop down the entire form length.
+
+          No bottom padding: the action bar below is `sticky`, not `fixed`, so
+          it takes up its own row in the flow and has nothing to be cleared of.
+          The padding that used to be here was left over from a fixed bar and
+          was the empty band at the foot of the composer. */}
+      <div className="grid gap-4 items-start xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="min-w-0 space-y-4">
           <fieldset disabled={isPublished} className="contents">
             {/* Unified Post Content Card */}
@@ -954,36 +1007,12 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
               <CardHeader className="p-4 pb-3">
                 <CardTitle className="text-base font-semibold">Post Content</CardTitle>
                 <CardDescription className="text-xs">
-                  Create your post content by adding a title, caption, media, and optional music.
+                  Create your post content by adding media, a title, caption, and optional music.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-4 pt-0">
-                {/* Title */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="post-title">Title</Label>
-                  <Input
-                    id="post-title"
-                    placeholder="Q3 product launch announcement"
-                    {...register("title")}
-                  />
-                  <FieldError message={errors.title?.message} />
-                </div>
-
-                {/* Caption */}
-                <div className="space-y-1.5">
-                  <Label>Caption</Label>
-                  <Controller
-                    control={control}
-                    name="caption"
-                    render={({ field }) => (
-                      <CaptionEditor value={field.value} onChange={field.onChange} />
-                    )}
-                  />
-                  <FieldError message={errors.caption?.message} />
-                </div>
-
                 {/* Media Section */}
-                <div className="space-y-2 border-t pt-4">
+                <div className="space-y-2">
                   <Label className="text-sm font-semibold">Media</Label>
                   <MediaUploader
                     items={media}
@@ -1003,6 +1032,30 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
                       onSelect={setSelectedMedia}
                     />
                   )}
+                </div>
+
+                {/* Title */}
+                <div className="space-y-1.5 border-t pt-4">
+                  <Label htmlFor="post-title">What are you feeling today?</Label>
+                  <Input
+                    id="post-title"
+                    placeholder="Tell me about your post..."
+                    {...register("title")}
+                  />
+                  <FieldError message={errors.title?.message} />
+                </div>
+
+                {/* Caption */}
+                <div className="space-y-1.5">
+                  <Label>Caption</Label>
+                  <Controller
+                    control={control}
+                    name="caption"
+                    render={({ field }) => (
+                      <CaptionEditor value={field.value} onChange={field.onChange} />
+                    )}
+                  />
+                  <FieldError message={errors.caption?.message} />
                 </div>
 
                 {/* Music & Campaign options */}
@@ -1124,10 +1177,14 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
 
           {!isPublished && (
             <AiCaptionPanel
-              result={ai.result}
+              result={aiResult}
               isGenerating={generating}
-              error={ai.error}
+              // Either path can fail, and the panel is where a failure has to
+              // be readable — the strategy run's error used to exist only as a
+              // toast that had already gone by the time anyone looked.
+              error={ai.error ?? generateStrategy.error?.message ?? null}
               blockedReason={blockedReason}
+              mode={isBrand ? "brand" : "personal"}
               audience={audience}
               onAudienceChange={setAudience}
               hasImage={Boolean(imageUrl?.trim())}
@@ -1135,8 +1192,16 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
               onGenerate={handleGenerate}
               showPlatformVariations={isBrand}
               onUseCaption={(caption) =>
-                setValue("caption", applyCaption(caption, ai.result?.hashtags ?? []), {
-                  shouldValidate: true,
+                setValue("caption", caption, { shouldValidate: true })
+              }
+              onCaptionChosen={(caption, variationIndex) =>
+                aiService.recordCaptionFeedback({
+                  action: "selected",
+                  mode: isBrand ? "brand" : "personal",
+                  caption,
+                  ...(context.brandId && { brandId: context.brandId }),
+                  ...(post?.id && { postId: post.id }),
+                  ...(variationIndex !== undefined && { variationIndex }),
                 })
               }
               onAppendHashtags={handleAppendHashtags}
@@ -1149,6 +1214,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
 
           {!isBrand && !isPublished && (
             <ReachPanel
+              mode="personal"
               caption={watch("caption")}
               platforms={selectedPlatforms}
               hasImage={Boolean(imageUrl?.trim())}
@@ -1156,8 +1222,8 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
               onApplyCaption={(next) =>
                 setValue("caption", next, { shouldValidate: true })
               }
-              {...(ai.result?.imageAnalysis && {
-                imageAnalysis: ai.result.imageAnalysis,
+              {...(aiResult?.imageAnalysis && {
+                imageAnalysis: aiResult.imageAnalysis,
               })}
               {...(suggestion && {
                 suggestedTime: {
@@ -1188,7 +1254,10 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
           )}
         </div>
 
-        <div className="min-w-0 xl:sticky xl:top-6 self-start">
+        {/* Now that sticky actually works (see PageContainer), the pinned
+            column has to be able to hold a preview taller than the viewport —
+            otherwise its lower half is unreachable. It scrolls inside itself. */}
+        <div className="min-w-0 self-start xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto scrollbar-thin">
           <Card className="overflow-hidden">
             <CardContent className="p-4">
               <PlatformPreview

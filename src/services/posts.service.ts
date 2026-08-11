@@ -6,6 +6,7 @@ import {
   toStudioOutput,
   type AudienceRegister,
   type CaptionBrief,
+  type CaptionMode,
   type CaptionResult,
 } from "@/ai/caption";
 import { aiService } from "./ai.service";
@@ -264,6 +265,13 @@ export const postsService = {
    * brand voice profile is, or that one is fetched at all.
    */
   async buildBriefFromDraft(draft: {
+    /**
+     * Which brain writes it, taken from the composer's publishing context.
+     * Omitted means Brand — the behaviour every caller had before Personal
+     * became its own thing.
+     */
+    mode?: CaptionMode;
+    brandId?: string;
     title: string;
     caption?: string;
     image_url?: string;
@@ -278,6 +286,7 @@ export const postsService = {
     brand?: { name: string; description?: string } | null;
   }): Promise<CaptionBrief> {
     const settings = await buildDefaultStudioInput();
+    const personal = draft.mode === "personal";
 
     // In a Brand context the AI writes as that brand: its name and description
     // override the voice profile's, while the profile's tone rules still apply.
@@ -291,7 +300,27 @@ export const postsService = {
         }
       : settings.brandVoice;
 
+    // A personal post has no marketing brief. The goal, funnel stage, length
+    // band, brand voice and feature flags below are all Brand's, and sending
+    // them alongside `mode: personal` would only be describing settings the
+    // personal prompt does not read — the backend drops them anyway.
+    if (personal) {
+      return {
+        mode: "personal",
+        topic: draft.title,
+        title: draft.title,
+        ...(draft.image_url && { imageUrl: draft.image_url }),
+        ...(draft.music?.trim() && { music: draft.music.trim() }),
+        ...(draft.suggestSongs && { suggestSongs: true }),
+        platforms: draft.platforms ?? [],
+        language: settings.language,
+        ...(draft.caption?.trim() && { previousCaption: draft.caption }),
+      };
+    }
+
     return {
+      mode: "brand",
+      ...(draft.brandId && { brandId: draft.brandId }),
       topic: draft.title,
       title: draft.title,
       ...(draft.image_url && { imageUrl: draft.image_url }),

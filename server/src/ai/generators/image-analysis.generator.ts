@@ -2,6 +2,7 @@ import { buildVisionPrompt } from '../prompts/vision.prompt';
 import type { AiTextProvider } from '../providers';
 import { fetchInlineImage, ImageFetchError } from '../vision/image-source';
 import type {
+  CaptionMode,
   ImageAnalysis,
   InlineImage,
   RawImageAnalysisPayload,
@@ -90,6 +91,21 @@ function normaliseAnalysis(payload: RawImageAnalysisPayload): ImageAnalysis | nu
     ),
     suggestedBuyerPersona: asString(payload.suggestedBuyerPersona, 300),
     confidenceScore: asScore(payload.confidenceScore),
+
+    // Personal read. Spread conditionally so a brand analysis carries the same
+    // twenty-four keys it always did, and an absent field stays absent rather
+    // than becoming an empty string the prompt would then render as a blank
+    // bullet.
+    ...(asString(payload.whatSubjectIsDoing, 200) && {
+      whatSubjectIsDoing: asString(payload.whatSubjectIsDoing, 200),
+    }),
+    ...(asString(payload.vibe, 160) && { vibe: asString(payload.vibe, 160) }),
+    ...(asStringArray(payload.recognisableReferences, 5, 120).length > 0 && {
+      recognisableReferences: asStringArray(payload.recognisableReferences, 5, 120),
+    }),
+    ...(asString(payload.whatAFriendWouldNotice, 240) && {
+      whatAFriendWouldNotice: asString(payload.whatAFriendWouldNotice, 240),
+    }),
   };
 }
 
@@ -100,6 +116,8 @@ export interface AnalyseImageOptions {
   topic?: string;
   brandName?: string;
   brandDescription?: string;
+  /** `personal` also asks for the social read. Defaults to the brand read. */
+  mode?: CaptionMode;
 }
 
 /** What stage one hands to stage two: the read, and the pixels behind it. */
@@ -124,6 +142,7 @@ export async function analyseImage({
   topic,
   brandName,
   brandDescription,
+  mode,
 }: AnalyseImageOptions): Promise<ImageAnalysisOutcome | null> {
   if (!provider.supportsVision) {
     console.info('[ai] skipping image analysis — provider cannot see', {
@@ -136,7 +155,7 @@ export async function analyseImage({
 
   try {
     const image = await fetchInlineImage(imageUrl);
-    const built = buildVisionPrompt({ topic, brandName, brandDescription });
+    const built = buildVisionPrompt({ topic, brandName, brandDescription, mode });
 
     const payload = (await provider.generateJson({
       systemInstruction: built.systemInstruction,

@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PlatformIcon } from "@/components/shared/PlatformIcon";
 import { useCaptionAnalysis } from "@/hooks/useCaptionAnalysis";
 // Read from the caption text, never from the last generation: the tags that
@@ -17,6 +18,7 @@ import { useCaptionAnalysis } from "@/hooks/useCaptionAnalysis";
 import { hashtagsIn } from "@/utils/hashtags";
 import { PLATFORM_MAP } from "@/constants";
 import { scoreBand } from "@/ai/analysis";
+import type { CaptionMode } from "@/ai/caption";
 // Deterministic verification against the caption on screen. The panel holds no
 // memory of what was applied — see `ai/reach-fixes.ts`.
 import {
@@ -85,6 +87,17 @@ interface ReachPanelProps {
    * "Schedule for 7:30 PM" feeds the one scheduling flow that already exists.
    */
   suggestedTime?: { name: string; time: string; label: string; use: () => void };
+  /**
+   * Which rubric to score against. Defaults to `personal`, because this panel
+   * has only ever rendered in a personal context — Brand reviews its posts in
+   * the Marketing Studio.
+   *
+   * That default is the fix for a real inversion: until Personal became its own
+   * brain, this panel was scoring personal posts on hooks, CTAs and hashtags —
+   * the marketing rubric, applied exclusively to the one mode it does not
+   * describe.
+   */
+  mode?: CaptionMode;
 }
 
 /**
@@ -338,6 +351,7 @@ export function ReachPanel({
   imageAnalysis,
   onApplyCaption,
   suggestedTime,
+  mode = "personal",
 }: ReachPanelProps) {
   const { analysis, isAnalysing, error, analysedCaption, analyse } =
     useCaptionAnalysis();
@@ -352,7 +366,11 @@ export function ReachPanel({
   >({});
 
   const trimmed = caption.trim();
-  const tooShort = trimmed.length < 12;
+  // Matches the backend's `MIN_CAPTION_LENGTH_BY_MODE`. Twelve characters of
+  // marketing copy is not yet a post; two characters of a personal one can be
+  // the whole thing and entirely deliberate. A shared floor here disabled the
+  // button on exactly the captions Personal exists to write.
+  const tooShort = trimmed.length < (mode === "personal" ? 2 : 12);
 
   // A score run against copy that has since been rewritten still describes the
   // old copy. Saying so is better than quietly showing a number that no longer
@@ -372,6 +390,7 @@ export function ReachPanel({
     const target = (override ?? caption).trim();
     setProposals({});
     void analyse({
+      mode,
       caption: target,
       hashtags: hashtagsIn(target),
       platforms,
@@ -397,6 +416,7 @@ export function ReachPanel({
 
     try {
       const improvement = await aiService.improveCaption({
+        mode,
         target,
         caption,
         hashtags: hashtagsIn(caption),
@@ -443,13 +463,13 @@ export function ReachPanel({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
+      <CardHeader className="flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0 p-4 pb-3">
+        <div className="min-w-0 space-y-1">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <TrendingUp className="h-4 w-4 shrink-0 text-primary" />
             Reach &amp; Visibility
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-xs">
             Optional. Ask what is working in this post and what could be
             stronger before you publish.
           </CardDescription>
@@ -467,27 +487,58 @@ export function ReachPanel({
               : undefined
           }
           onClick={() => run()}
+          className="w-full sm:w-auto"
         >
           {analysis ? <RefreshCw /> : <TrendingUp />}
           {analysis ? "Check again" : "Check this post"}
         </Button>
       </CardHeader>
 
-      {(error || analysis) && (
-        <CardContent className="space-y-4">
-          {error && (
-            <div
-              role="alert"
-              className="flex items-start gap-3 rounded-md border border-destructive/25 bg-destructive/5 px-4 py-3"
+      {/* Never taller than what there is to show: one line before the first
+          run, a short skeleton while it runs, the reading once it exists. */}
+      <CardContent className="space-y-3 p-4 pt-0">
+        {error && !isAnalysing && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-start gap-3 rounded-md border border-destructive/25 bg-destructive/5 p-3"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-muted-foreground">
+              {error}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 text-[11px]"
+              disabled={tooShort}
+              onClick={() => run()}
             >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                {error}
-              </p>
-            </div>
-          )}
+              Try again
+            </Button>
+          </div>
+        )}
 
-          {analysis && (
+        {isAnalysing && !analysis && (
+          <div className="space-y-2 rounded-md border p-3" aria-busy="true">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+              Reading your caption…
+            </p>
+            <Skeleton className="h-3 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        )}
+
+        {!analysis && !isAnalysing && !error && (
+          <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+            {tooShort
+              ? "Write a line or two first — there's nothing to read yet."
+              : "Not checked yet. Press “Check this post” for a read of what you have written."}
+          </p>
+        )}
+
+        {analysis && (
             <Report
               analysis={analysis}
               caption={caption}
@@ -505,9 +556,8 @@ export function ReachPanel({
               onApply={applyAndVerify}
               {...(suggestedTime && { suggestedTime })}
             />
-          )}
-        </CardContent>
-      )}
+        )}
+      </CardContent>
     </Card>
   );
 }
@@ -790,7 +840,7 @@ function Report({
 
   return (
     <>
-      <div className="space-y-1 rounded-md border bg-muted/30 p-4">
+      <div className="space-y-1 rounded-md border bg-muted/30 p-3">
         <p className="text-base font-semibold">{headline}</p>
         <p className="text-sm text-muted-foreground">
           {checking
@@ -811,14 +861,14 @@ function Report({
       </div>
 
       {fixedSince.length > 0 ? (
-        <p className="rounded-md border border-dashed px-4 py-2 text-[11px] text-muted-foreground">
+        <p className="rounded-md border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
           {fixedSince.length} fix{fixedSince.length === 1 ? "" : "es"} found in
           your caption. The arrow above is this analysis's own estimate — check
           again to have your updated post read properly.
         </p>
       ) : (
         stale && (
-          <p className="rounded-md border border-dashed px-4 py-2 text-[11px] text-muted-foreground">
+          <p className="rounded-md border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
             You have edited the caption since this ran — check again for a
             reading of what is on screen now.
           </p>

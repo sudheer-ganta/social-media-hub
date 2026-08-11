@@ -23,11 +23,20 @@ import {
   type ImageAnalysis,
   type MarketingGoal,
 } from "@/ai/types";
-import type { AudienceRegister } from "@/ai/caption";
+import type { AudienceRegister, CaptionMode } from "@/ai/caption";
 
 // ─── Request ─────────────────────────────────────────────────────────────────
 
 export interface AnalysisBrief {
+  /**
+   * Which rubric to judge against. Omitted means `brand`.
+   *
+   * Personal is scored on whether it sounds like the member, whether it sounds
+   * human and whether they have made the joke before — never on hooks, CTAs,
+   * hashtags or readability, all of which a personal caption is correct to be
+   * missing. See the backend's `PERSONAL_DIMENSIONS`.
+   */
+  mode?: CaptionMode;
   /** The caption as it stands right now, edits included. */
   caption: string;
   /** Hashtags as they will be published, with or without the leading `#`. */
@@ -60,13 +69,20 @@ export type Confidence = "High" | "Medium" | "Low";
 export type Likelihood = "Low" | "Medium" | "High";
 
 export type ScoreDimension =
+  // Brand
   | "hook"
   | "visual"
   | "platformFit"
   | "audienceFit"
   | "cta"
   | "readability"
-  | "hashtags";
+  | "hashtags"
+  // Personal. A different rubric, not a relaxed one — a caption with no hook,
+  // no CTA and no hashtags is doing exactly what it should here, so those axes
+  // are not scored at all rather than scored leniently.
+  | "voiceMatch"
+  | "humanness"
+  | "originality";
 
 /** Human labels, kept here so panels never build their own and drift apart. */
 export const DIMENSION_LABELS: Record<ScoreDimension, string> = {
@@ -77,6 +93,9 @@ export const DIMENSION_LABELS: Record<ScoreDimension, string> = {
   cta: "Call to action",
   readability: "Readability",
   hashtags: "Hashtags",
+  voiceMatch: "Sounds like you",
+  humanness: "Sounds human",
+  originality: "Not a repeat",
 };
 
 export interface DimensionScore {

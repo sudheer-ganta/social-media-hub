@@ -27,9 +27,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PlatformIcon } from "@/components/shared/PlatformIcon";
 import { PLATFORM_MAP } from "@/constants";
-import type { AudienceRegister, CaptionResult } from "@/ai/caption";
+import type {
+  AudienceRegister,
+  CaptionMode,
+  CaptionResult,
+} from "@/ai/caption";
 import type { ImageAnalysis } from "@/ai/types";
 import type { Platform } from "@/types";
 
@@ -54,6 +59,12 @@ interface AiCaptionPanelProps {
   error: string | null;
   /** Disabled reason, e.g. "add a title first". Null when generation is allowed. */
   blockedReason: string | null;
+  /**
+   * Which brain wrote it. Decides what this panel offers: Brand gets the
+   * register picker, the tone labels and the hashtag block, and Personal gets
+   * none of the three — see each one for why.
+   */
+  mode: CaptionMode;
   audience: AudienceRegister;
   onAudienceChange: (audience: AudienceRegister) => void;
   /** Whether the form currently has an image, so the panel can say what it will do. */
@@ -62,6 +73,15 @@ interface AiCaptionPanelProps {
   currentCaption?: string;
   onGenerate: () => void;
   onUseCaption: (caption: string) => void;
+  /**
+   * Called alongside `onUseCaption` when the member picks a specific option.
+   *
+   * Separate from it because they answer different questions: `onUseCaption`
+   * puts text in the editor, while this records that *this option, out of the
+   * ones shown, was the one they wanted*. Optional — a composer that does not
+   * feed style memory simply omits it.
+   */
+  onCaptionChosen?: (caption: string, variationIndex?: number) => void;
   onAppendHashtags: (hashtags: string[]) => void;
   /**
    * Fills the composer's Music / Song field. Optional: a composer without an
@@ -103,7 +123,7 @@ function ImageReadStrip({ analysis }: { analysis: ImageAnalysis }) {
   const uncertain = analysis.confidenceScore < 60;
 
   return (
-    <div className="rounded-md border bg-muted/30 p-4">
+    <div className="rounded-md border bg-muted/30 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <Eye className="h-3.5 w-3.5 text-primary" />
@@ -166,21 +186,27 @@ export function AiCaptionPanel({
   isGenerating,
   error,
   blockedReason,
+  mode,
   audience,
   onAudienceChange,
   hasImage,
   currentCaption,
   onGenerate,
   onUseCaption,
+  onCaptionChosen,
   onAppendHashtags,
   onUseSong,
   showPlatformVariations = false,
 }: AiCaptionPanelProps) {
   const [selectedCaption, setSelectedCaption] = useState<string | null>(null);
 
-  const handleSelectCaption = (caption: string) => {
+  const handleSelectCaption = (caption: string, variationIndex?: number) => {
     setSelectedCaption(caption);
     onUseCaption(caption);
+    // The one signal the post row cannot reconstruct on its own: a member who
+    // picks an option and then closes the tab still told us something about how
+    // they write. Fire and forget — see `aiService.recordCaptionFeedback`.
+    onCaptionChosen?.(caption, variationIndex);
   };
 
   const hasResult = Boolean(result && result.variations.length > 0);
@@ -194,42 +220,58 @@ export function AiCaptionPanel({
 
   return (
     <Card>
-      <CardHeader className="flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0">
-        <div className="space-y-1">
-          <CardTitle className="flex items-center gap-2">
+      <CardHeader className="flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0 p-4 pb-3">
+        <div className="min-w-0 space-y-1">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
             <Sparkles className="h-4 w-4 text-primary shrink-0" />
             <span>AI Assistant</span>
           </CardTitle>
-          <CardDescription>
+          {/* Personal is not offered angles, hooks or hashtags, so it is not
+              told about them either — copy that promises a thing the mode does
+              not do is its own small lie. */}
+          <CardDescription className="text-xs">
             {isGenerating
               ? hasImage
                 ? "Looking at your image, then writing from what it sees…"
                 : "Writing suggestions from your title, caption and platforms…"
               : hasResult
-                ? "Pick an angle, apply it to your post, then edit it freely."
+                ? mode === "personal"
+                  ? "Pick the one that sounds like you, then edit it freely."
+                  : "Pick an angle, apply it to your post, then edit it freely."
                 : hasImage
                   ? "Optional. Your image is analysed first, then suggestions are written from what's actually in it."
-                  : "Optional. Get caption, hook and hashtag suggestions from your title and chosen platforms."}
+                  : mode === "personal"
+                    ? "Optional. Add a picture or a title and get a few captions in your own voice."
+                    : "Optional. Get caption, hook and hashtag suggestions from your title and chosen platforms."}
           </CardDescription>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 pt-2 sm:pt-0">
-          <Select
-            value={audience}
-            onValueChange={(next) => onAudienceChange(next as AudienceRegister)}
-            disabled={isGenerating}
-          >
-            <SelectTrigger className="w-full sm:w-44" aria-label="Who this is written for">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {AUDIENCE_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Brand only. Picking a register is a marketing decision about who
+              the copy is pitched at — a real question when a business is
+              choosing how to sound to its buyers, and the wrong question to ask
+              somebody about their own account. Personal works out how they
+              write from what they have already posted; a dropdown asking them
+              to choose a voice for themselves is the "select your tone"
+              questionnaire this composer exists without. */}
+          {mode === "brand" && (
+            <Select
+              value={audience}
+              onValueChange={(next) => onAudienceChange(next as AudienceRegister)}
+              disabled={isGenerating}
+            >
+              <SelectTrigger className="w-full sm:w-44" aria-label="Who this is written for">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AUDIENCE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <Button
             type="button"
@@ -247,19 +289,35 @@ export function AiCaptionPanel({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        {error && (
+      {/* One card, four states — and only ever one of them at a time, so the
+          panel is exactly as tall as what it currently has to say. */}
+      <CardContent className="space-y-3 p-4 pt-0">
+        {/* An error outranks a stale result: the run the member just asked for
+            is what failed, and the retry has to be next to the reason. */}
+        {!isGenerating && error && (
           <div
             role="alert"
-            className="flex items-start gap-3 rounded-md border border-destructive/25 bg-destructive/5 px-4 py-3"
+            className="flex flex-wrap items-start gap-3 rounded-md border border-destructive/25 bg-destructive/5 p-3"
           >
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <div className="space-y-0.5">
+            <div className="min-w-0 flex-1 space-y-0.5">
               <p className="text-xs font-semibold">Generation failed</p>
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 {error}
               </p>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 text-[11px]"
+              disabled={Boolean(blockedReason)}
+              title={blockedReason ?? undefined}
+              onClick={onGenerate}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Try again
+            </Button>
           </div>
         )}
 
@@ -267,17 +325,32 @@ export function AiCaptionPanel({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex items-center gap-3 rounded-md border border-dashed p-4 text-sm text-muted-foreground"
+            className="space-y-3"
+            aria-busy="true"
           >
-            <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-            {hasImage
-              ? "Reading the image, then writing three angles from it — this takes a few seconds longer than text alone."
-              : "Writing your captions — this usually takes a few seconds."}
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+              {hasImage
+                ? "Reading the image, then writing three angles from it…"
+                : "Writing your captions — this usually takes a few seconds."}
+            </p>
+            {/* Shaped like the options that are about to replace it, so the
+                card does not jump when they arrive. */}
+            {[0, 1, 2].map((row) => (
+              <div key={row} className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                  <Skeleton className="h-4 w-14 rounded-full" />
+                </div>
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-4/5" />
+              </div>
+            ))}
           </motion.div>
         )}
 
         {!isGenerating && !hasResult && !error && (
-          <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
             {blockedReason ??
               "Nothing generated yet. Add a title, then press Generate."}
           </p>
@@ -290,7 +363,7 @@ export function AiCaptionPanel({
             )}
 
             {imageWasIgnored && (
-              <div className="flex items-start gap-3 rounded-md border border-dashed px-4 py-3">
+              <div className="flex items-start gap-3 rounded-md border border-dashed p-3">
                 <ImageOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   Your image could not be analysed — check that the URL is public
@@ -312,7 +385,7 @@ export function AiCaptionPanel({
                 return (
                   <div
                     key={`${variation.tone}-${index}`}
-                    className={`rounded-md border p-4 transition-colors ${isSelected
+                    className={`rounded-md border p-3 transition-colors ${isSelected
                         ? "border-primary bg-primary/5 ring-1 ring-primary"
                         : ""
                       }`}
@@ -322,9 +395,16 @@ export function AiCaptionPanel({
                         {variation.angle && (
                           <Badge className="text-[10px]">{variation.angle}</Badge>
                         )}
-                        <Badge variant="secondary" className="text-[10px]">
-                          {variation.tone}
-                        </Badge>
+                        {/* Personal returns no tone, on purpose. Brand's tone is
+                            a label the member chose to see; a personal caption
+                            labelled "chaotic" or "deadpan" turns their own voice
+                            back into a menu of options, which is the thing this
+                            mode exists to remove. */}
+                        {variation.tone && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {variation.tone}
+                          </Badge>
+                        )}
                         <span className="text-[11px] text-muted-foreground">
                           {variation.wordCount}{" "}
                           {variation.wordCount === 1 ? "word" : "words"}
@@ -334,7 +414,7 @@ export function AiCaptionPanel({
                         type="button"
                         variant={isSelected ? "default" : "outline"}
                         size="sm"
-                        onClick={() => handleSelectCaption(variation.caption)}
+                        onClick={() => handleSelectCaption(variation.caption, index)}
                       >
                         {isSelected ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}
                         {isSelected ? "Applied" : "Apply to Post"}
@@ -354,7 +434,7 @@ export function AiCaptionPanel({
             </div>
 
             {result.hashtags.length > 0 && (
-              <div className="rounded-md border p-4">
+              <div className="rounded-md border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Hashtags
@@ -384,7 +464,7 @@ export function AiCaptionPanel({
                 song is chosen, so there is nothing here that could tempt anyone
                 into replacing a decision the user already made. */}
             {onUseSong && result.songSuggestions?.length ? (
-              <div className="rounded-md border p-4">
+              <div className="rounded-md border p-3">
                 <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <Music className="h-3.5 w-3.5 text-primary" />
                   Audio ideas
@@ -437,7 +517,7 @@ export function AiCaptionPanel({
                   return (
                     <div
                       key={platform}
-                      className={`rounded-md border p-4 transition-colors ${isSelected
+                      className={`rounded-md border p-3 transition-colors ${isSelected
                           ? "border-primary bg-primary/5 ring-1 ring-primary"
                           : ""
                         }`}

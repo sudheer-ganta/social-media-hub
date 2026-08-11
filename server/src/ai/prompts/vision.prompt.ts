@@ -1,3 +1,5 @@
+import type { CaptionMode } from '../types';
+
 /**
  * Stage one: look at the image.
  *
@@ -17,8 +19,22 @@
  * stage that writes from them.
  */
 
+/**
+ * ─── What changed in v2 ──────────────────────────────────────────────────────
+ * One prompt, two readings. Everything above still runs for every request; a
+ * personal request additionally asks four questions a *campaign* has no use for
+ * and a person posting the picture has nothing but: what is the subject doing,
+ * what is the energy of it, what does it visibly evoke, and what would a friend
+ * say first.
+ *
+ * Added to this prompt rather than split into a second one because the
+ * expensive parts — the download, the round trip, the pixels — are identical,
+ * and because a personal caption still wants the observation block. Only the
+ * interpretation differs, and interpretation is cheap.
+ */
+
 /** Bump when this prompt's shape changes, so provenance stays honest. */
-export const VISION_PROMPT_VERSION = 1;
+export const VISION_PROMPT_VERSION = 2;
 
 const SYSTEM_INSTRUCTION = `You are an art director, pop-culture expert, and brand strategist who reads images for a living. You look first and interpret second.
 
@@ -145,6 +161,49 @@ export const VISION_RESPONSE_SCHEMA: Record<string, unknown> = {
   ],
 };
 
+/**
+ * The four extra fields a personal post wants.
+ *
+ * Not marked required. A model that genuinely cannot tell what the subject is
+ * doing should leave the field out rather than fill it — an invented "posing
+ * confidently" is worse than nothing, because the writer downstream treats
+ * these as the most concrete thing it has been told.
+ */
+const PERSONAL_PROPERTIES: Record<string, unknown> = {
+  whatSubjectIsDoing: {
+    type: 'string',
+    description:
+      'What the main subject is visibly doing, in a few plain words. Only what is actually happening in the frame.',
+  },
+  vibe: {
+    type: 'string',
+    description:
+      'The energy of the picture in plain words a person would use — e.g. "trying way too hard", "genuinely peaceful", "chaotic night out". Not a marketing mood.',
+  },
+  recognisableReferences: stringArray(
+    'Characters, franchises, films, songs, genres or public figures this image visibly evokes — a resemblance or an association, never a claim about who someone actually is. Empty array if none.',
+    5,
+  ),
+  whatAFriendWouldNotice: {
+    type: 'string',
+    description:
+      'The single thing a friend would comment on first if this was sent to them. Often the funny, absurd or over-the-top part.',
+  },
+};
+
+/** The schema for one request. Personal gets four extra optional properties. */
+function responseSchemaFor(personal: boolean): Record<string, unknown> {
+  if (!personal) return VISION_RESPONSE_SCHEMA;
+
+  return {
+    ...VISION_RESPONSE_SCHEMA,
+    properties: {
+      ...(VISION_RESPONSE_SCHEMA.properties as Record<string, unknown>),
+      ...PERSONAL_PROPERTIES,
+    },
+  };
+}
+
 // ─── Prompt assembly ─────────────────────────────────────────────────────────
 
 export interface BuiltVisionPrompt {
@@ -168,7 +227,11 @@ export function buildVisionPrompt(context: {
   topic?: string;
   brandName?: string;
   brandDescription?: string;
+  /** `personal` adds the social read. Anything else behaves exactly as v1. */
+  mode?: CaptionMode;
 }): BuiltVisionPrompt {
+  const personal = context.mode === 'personal';
+
   const contextLines = [
     context.topic && `- The post it will be used for is about: ${context.topic}`,
     context.brandName && `- The brand posting it: ${context.brandName}`,
@@ -194,6 +257,20 @@ export function buildVisionPrompt(context: {
       '4. A confidenceScore from 0 to 100 for how clearly the image reads.',
     ].join('\n'),
 
+    // Personal only. Written as "read it as a person" rather than as four more
+    // schema fields, because the difference between `vibe` and `mood` is not a
+    // difference a model finds in a field description.
+    personal
+      ? [
+          '## Also read it the way a person would',
+          'Someone is about to post this on their own account. Set the campaign aside and answer four more things:',
+          '- whatSubjectIsDoing: what is actually happening, in plain words.',
+          '- vibe: the energy of it, said the way a person would say it — "trying way too hard", "genuinely peaceful", "chaotic night out".',
+          '- recognisableReferences: what it visibly evokes — a character, a film, a genre, a kind of song, a public figure it resembles. This is an association, NOT a claim about who anyone is. Leave it empty rather than guess at a real identity.',
+          '- whatAFriendWouldNotice: the one thing a friend would say first if this landed in their messages. Usually the funny, absurd or over-the-top part — say it plainly, do not soften it into a compliment.',
+        ].join('\n')
+      : null,
+
     'Return a single JSON object matching the provided schema. Nothing else.',
   ]
     .filter(Boolean)
@@ -202,7 +279,7 @@ export function buildVisionPrompt(context: {
   return {
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt,
-    responseSchema: VISION_RESPONSE_SCHEMA,
+    responseSchema: responseSchemaFor(personal),
     // Low: this stage is reporting, not creating. The invention happens in
     // stage two, and it should invent from an accurate reading.
     temperature: 0.25,

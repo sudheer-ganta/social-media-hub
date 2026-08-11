@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { postsService } from "@/services";
 import { aiService } from "@/services/ai.service";
-import type { AudienceRegister, CaptionResult } from "@/ai/caption";
+import type {
+  AudienceRegister,
+  CaptionMode,
+  CaptionResult,
+} from "@/ai/caption";
 
 /**
  * Caption generation for the Create Post page.
@@ -19,6 +23,13 @@ import type { AudienceRegister, CaptionResult } from "@/ai/caption";
  */
 
 export interface UseAiCaptionDraft {
+  /**
+   * Which brain writes it, from the composer's publishing context. Personal
+   * reaches none of the marketing pipeline — see the backend's `CaptionMode`.
+   */
+  mode?: CaptionMode;
+  /** The brand whose style memory to read. Brand mode only. */
+  brandId?: string;
   title: string;
   caption?: string;
   image_url?: string;
@@ -109,14 +120,20 @@ export function useAiCaption(
         // difference between copy built on the picture and copy built on the
         // title, and the user is about to judge the options either way.
         const count = generated.variations.length;
+        // "Angle" is a Brand word. Personal options are not different takes on
+        // one direction, so describing them that way would be describing the
+        // wrong product.
+        const detail =
+          draft.mode === "personal"
+            ? ""
+            : generated.imageAnalysis
+              ? `, each on a different angle from "${generated.imageAnalysis.primarySubject}"`
+              : "";
+
         toast.success(
           generated.imageAnalysis ? "Written from your image" : "Caption ready",
           {
-            description: `${count} option${count === 1 ? "" : "s"}${
-              generated.imageAnalysis
-                ? `, each on a different angle from "${generated.imageAnalysis.primarySubject}"`
-                : ""
-            } — edit anything before you save.`,
+            description: `${count} option${count === 1 ? "" : "s"}${detail} — edit anything before you save.`,
           },
         );
         return generated;

@@ -164,17 +164,22 @@ const CAPTION_PAYLOAD = {
  * never let through, like `audience: 'boomer'`.
  */
 function baseRequest(overrides: Record<string, unknown> = {}): CaptionRequest {
-  return parseCaptionRequest({
-    title: 'Winter wedding at a stone hall',
-    platforms: ['instagram'],
-    goal: 'brand_awareness',
-    funnelStage: 'TOFU',
-    captionLength: 'Medium',
-    language: 'English',
-    variationCount: 2,
-    hashtagCount: 5,
-    ...overrides,
-  });
+  // The user id is an argument rather than a body field — it decides whose
+  // writing history the generator may read, so a request cannot name its own.
+  return parseCaptionRequest(
+    {
+      title: 'Winter wedding at a stone hall',
+      platforms: ['instagram'],
+      goal: 'brand_awareness',
+      funnelStage: 'TOFU',
+      captionLength: 'Medium',
+      language: 'English',
+      variationCount: 2,
+      hashtagCount: 5,
+      ...overrides,
+    },
+    { userId: 'verify-script' },
+  );
 }
 
 const ANALYSIS: ImageAnalysis = {

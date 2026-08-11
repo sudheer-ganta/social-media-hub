@@ -8,6 +8,7 @@ import {
   type AudienceRegister,
   type CaptionAnalysis,
   type CaptionLength,
+  type CaptionMode,
   type CaptionRequest,
   type CaptionResult,
   type FunnelStage,
@@ -17,6 +18,7 @@ import {
   type MarketingGoal,
   type TargetedImprovement,
 } from '../ai';
+import { activityService, ActivityAction } from './activity.service';
 
 /**
  * The AI module's application layer.
@@ -86,6 +88,31 @@ const AUDIENCE_REGISTERS: AudienceRegister[] = [
   'broad',
 ];
 
+const MODES: CaptionMode[] = ['personal', 'brand'];
+
+/**
+ * The mode an unlabelled request gets.
+ *
+ * `brand` rather than `personal`, because brand is what this endpoint did
+ * before modes existed: a client that has never sent the field must keep
+ * receiving the captions it always received. The browser sends it explicitly
+ * from the composer's publishing context.
+ */
+const DEFAULT_MODE: CaptionMode = 'brand';
+
+/**
+ * The shortest text each mode will accept.
+ *
+ * Brand's floor exists because a two-character caption from a marketing
+ * generator is a failed generation, not a terse one. Personal's exists for the
+ * opposite reason: "ofc" is a caption someone meant, and a shared floor of 12
+ * silently discarded exactly the output Personal is for.
+ */
+const MIN_CAPTION_LENGTH_BY_MODE: Record<CaptionMode, number> = {
+  brand: 12,
+  personal: 2,
+};
+
 /**
  * The register everything is written in unless the user says otherwise.
  *
@@ -98,6 +125,15 @@ const DEFAULT_AUDIENCE: AudienceRegister = 'gen_z_millennial';
 
 /** Free text we will forward to the model, e.g. a language name. */
 const MAX_FREE_TEXT_LENGTH = 60;
+
+/**
+ * How much of a caption a feedback event stores.
+ *
+ * Enough for any personal caption several times over. The row is evidence about
+ * how somebody writes, not a copy of their post — the post is already in
+ * `posts`, and this is only here for the case where it never got there.
+ */
+const MAX_FEEDBACK_CAPTION_LENGTH = 500;
 
 // ─── Field readers ───────────────────────────────────────────────────────────
 
@@ -286,13 +322,22 @@ function readFeatures(value: unknown): CaptionRequest['features'] {
  * Only one field can fail the request outright. Everything else has a sensible
  * default, because a caption generator that refuses to run over a missing
  * `funnelStage` is a worse product than one that assumes "TOFU".
+ *
+ * `userId` arrives as an argument and never from the body. It selects whose
+ * writing history the generator is allowed to read, which makes it the one
+ * field on this request that a caller must not be able to choose.
  */
-export function parseCaptionRequest(body: unknown): CaptionRequest {
+export function parseCaptionRequest(
+  body: unknown,
+  { userId }: { userId: string },
+): CaptionRequest {
   if (!body || typeof body !== 'object') {
     throw new AiError('Send a JSON body describing the post.');
   }
 
   const input = body as Record<string, unknown>;
+  const mode = readEnum(input.mode, MODES, DEFAULT_MODE);
+  const personal = mode === 'personal';
 
   // `topic` is what to write about; a caller with only a title may send that.
   const title = readString(input.title, MAX_TITLE_LENGTH);
@@ -306,6 +351,13 @@ export function parseCaptionRequest(body: unknown): CaptionRequest {
   }
 
   return {
+    mode,
+    userId,
+    // Scopes a brand-context style profile. Meaningless in personal mode, and
+    // dropped there rather than carried, so a personal request can never be
+    // pointed at a brand's writing history.
+    ...(!personal &&
+      readString(input.brandId, 64) && { brandId: readString(input.brandId, 64) }),
     topic,
     ...(title && { title }),
     ...(readImageUrl(input.imageUrl) && {
@@ -322,15 +374,24 @@ export function parseCaptionRequest(body: unknown): CaptionRequest {
     funnelStage: readEnum(input.funnelStage, FUNNEL_STAGES, 'TOFU'),
     captionLength: readEnum(input.captionLength, CAPTION_LENGTHS, 'Medium'),
     language: readString(input.language, MAX_FREE_TEXT_LENGTH) ?? 'English',
-    ...(readBrandVoice(input.brandVoice) && {
-      brandVoice: readBrandVoice(input.brandVoice),
-    }),
-    ...(readCompetitor(input.competitor) && {
-      competitor: readCompetitor(input.competitor),
-    }),
-    ...(readFeatures(input.features) && {
-      features: readFeatures(input.features),
-    }),
+    // ── Brand-only from here down ──────────────────────────────────────────
+    //
+    // Parsed for every mode so an unchanged client body still validates, but
+    // dropped in personal mode rather than passed on. The personal prompt does
+    // not read any of them; dropping them here is belt and braces, and it makes
+    // the logged request honest about what was actually used.
+    ...(!personal &&
+      readBrandVoice(input.brandVoice) && {
+        brandVoice: readBrandVoice(input.brandVoice),
+      }),
+    ...(!personal &&
+      readCompetitor(input.competitor) && {
+        competitor: readCompetitor(input.competitor),
+      }),
+    ...(!personal &&
+      readFeatures(input.features) && {
+        features: readFeatures(input.features),
+      }),
     ...(readString(input.previousCaption, MAX_PREVIOUS_CAPTION_LENGTH) && {
       previousCaption: readString(
         input.previousCaption,
@@ -343,12 +404,16 @@ export function parseCaptionRequest(body: unknown): CaptionRequest {
       MAX_VARIATIONS,
       DEFAULT_VARIATIONS,
     ),
-    hashtagCount: readClampedInt(
-      input.hashtagCount,
-      MIN_HASHTAGS,
-      MAX_HASHTAGS,
-      DEFAULT_HASHTAGS,
-    ),
+    // A personal post has no hashtags. Not "zero by default" — there is no
+    // number a personal member could send that would produce any.
+    hashtagCount: personal
+      ? 0
+      : readClampedInt(
+          input.hashtagCount,
+          MIN_HASHTAGS,
+          MAX_HASHTAGS,
+          DEFAULT_HASHTAGS,
+        ),
   };
 }
 
@@ -356,8 +421,6 @@ export function parseCaptionRequest(body: unknown): CaptionRequest {
 
 /** Long enough for any caption a network will accept, with room to be told so. */
 const MAX_CAPTION_LENGTH = 8000;
-/** Matches the generator's floor — below it there is nothing to judge. */
-const MIN_CAPTION_LENGTH = 12;
 const MAX_ANALYSED_HASHTAGS = 40;
 
 /**
@@ -426,9 +489,10 @@ export function parseAnalysisRequest(body: unknown): AnalysisRequest {
   }
 
   const input = body as Record<string, unknown>;
+  const mode = readEnum(input.mode, MODES, DEFAULT_MODE);
   const caption = readString(input.caption, MAX_CAPTION_LENGTH);
 
-  if (!caption || caption.length < MIN_CAPTION_LENGTH) {
+  if (!caption || caption.length < MIN_CAPTION_LENGTH_BY_MODE[mode]) {
     throw new AiError(
       'There is not enough caption here to analyse yet. Write a line or two first.',
       422,
@@ -438,6 +502,7 @@ export function parseAnalysisRequest(body: unknown): AnalysisRequest {
   const imageAnalysis = readImageAnalysis(input.imageAnalysis);
 
   return {
+    mode,
     caption,
     // Normalised the same way the generator normalises what it produces, so a
     // tag list round-tripped through the browser is counted identically here.
@@ -491,6 +556,7 @@ export function parseImprovementRequest(body: unknown): ImprovementRequest {
   }
 
   const input = body as Record<string, unknown>;
+  const mode = readEnum(input.mode, MODES, DEFAULT_MODE);
 
   if (!IMPROVEMENT_TARGETS.includes(input.target as ImprovementTarget)) {
     throw new AiError(
@@ -498,8 +564,19 @@ export function parseImprovementRequest(body: unknown): ImprovementRequest {
     );
   }
 
+  // Two of the four targets exist to make copy conform, which is the opposite
+  // of what a personal caption wants. `readability` would iron out the
+  // fragments and `cta` would bolt an engagement prompt onto a post that is
+  // not asking for engagement — so neither is reachable in personal mode, and
+  // the composer does not offer them either.
+  if (mode === 'personal' && (input.target === 'readability' || input.target === 'cta')) {
+    throw new AiError(
+      `"${String(input.target)}" is a brand improvement. A personal caption is not tidied or given a call to action.`,
+    );
+  }
+
   const caption = readString(input.caption, MAX_CAPTION_LENGTH);
-  if (!caption || caption.length < MIN_CAPTION_LENGTH) {
+  if (!caption || caption.length < MIN_CAPTION_LENGTH_BY_MODE[mode]) {
     throw new AiError(
       'There is not enough caption here to improve yet. Write a line or two first.',
       422,
@@ -509,6 +586,7 @@ export function parseImprovementRequest(body: unknown): ImprovementRequest {
   const imageAnalysis = readImageAnalysis(input.imageAnalysis);
 
   return {
+    mode,
     target: input.target as ImprovementTarget,
     caption,
     hashtags: readStringArray(input.hashtags, MAX_ANALYSED_HASHTAGS).map((tag) =>
@@ -547,7 +625,7 @@ export const aiService = {
     userId: string,
     body: unknown,
   ): Promise<CaptionResult> {
-    const request = parseCaptionRequest(body);
+    const request = parseCaptionRequest(body, { userId });
     const provider = providerForRole('caption');
 
     if (!provider.isConfigured()) {
@@ -560,10 +638,14 @@ export const aiService = {
     const result = await generateCaption(request, {
       provider,
       visionProvider: providerForRole('vision'),
+      // Style profiles are built off the request path and are the cheapest
+      // model call in the module — the light role, not the writer's.
+      lightProvider: providerForRole('light'),
     });
 
     console.info('[ai] caption generated', {
       userId,
+      mode: request.mode,
       model: result.meta.model,
       durationMs: result.meta.durationMs,
       variations: result.variations.length,
@@ -589,7 +671,7 @@ export const aiService = {
    * analyser reachable only as a side effect of generation could never see it.
    */
   async analyseCaption(userId: string, body: unknown): Promise<CaptionAnalysis> {
-    const request = parseAnalysisRequest(body);
+    const request = { ...parseAnalysisRequest(body), userId };
     const provider = providerForRole('marketing');
 
     if (!provider.isConfigured()) {
@@ -650,6 +732,48 @@ export const aiService = {
     });
 
     return improvement;
+  },
+
+  /**
+   * Records what the member did with a set of suggestions.
+   *
+   * The two signals the post row cannot reconstruct — see
+   * `ActivityAction.CAPTION_SELECTED`. Everything else style memory learns is
+   * derived from posts that already exist, retroactively and for free.
+   *
+   * Never throws and never reports a problem to the browser. This is a hint
+   * about somebody's writing style; a failed hint is worth a log line and
+   * nothing more, and a member who sees "could not record feedback" after
+   * clicking Use This has been told about a mechanism they did not know
+   * existed and cannot act on.
+   */
+  async recordCaptionFeedback(userId: string, body: unknown): Promise<void> {
+    if (!body || typeof body !== 'object') return;
+    const input = body as Record<string, unknown>;
+
+    const action =
+      input.action === 'regenerated'
+        ? ActivityAction.CAPTION_REGENERATED
+        : input.action === 'selected'
+          ? ActivityAction.CAPTION_SELECTED
+          : null;
+    if (!action) return;
+
+    const captionText = readString(input.caption, MAX_FEEDBACK_CAPTION_LENGTH);
+    if (!captionText) return;
+
+    const mode = readEnum(input.mode, MODES, DEFAULT_MODE);
+
+    await activityService.logCaptionFeedback(userId, action, {
+      contextType: mode,
+      ...(mode === 'brand' &&
+        readString(input.brandId, 64) && { brandId: readString(input.brandId, 64) }),
+      ...(readString(input.postId, 64) && { postId: readString(input.postId, 64) }),
+      captionText,
+      ...(typeof input.variationIndex === 'number' && {
+        variationIndex: readClampedInt(input.variationIndex, 0, MAX_VARIATIONS, 0),
+      }),
+    });
   },
 
   /**

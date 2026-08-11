@@ -113,7 +113,8 @@
   body {
     width: 100%;
     max-width: 100vw;
-    overflow-x: hidden;
+    height: 100%;
+    overflow: hidden;
     position: relative;
   }
 
@@ -159,6 +160,15 @@
 
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 
   /* The sticky masthead only. Not a decorative surface treatment. */

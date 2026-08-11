@@ -244,7 +244,7 @@ function RightPanel({ posts, stats }: RightPanelProps) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-foreground">
-                    {post.title}
+                    {post.title || "Untitled"}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
                     {formatUpcomingTime(post)}
@@ -488,7 +488,7 @@ export function CalendarView({ posts, month, onMonthChange }: CalendarViewProps)
                               className="h-2.5 w-2.5 shrink-0 opacity-80"
                             />
                           )}
-                          <span className="truncate flex-1">{post.title}</span>
+                          <span className="truncate flex-1">{post.title || "Untitled"}</span>
                         </div>
                       );
                     })}
@@ -566,7 +566,7 @@ export function CalendarView({ posts, month, onMonthChange }: CalendarViewProps)
                     className="flex-1 flex items-center gap-3 rounded-xl border bg-card/40 p-3.5 transition-all duration-200 hover:bg-accent/40 hover:border-foreground/10 hover:translate-x-0.5 shadow-sm"
                   >
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                      {post.title}
+                      {post.title || "Untitled"}
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
                       {post.platforms.slice(0, 3).map((platform) => (

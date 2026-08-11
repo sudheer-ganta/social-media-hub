@@ -193,7 +193,7 @@ export const DEFAULT_MEDIA_CAPABILITY: MediaCapability = {
  * that the composer briefly offers fewer slots than it could — not that it
  * promises something a publish would reject.
  */
-export const MEDIA_LIMIT_BEFORE_CAPABILITIES_LOAD = 10;
+export const MEDIA_LIMIT_BEFORE_CAPABILITIES_LOAD = 20;
 
 /** One entry in the Activity Timeline. */
 export interface ActivityEvent {

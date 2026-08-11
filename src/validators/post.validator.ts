@@ -10,10 +10,8 @@ export const postSchema = z
     title: z
       .string()
       .trim()
-      .min(1, "Title is required.")
-      .min(3, "Give your post a title of at least 3 characters.")
       .max(120, "Keep the title under 120 characters."),
-    caption: z.string().trim().min(1, "Caption is required."),
+    caption: z.string().trim(),
     /**
      * The first attached image, mirrored from the composer's media list.
      *

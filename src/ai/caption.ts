@@ -45,8 +45,23 @@ export type AudienceRegister =
   | "professional"
   | "broad";
 
+/**
+ * Which brain writes the post.
+ *
+ * Mirrors `posts.context_type`, which is where the composer takes it from, and
+ * the backend's `CaptionMode`. Not a tone setting: the two modes select
+ * different prompts, different output contracts and different evaluation
+ * rubrics. A brief that omits it is treated as `brand`, which is what this
+ * endpoint always did.
+ */
+export type CaptionMode = "personal" | "brand";
+
 /** Everything the backend needs to write a caption. Only `topic` is required. */
 export interface CaptionBrief {
+  /** Personal or Brand. Omitted means Brand. See {@link CaptionMode}. */
+  mode?: CaptionMode;
+  /** The brand whose style memory to read. Brand mode only. */
+  brandId?: string;
   /** What the post is about. Falls back to `title` on the backend. */
   topic?: string;
   title?: string;

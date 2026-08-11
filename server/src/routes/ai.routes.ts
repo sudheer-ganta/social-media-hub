@@ -106,6 +106,25 @@ router.post(
   }),
 );
 
+// POST /api/ai/caption/feedback → what the member did with the suggestions.
+//
+// Fire-and-forget, and answers 204 whatever happens. This records a hint about
+// how somebody writes; there is no outcome the browser can act on, and a
+// failure here must not turn a successful "use this caption" click into an
+// error toast about a mechanism the member does not know exists.
+//
+// Only two events come through here — a selection, and a regenerate. Everything
+// else style memory learns is derived from the post row itself, which is why
+// this endpoint is as small as it is. See `ai/style/signals.ts`.
+router.post(
+  '/caption/feedback',
+  requireAuth,
+  handle(async (req, res) => {
+    await aiService.recordCaptionFeedback(req.user.id, req.body);
+    res.status(204).end();
+  }),
+);
+
 // The American spelling, for the same handler. Every other identifier in this
 // codebase is British ("analyse", "normalise"), and a client that guesses the
 // other spelling should get an analysis rather than a 404.

@@ -150,6 +150,37 @@ export async function improveCaption(
   );
 }
 
+/**
+ * Tells the backend what the member did with a set of suggestions.
+ *
+ * ─── Fire and forget, deliberately ───────────────────────────────────────────
+ * Nothing awaits this and nothing can fail because of it. It is a hint that
+ * feeds a style profile built hours later, and the member has no idea it exists
+ * — so a network blip must not produce an error toast on top of a click that
+ * plainly worked, and a slow response must not delay a caption landing in the
+ * editor.
+ *
+ * Only two events go through here. Everything else the system learns about how
+ * somebody writes is derived from the saved post: which option they kept,
+ * whether they edited it first, which they ignored. These two — a selection
+ * they never saved, and a regenerate — leave no trace in the post row.
+ */
+export function recordCaptionFeedback(feedback: {
+  action: "selected" | "regenerated";
+  mode: "personal" | "brand";
+  caption: string;
+  brandId?: string | null;
+  postId?: string | null;
+  variationIndex?: number;
+}): void {
+  void request("/caption/feedback", {
+    method: "POST",
+    body: JSON.stringify(feedback),
+  }, "").catch(() => {
+    // Swallowed on purpose. See above.
+  });
+}
+
 /** Whether this server can generate at all, and with which model. */
 export async function fetchAiStatus(): Promise<{
   configured: boolean;
@@ -167,5 +198,6 @@ export const aiService = {
   generateCaption,
   analyzeCaption,
   improveCaption,
+  recordCaptionFeedback,
   fetchAiStatus,
 };

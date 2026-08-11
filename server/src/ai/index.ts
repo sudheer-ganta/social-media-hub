@@ -54,6 +54,11 @@ export {
   CAPTION_PROMPT_VERSION,
 } from './prompts/caption.prompt';
 export {
+  buildPersonalPrompt,
+  PERSONAL_PROMPT_VERSION,
+  PROMPT_LINE_BUDGET,
+} from './prompts/personal.prompt';
+export {
   buildVisionPrompt,
   VISION_PROMPT_VERSION,
 } from './prompts/vision.prompt';
@@ -80,7 +85,34 @@ export {
 } from './brand/brand-profile';
 
 // ─── The two engines ─────────────────────────────────────────────────────────
+//
+// One entry point, two brains behind it: `generateCaption` runs the shared
+// stage one and then forks on `request.mode`. Personal's half lives in
+// `generators/personal-caption.generator.ts` and reaches none of the marketing
+// machinery below.
 export { generateCaption } from './generators/creative-intelligence.generator';
+export { writePersonalCaption } from './generators/personal-caption.generator';
+
+// ─── Personal: the deterministic half ────────────────────────────────────────
+export {
+  aiRejectReason,
+  filterCandidates,
+  repeatReason,
+  repeatsAny,
+  tokenSimilarity,
+  trigramSimilarity,
+  type Candidate,
+  type FilterResult,
+} from './personal/filters';
+export { rankCandidates, type RankedCandidate } from './personal/score';
+export {
+  aggregateShape,
+  captionShape,
+  imageConnection,
+  voiceDistance,
+  type CaptionShape,
+  type MeasuredStyle,
+} from './style/measure';
 export { analyseCaption } from './generators/marketing-intelligence.generator';
 export { analyseImage } from './generators/image-analysis.generator';
 // Not a third engine — a repair pass over one named part of a post that the

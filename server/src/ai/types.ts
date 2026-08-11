@@ -13,6 +13,24 @@
 
 // ─── Request ─────────────────────────────────────────────────────────────────
 
+/**
+ * Which brain writes the post.
+ *
+ * Not a tone setting and not a feature flag — the two select genuinely
+ * different prompts, different output contracts and different evaluation
+ * rubrics. `brand` is everything this module did before Personal existed and is
+ * the default, so a client that has never heard of a mode keeps the behaviour
+ * it always had.
+ *
+ *   brand     a social strategist writing for a business: objective, funnel,
+ *             audience register, hook, CTA, hashtags, platform rules, SEO.
+ *   personal  the member's own voice. None of the above applies — see
+ *             `prompts/personal.prompt.ts` for what replaces it.
+ *
+ * Mirrors `posts.context_type`, which is where the browser gets it from.
+ */
+export type CaptionMode = 'personal' | 'brand';
+
 export type CaptionLength = 'Short' | 'Medium' | 'Long';
 
 export type MarketingGoal =
@@ -190,6 +208,28 @@ export interface ImageAnalysis {
   suggestedBuyerPersona: string;
   /** 0–100. Low means the image was ambiguous and stage two should lean brand. */
   confidenceScore: number;
+
+  // ─── Personal read ─────────────────────────────────────────────────────────
+  //
+  // Asked for only when `mode: 'personal'`, which is why every field here is
+  // optional: a brand analysis never carries them, and neither does any
+  // analysis stored on a post before Personal existed.
+  //
+  // The block above answers "what could a campaign do with this picture". These
+  // four answer the question a person posting it actually has — what is going
+  // on here, and what would somebody notice first.
+
+  /** What the subject is visibly doing, in a few words. */
+  whatSubjectIsDoing?: string;
+  /** The energy of the picture in plain words — not a marketing "mood". */
+  vibe?: string;
+  /**
+   * Characters, franchises, films, songs or public figures the image visibly
+   * evokes. A *resemblance*, never an identification of a real person.
+   */
+  recognisableReferences?: string[];
+  /** The one thing a friend would comment on first. Often the funny part. */
+  whatAFriendWouldNotice?: string;
 }
 
 /** A creative direction stage two chose before it wrote anything. */
@@ -224,6 +264,21 @@ export const DEFAULT_FEATURE_FLAGS: StudioFeatureFlags = {
 
 /** The body of `POST /api/ai/caption`, after validation. */
 export interface CaptionRequest {
+  /**
+   * Which brain writes it. Defaults to `brand` in the service, so an older
+   * client's body produces exactly the caption it always produced.
+   */
+  mode: CaptionMode;
+  /**
+   * Whose style memory to read.
+   *
+   * Injected by the service from the authenticated session and **never** read
+   * from the request body. A body that could name its own user id is a body
+   * that can read another member's entire writing history.
+   */
+  userId: string;
+  /** Scopes a brand-context style profile. Ignored in personal mode. */
+  brandId?: string;
   /** What the post is about. The one field the generator cannot do without. */
   topic: string;
   /** The post's working title, when it differs from the topic. */
@@ -424,6 +479,49 @@ export type RawImageAnalysisPayload = Partial<
   Record<keyof ImageAnalysis, unknown>
 >;
 
+// ─── Personal ────────────────────────────────────────────────────────────────
+
+/**
+ * What the personal writer worked out before it wrote anything.
+ *
+ * The counterpart of Brand's `angles`, and deliberately a different shape.
+ * Angles are creative *directions to fill* — three named premises, one caption
+ * each. This is a single read of one post, and the captions that follow are not
+ * required to divide themselves between anything.
+ *
+ * Never returned to the browser. It exists so the model commits to
+ * understanding the post before it starts typing, which is the whole of what
+ * separates "a caption for this image" from "what this person would post".
+ */
+export interface PersonalRead {
+  whatThisIs: string;
+  whatStandsOut: string;
+  /** Which creative behaviours suit THIS post. The model's call, not ours. */
+  whatFits: string;
+}
+
+/** One personal candidate, before filtering and ranking. */
+export interface PersonalCandidate {
+  text: string;
+  /**
+   * Free text, at most two words, chosen by the model rather than assigned by
+   * us — an enum here would become a checklist to work through, which is the
+   * rotation this design exists to avoid. Logged for telemetry and used for
+   * diversity; never returned to the browser and never shown to a member.
+   */
+  behaviour: string;
+}
+
+/** What the personal prompt is asked to return, before we normalise it. */
+export interface RawPersonalPayload {
+  read?: {
+    whatThisIs?: unknown;
+    whatStandsOut?: unknown;
+    whatFits?: unknown;
+  };
+  captions?: Array<{ text?: unknown; behaviour?: unknown }>;
+}
+
 // ─── Marketing Intelligence ──────────────────────────────────────────────────
 //
 // The second engine. Creative Intelligence writes copy; Marketing Intelligence
@@ -448,13 +546,27 @@ export type Likelihood = 'Low' | 'Medium' | 'High';
  * so a text-only post is not quietly marked down for having no visual.
  */
 export type ScoreDimension =
+  // Brand. Unchanged, and still the whole of what Marketing Intelligence
+  // judges a business's copy on.
   | 'hook'
   | 'visual'
   | 'platformFit'
   | 'audienceFit'
   | 'cta'
   | 'readability'
-  | 'hashtags';
+  | 'hashtags'
+  // ─── Personal ─────────────────────────────────────────────────────────────
+  //
+  // A different rubric, not a relaxed one. Judging a personal caption on hooks,
+  // CTAs and hashtags marks it down for three things it is deliberately not
+  // doing — and the mechanism for judging a caption on a subset of axes already
+  // existed, because a text-only post has always had to be scored without
+  // `visual`. See `applicableDimensions` and `normaliseWeights`.
+  //
+  // Only `visual` is shared, and it means the same thing in both.
+  | 'voiceMatch'
+  | 'humanness'
+  | 'originality';
 
 export interface DimensionScore {
   /** 0–10. */
@@ -603,6 +715,12 @@ export type ImprovementTarget = 'hook' | 'readability' | 'cta' | 'hashtags';
 export type ImprovementKind = 'lead' | 'line' | 'hashtags' | 'replace';
 
 export interface ImprovementRequest {
+  /**
+   * Which mode wrote it. In personal mode the register rule hardens: their
+   * fragments, lowercase and missing punctuation are the voice, and an
+   * improvement that tidies them has broken the thing it was fixing.
+   */
+  mode: CaptionMode;
   target: ImprovementTarget;
   /** The caption as it stands right now. The thing being improved. */
   caption: string;
@@ -691,6 +809,19 @@ export interface AnalysisMeta {
 
 /** The body of `POST /api/ai/analyse`, after validation. */
 export interface AnalysisRequest {
+  /**
+   * Which rubric to judge against. A personal caption scored on hooks, CTAs
+   * and hashtags is scored on three things it is not trying to do — see the
+   * personal dimensions in `analysis/weights.ts`.
+   */
+  mode: CaptionMode;
+  /**
+   * Whose style memory to judge `voiceMatch` against. Injected by the service
+   * from the session, never read from the body — same rule as
+   * {@link CaptionRequest.userId}. Absent on the paths that build an
+   * AnalysisRequest directly, which simply judge without a style profile.
+   */
+  userId?: string;
   /** The caption to judge — usually the one in the editor, edits included. */
   caption: string;
   /** Hashtags as they will be published, without the leading `#`. */

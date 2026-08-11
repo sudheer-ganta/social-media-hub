@@ -64,7 +64,7 @@ export function PostCard({ post, onDelete, onDuplicate, onPublish, onClick }: Po
 
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="line-clamp-1 text-sm font-semibold">{post.title}</h3>
+          <h3 className="line-clamp-1 text-sm font-semibold">{post.title || "Untitled"}</h3>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button

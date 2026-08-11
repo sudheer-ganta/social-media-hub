@@ -35,6 +35,21 @@ export const ActivityAction = {
   /** A member armed, or called off, a scheduled publish. */
   POST_SCHEDULED: 'post.scheduled',
   POST_SCHEDULE_CANCELLED: 'post.schedule_cancelled',
+  /**
+   * Style-memory feedback — the two things a post row cannot reconstruct.
+   *
+   * Everything else this system learns about how a member writes is derived by
+   * comparing `posts.caption` against the options stored in
+   * `posts.ai_studio_output`: which one they picked, whether they edited it,
+   * which they ignored. See `ai/style/signals.ts`.
+   *
+   * These two escape that comparison. A caption chosen and then abandoned
+   * before saving leaves no row to compare, and a regenerate — the member
+   * saying *none of these* — leaves no trace at all, while being the clearest
+   * negative signal available.
+   */
+  CAPTION_SELECTED: 'caption.selected',
+  CAPTION_REGENERATED: 'caption.regenerated',
   FAILURE: 'failure',
 } as const;
 
@@ -216,6 +231,32 @@ export function logFailure(
   });
 }
 
+/**
+ * A member picked one of the AI's captions, or asked for a different set.
+ *
+ * Deliberately routed through the audit trail rather than through a table of
+ * its own. This *is* an activity — a thing the account did, worth a row,
+ * append-only, already indexed by user and time — and the alternative was a
+ * second table holding the same three columns for one consumer.
+ *
+ * One consequence worth knowing: `sanitize` above redacts any key matching
+ * /code/, so the payload field is `captionText` rather than anything shaped
+ * like a credential.
+ */
+export function logCaptionFeedback(
+  userId: string,
+  action: typeof ActivityAction.CAPTION_SELECTED | typeof ActivityAction.CAPTION_REGENERATED,
+  details: {
+    contextType: string;
+    brandId?: string | null;
+    postId?: string | null;
+    captionText: string;
+    variationIndex?: number;
+  },
+) {
+  return log({ userId, action, details });
+}
+
 /** Reads the feed back. Thin pass-through, kept here so callers import one module. */
 export function listForUser(userId: string, options?: ListActivityOptions) {
   return activityRepository.listByUser(userId, options);
@@ -230,5 +271,6 @@ export const activityService = {
   logPublish,
   logPublishFailed,
   logFailure,
+  logCaptionFeedback,
   listForUser,
 };

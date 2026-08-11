@@ -20,8 +20,21 @@ import { resolveBrandProfile } from '../ai/brand/brand-profile';
 import { generateCaption } from '../ai/generators/creative-intelligence.generator';
 import { AiProviderError, activeProvider } from '../ai/providers';
 import type { AiTextProvider, GenerateJsonOptions } from '../ai/providers';
-import { aiService, AiError, parseCaptionRequest } from '../services/ai.service';
+import {
+  aiService,
+  AiError,
+  parseCaptionRequest as parseCaptionRequestFor,
+} from '../services/ai.service';
 import type { CaptionRequest } from '../ai/types';
+
+/**
+ * The parser now takes the authenticated user id alongside the body, because
+ * that id selects whose writing history the generator may read and so must not
+ * be something a request body can name. This script is checking validation, not
+ * authentication, so it supplies a fixed one and carries on.
+ */
+const parseCaptionRequest = (body: unknown): CaptionRequest =>
+  parseCaptionRequestFor(body, { userId: 'verify-script' });
 
 /**
  * Builds a prompt the way the generator does — Brand Intelligence first.

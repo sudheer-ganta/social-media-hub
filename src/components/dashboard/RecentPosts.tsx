@@ -74,7 +74,7 @@ export function RecentPosts({ posts, loading }: RecentPostsProps) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs sm:text-sm font-medium">{post.title}</p>
+                <p className="truncate text-xs sm:text-sm font-medium">{post.title || "Untitled"}</p>
                 <p className="truncate text-[11px] sm:text-xs text-muted-foreground">
                   {truncate(post.caption, 40) || "No caption"} ·{" "}
                   {formatRelative(post.created_at)}

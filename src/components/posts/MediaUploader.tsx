@@ -286,7 +286,7 @@ export function MediaUploader({
         aria-orientation="horizontal"
         // Scrolls rather than wraps, and the negative margin lets tiles reach
         // the card's edge while their focus rings stay visible.
-        className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2"
+        className="-mx-1 flex gap-2 overflow-x-auto scrollbar-none px-1 pb-2"
       >
         <AnimatePresence initial={false}>
           {items.map((item, index) => (

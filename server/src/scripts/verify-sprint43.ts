@@ -357,6 +357,9 @@ async function main() {
   const provider = stubProvider(ANALYSIS_PAYLOAD);
   const analysis = await analyseCaption(
     {
+      // Marketing Intelligence is the brand rubric. Personal is scored on a
+      // different set of dimensions entirely — see analysis/weights.ts.
+      mode: 'brand',
       caption: CAPTION,
       hashtags: ['wedding', 'venue'],
       platforms: ['linkedin'],
@@ -423,6 +426,7 @@ async function main() {
   // A text-only post must drop the visual dimension entirely.
   const textOnly = await analyseCaption(
     {
+      mode: 'brand',
       caption: CAPTION,
       hashtags: [],
       platforms: [],
@@ -443,6 +447,7 @@ async function main() {
 
   const untagged = await analyseCaption(
     {
+      mode: 'brand',
       caption: 'Some rooms have heard a thousand promises. Yours is the one they keep.',
       hashtags: [],
       platforms: [],
@@ -463,6 +468,7 @@ async function main() {
   try {
     await analyseCaption(
       {
+        mode: 'brand',
         caption: CAPTION,
         hashtags: [],
         platforms: [],
@@ -492,6 +498,7 @@ async function main() {
     } else {
       const live = await analyseCaption(
         {
+          mode: 'brand',
           caption: CAPTION,
           hashtags: ['wedding'],
           platforms: ['linkedin'],

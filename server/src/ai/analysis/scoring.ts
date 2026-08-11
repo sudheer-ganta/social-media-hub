@@ -37,6 +37,12 @@ export const DIMENSION_LABELS: Record<ScoreDimension, string> = {
   cta: 'Call to action',
   readability: 'Readability',
   hashtags: 'Hashtags',
+  // Personal. Deliberately named in the member's terms rather than the
+  // analyser's — "Sounds like you" is a thing somebody can agree or disagree
+  // with, where "Voice match" is a metric being reported at them.
+  voiceMatch: 'Sounds like you',
+  humanness: 'Sounds human',
+  originality: 'Not a repeat',
 };
 
 export interface ScoreInput {

@@ -2,6 +2,7 @@ import { looksLikeCta } from './metrics';
 import type {
   BrandProfile,
   CaptionMetrics,
+  CaptionMode,
   ChecklistItem,
   ChecklistSeverity,
   DimensionScore,
@@ -69,6 +70,8 @@ export interface ChecklistInput {
   platforms: readonly PlatformFit[];
   scores: Partial<Record<ScoreDimension, DimensionScore>>;
   brand?: BrandProfile;
+  /** Personal keeps only the items that are true in both modes. */
+  mode?: CaptionMode;
 }
 
 export function buildChecklist({
@@ -79,10 +82,21 @@ export function buildChecklist({
   platforms,
   scores,
   brand,
+  mode = 'brand',
 }: ChecklistInput): PrePublishChecklist {
   const items: ChecklistItem[] = [];
+  const personal = mode === 'personal';
 
   // ── Blockers: things that make the post fail on arrival ──────────────────
+  //
+  // The only section that runs in full for both modes. A caption too long for
+  // Instagram fails on arrival whoever wrote it and whatever it was trying to
+  // do — that is arithmetic against a published limit, not a marketing opinion.
+  //
+  // Everything below this section is gated. A personal post has no CTA to be
+  // missing, no hashtag band to sit in, no hook to survive the fold and no
+  // readability target to hit, and an unticked box for each would tell somebody
+  // their perfectly good two-word caption is 40% ready to publish.
 
   const overLimit = platforms.flatMap((fit) =>
     fit.checks.filter((c) => c.id === 'length-limit' && c.status === 'fail').map(() => fit),
@@ -117,6 +131,20 @@ export function buildChecklist({
   }
 
   // ── Important: things that cost real reach ───────────────────────────────
+
+  if (personal) {
+    // One item, and it is the only pre-publish question a personal post has.
+    items.push(
+      item(
+        'image-attached',
+        'Has an image',
+        hasImage,
+        'polish',
+        'Posts with a picture travel further. Not required.',
+      ),
+    );
+    return { items, readiness: readinessOf(items) };
+  }
 
   const foldWarnings = platforms.filter((fit) =>
     fit.checks.some((c) => c.id === 'hook-before-fold' && c.status !== 'pass'),

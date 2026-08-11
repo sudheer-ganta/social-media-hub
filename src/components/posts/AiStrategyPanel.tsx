@@ -51,12 +51,12 @@ export function AiStrategyPanel({ studio, hasImage }: AiStrategyPanelProps) {
 
   return (
     <details className="group rounded-lg border bg-card text-card-foreground shadow-soft">
-      <summary className="flex cursor-pointer list-none items-center gap-3 p-6 [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           <Sparkles className="h-4 w-4 shrink-0 text-primary" />
           <div className="min-w-0">
             <p className="text-sm font-semibold leading-none">AI Strategy</p>
-            <p className="mt-1.5 text-sm text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               Optional. Set a goal, an audience and a voice, and the Generate
               button writes hooks, platform versions and hashtags instead of
               just a caption.
@@ -64,7 +64,7 @@ export function AiStrategyPanel({ studio, hasImage }: AiStrategyPanelProps) {
           </div>
         </summary>
 
-        <div className="space-y-6 border-t p-6">
+        <div className="space-y-5 border-t p-4">
           <MarketingGoalSelector value={studio.goal} onChange={studio.setGoal} />
 
           <FunnelStageSelector

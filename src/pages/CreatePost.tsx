@@ -104,6 +104,7 @@ export default function CreatePost() {
     <PageContainer
       title={title}
       description={description}
+      className="pb-0 sm:pb-0 lg:pb-0"
       actions={
         !editing ? (
           <Button

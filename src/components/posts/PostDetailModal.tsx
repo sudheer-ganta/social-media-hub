@@ -69,7 +69,7 @@ export function PostDetailModal({ post, open, onOpenChange }: PostDetailModalPro
               </Button>
             </div>
           </div>
-          <DialogTitle className="text-2xl font-bold tracking-tight">{post.title}</DialogTitle>
+          <DialogTitle className="text-2xl font-bold tracking-tight">{post.title || "Untitled"}</DialogTitle>
           <DialogDescription className="flex items-center gap-1.5 text-xs">
             <CalendarClock className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-muted-foreground">Scheduled / Published:</span>

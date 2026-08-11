@@ -12,6 +12,13 @@ interface PageContainerProps {
 /**
  * Standard page wrapper: consistent max width, padding and an
  * animated entrance shared by every route.
+ *
+ * The horizontal guard is `overflow-x-clip`, never `overflow-x-hidden`.
+ * `hidden` on one axis makes the other axis compute to `auto`, which turns
+ * every page into its own scroll container — and a scroll container is what
+ * `position: sticky` measures against, so the composer's action bar and its
+ * preview column silently stopped sticking to the viewport. `clip` blocks
+ * horizontal overflow exactly the same way without creating a scrollport.
  */
 export function PageContainer({
   title,
@@ -26,7 +33,7 @@ export function PageContainer({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-      className={cn("w-full min-w-0 overflow-x-hidden px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8", className)}
+      className={cn("w-full min-w-0 overflow-x-clip px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8", className)}
     >
       {(title || actions) && (
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">

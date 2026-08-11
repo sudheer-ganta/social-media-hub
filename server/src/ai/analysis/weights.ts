@@ -25,7 +25,7 @@ import type { ScoreDimension } from '../types';
  */
 
 /** Bumped whenever {@link DEFAULT_WEIGHTS} changes. Reported in `meta.weightsVersion`. */
-export const WEIGHTS_VERSION = '1.0.0';
+export const WEIGHTS_VERSION = '1.1.0';
 
 export type ScoringWeights = Record<ScoreDimension, number>;
 
@@ -51,7 +51,44 @@ export const DEFAULT_WEIGHTS: ScoringWeights = {
   cta: 0.13,
   readability: 0.1,
   hashtags: 0.09,
+
+  // ─── Personal ─────────────────────────────────────────────────────────────
+  //
+  // In one table with the brand weights rather than a second table, because
+  // `normaliseWeights` already rescales over whichever axes applied — the two
+  // sets never appear in the same analysis, so the totals not summing to 1
+  // across all ten is fine and always was.
+  //
+  // The ordering is the product opinion. Sounding like themselves comes first,
+  // because a funny caption in someone else's voice is a failure of the only
+  // thing Personal promises. Freshness is next and weighted heavily on purpose:
+  // a system that learns a voice and then replays its greatest hits is a
+  // template generator, and nothing else in this rubric would catch that.
+  voiceMatch: 0.35,
+  humanness: 0.3,
+  originality: 0.2,
 };
+
+/**
+ * The axes a personal caption is judged on.
+ *
+ * The absences are the design. `hook`, `cta` and `hashtags` are marketing
+ * requirements a personal post is not trying to meet — scoring them would mark
+ * down a caption for correctly having none of the three. `platformFit` is gone
+ * because the mechanical limits are already checked deterministically and the
+ * rest of it is about sounding native to a network, which is a brand concern.
+ * `readability` is gone because its whole premise — shorter sentences, plainer
+ * words, blank lines between thoughts — is a description of what a personal
+ * caption should not be talked into becoming.
+ *
+ * `visual` survives, conditionally, and means what it always meant.
+ */
+export const PERSONAL_DIMENSIONS: readonly ScoreDimension[] = [
+  'voiceMatch',
+  'humanness',
+  'originality',
+  'visual',
+];
 
 /**
  * Renormalises the weights over the dimensions that actually applied.

@@ -6,6 +6,7 @@ import type {
   AnalysisRequest,
   BrandProfile,
   CaptionMetrics,
+  CaptionMode,
   ImageAnalysis,
   PlatformFit,
   ScoreDimension,
@@ -65,6 +66,18 @@ const DIMENSION_BRIEF: Record<ScoreDimension, string> = {
     'How much effort does this take to read on a phone, once? Judge rhythm and clarity — the raw counts are given to you.',
   hashtags:
     'Do the tags describe what this post is actually about, and would the people they reach want this post? Judge relevance and specificity, not the count.',
+
+  // ─── Personal ─────────────────────────────────────────────────────────────
+  //
+  // Each of these states what must NOT count against the caption, because the
+  // instinct to mark down a two-word lowercase fragment is strong and would
+  // quietly turn this rubric back into the marketing one.
+  voiceMatch:
+    'Does this sound like the person whose account it is, given how they write? Judge it against their own habits, not against good writing. If their captions run four words and this one runs forty, that is the failure — however good the forty are.',
+  humanness:
+    'Would a real person type this without feeling like they were writing a caption? Score down anything that reads as AI performing a personality — manufactured slang, borrowed internet voice, stacked hype, motivational filler. Score UP a caption that is short, lowercase, unpunctuated, fragmentary, absurd, or has no call to action, no hook and no hashtags. Those are all correct here. A caption doing every one of them can score 10.',
+  originality:
+    'Is this a new thought, or one they have already had? Judge against their previous captions: the same joke with one word swapped, the same structure reused, the same reference again. A fresh observation in a familiar voice is exactly right; a familiar observation in a familiar voice is not.',
 };
 
 function section(heading: string, lines: Array<string | null | undefined | false>) {
@@ -153,12 +166,20 @@ function imageSection(analysis: ImageAnalysis | undefined, hasImage: boolean): s
  */
 export function improvableDimensions(
   dimensions: readonly ScoreDimension[],
+  mode: CaptionMode = 'brand',
 ): ScoreDimension[] {
+  // Personal improvements may only ever point at a personal axis. Adding
+  // `hashtags` here — which is right for a brand post carrying none, since
+  // "you have no tags" is the improvement — would hand a personal caption an
+  // enum value meaning "add hashtags", and a model given the option takes it.
+  if (mode === 'personal') return [...dimensions];
+
   return [...new Set<ScoreDimension>([...dimensions, 'hashtags'])];
 }
 
 export function buildAnalysisResponseSchema(
   dimensions: readonly ScoreDimension[],
+  mode: CaptionMode = 'brand',
 ): Record<string, unknown> {
   const scoreProperties = Object.fromEntries(
     dimensions.map((dimension) => [
@@ -218,7 +239,7 @@ export function buildAnalysisResponseSchema(
         items: {
           type: 'object',
           properties: {
-            dimension: { type: 'string', enum: improvableDimensions(dimensions) },
+            dimension: { type: 'string', enum: improvableDimensions(dimensions, mode) },
             issue: { type: 'string', description: 'What is wrong, in one line.' },
             suggestion: {
               type: 'string',
@@ -259,6 +280,15 @@ export interface BuildAnalysisPromptOptions {
   hashtagCount: number;
   /** The axes the model is asked to score. Built by the generator. */
   dimensions: ScoreDimension[];
+  /**
+   * How this member writes, rendered by `style/render.ts`. Personal only, and
+   * what `voiceMatch` is judged against — without it the judge falls back to
+   * its own idea of good writing, which is the failure mode this rubric exists
+   * to prevent.
+   */
+  styleSection?: string | null;
+  /** Their previous captions, for `originality` only. Personal only. */
+  history?: string[];
 }
 
 export function buildAnalysisPrompt({
@@ -268,31 +298,62 @@ export function buildAnalysisPrompt({
   platforms,
   hashtagCount,
   dimensions,
+  styleSection,
+  history = [],
 }: BuildAnalysisPromptOptions): BuiltPrompt {
+  const personal = request.mode === 'personal';
+
   const prompt = [
     section('## The caption under review', [
       '"""',
       request.caption,
       '"""',
-      request.hashtags.length > 0
-        ? `Hashtags published with it: ${request.hashtags.map((tag) => `#${tag}`).join(' ')}`
-        : 'No hashtag list is attached to this post.',
+      personal
+        ? null
+        : request.hashtags.length > 0
+          ? `Hashtags published with it: ${request.hashtags.map((tag) => `#${tag}`).join(' ')}`
+          : 'No hashtag list is attached to this post.',
     ]),
 
-    section('## Where it is going', [
-      request.platforms.length > 0
-        ? `- Networks: ${request.platforms.map(platformLabel).join(', ')}`
-        : '- No network chosen yet. Judge platform fit generically.',
-      `- Objective: ${request.goal.replace(/_/g, ' ')}`,
-      `- Funnel stage: ${request.funnelStage}`,
-      `- Written for: ${request.audience.replace(/_/g, ' and ')}`,
-      `- Language: ${request.language}`,
-    ]),
+    // The marketing brief. Personal has none of it — no objective, no funnel
+    // stage, no audience register — and telling the judge that a post about
+    // somebody's gym session has an objective of "brand awareness" is how a
+    // personal caption gets marked down for not pursuing one.
+    personal
+      ? section('## What this is', [
+          '- A personal post on somebody’s own account. There is no brand, no campaign and no objective behind it.',
+          `- Language: ${request.language}`,
+        ])
+      : section('## Where it is going', [
+          request.platforms.length > 0
+            ? `- Networks: ${request.platforms.map(platformLabel).join(', ')}`
+            : '- No network chosen yet. Judge platform fit generically.',
+          `- Objective: ${request.goal.replace(/_/g, ' ')}`,
+          `- Funnel stage: ${request.funnelStage}`,
+          `- Written for: ${request.audience.replace(/_/g, ' and ')}`,
+          `- Language: ${request.language}`,
+        ]),
 
-    renderBrandSection(brand, '## The brand behind it'),
+    personal ? null : renderBrandSection(brand, '## The brand behind it'),
     imageSection(request.imageAnalysis, request.hasImage),
-    metricsSection(metrics, hashtagCount),
-    platformSection(platforms),
+
+    // How they write, so `voiceMatch` is judged against them rather than
+    // against the judge's own idea of good writing.
+    personal ? styleSection : null,
+
+    personal && history.length > 0
+      ? [
+          '## What they have posted before',
+          'For `originality` only — is this a joke they have already made?',
+          ...history.slice(0, 8).map((caption) => `- ${caption.replace(/\s+/g, ' ')}`),
+        ].join('\n')
+      : null,
+
+    // Counted facts are useful to a brand judge, which is asked about hook
+    // length and reading ease. Handing them to a personal judge invites it to
+    // find fault with a two-word caption for being two words.
+    personal ? null : metricsSection(metrics, hashtagCount),
+    personal ? null : platformSection(platforms),
 
     section(
       '## Score these, 0–10',
@@ -301,10 +362,31 @@ export function buildAnalysisPrompt({
       ),
     ),
 
+    personal
+      ? [
+          '## What must not count against it',
+          'This is not marketing copy and must not be judged as if it were. None of the following is a flaw here, and marking any of them down is the single way to get this rubric wrong:',
+          '- being very short, including a single word',
+          '- lowercase, including the first word',
+          '- no full stop, or no punctuation at all',
+          '- a sentence fragment, or no verb',
+          '- no call to action, no question, no hook',
+          '- no hashtags and no emoji',
+          '- deliberate nonsense, absurdity, or a caption with no visible connection to the picture',
+          '- mixing languages mid-sentence',
+          'Every one of those is a normal thing a person does on their own account.',
+        ].join('\n')
+      : null,
+
     section('## Also return', [
       '1. Up to four `strengths` and four `weaknesses`, each naming something specific in this caption.',
       '2. An `engagement` forecast: how likely this post is to earn saves, shares, comments and clicks — as Low, Medium or High, judged against each other rather than against some absolute. A post can be High saves and Low comments; say why in one sentence.',
-      '3. Between one and five `improvements`, highest impact first. Each names the dimension it lifts, what is wrong, what to do instead, and roughly how many points on the 0–100 score it would be worth. Describe the change; do not write the replacement copy. Three additions may be supplied literally so the writer can apply them in one click: on a `hashtags` improvement, `suggestedHashtags` — specific tags naming what this post is actually about, no generic filler; on a `cta` improvement, `suggestedLine` — a single sentence appended to the end of the caption, giving this post\'s reader a real reason to reply; on a `hook` improvement, `suggestedLine` — a single opening line placed in front of the caption, which must read naturally as the new first line with the writer\'s existing opening directly beneath it. Leave either out rather than filling it with something that would fit any post. A post carrying no hashtags at all may take a `hashtags` improvement even though you were not asked to score that dimension.',
+      personal
+        ? '3. Between one and three `improvements`, highest impact first. Each names the dimension it lifts, what is wrong and what to do instead. Describe the change; never write the replacement caption. Do not suggest adding a hook, a call to action, hashtags, an emoji, punctuation or an explanation — none of those is an improvement to a personal post, and suggesting one is a worse answer than suggesting nothing. If the caption is genuinely fine, return one improvement saying so.'
+        : null,
+      personal
+        ? null
+        : '3. Between one and five `improvements`, highest impact first. Each names the dimension it lifts, what is wrong, what to do instead, and roughly how many points on the 0–100 score it would be worth. Describe the change; do not write the replacement copy. Three additions may be supplied literally so the writer can apply them in one click: on a `hashtags` improvement, `suggestedHashtags` — specific tags naming what this post is actually about, no generic filler; on a `cta` improvement, `suggestedLine` — a single sentence appended to the end of the caption, giving this post\'s reader a real reason to reply; on a `hook` improvement, `suggestedLine` — a single opening line placed in front of the caption, which must read naturally as the new first line with the writer\'s existing opening directly beneath it. Leave either out rather than filling it with something that would fit any post. A post carrying no hashtags at all may take a `hashtags` improvement even though you were not asked to score that dimension.',
     ]),
 
     'Return a single JSON object matching the provided schema. Nothing else.',
@@ -315,7 +397,7 @@ export function buildAnalysisPrompt({
   return {
     systemInstruction: ANALYSIS_SYSTEM_INSTRUCTION,
     prompt,
-    responseSchema: buildAnalysisResponseSchema(dimensions),
+    responseSchema: buildAnalysisResponseSchema(dimensions, request.mode),
     // Low on purpose. Judgement should be stable: the same caption analysed
     // twice must not swing between 62 and 81, or the score means nothing and
     // users learn to reroll until they like the number.
