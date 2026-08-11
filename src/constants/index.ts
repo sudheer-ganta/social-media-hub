@@ -89,6 +89,18 @@ export const WORKFLOW_META: Record<
     className: "bg-success/10 text-success border border-success/20",
     dotClassName: "bg-success",
   },
+  // Warning rather than success or destructive, and the word says which half
+  // is which: something is live, something needs fixing.
+  partially_published: {
+    label: "Partly published",
+    className: "bg-warning/10 text-warning border border-warning/20",
+    dotClassName: "bg-warning",
+  },
+  cancelled: {
+    label: "Cancelled",
+    className: "bg-muted text-muted-foreground border border-border",
+    dotClassName: "bg-muted-foreground",
+  },
   failed: {
     label: "Failed",
     className: "bg-destructive/10 text-destructive border border-destructive/20",

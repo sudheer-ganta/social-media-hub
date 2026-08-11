@@ -1,6 +1,15 @@
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, Monitor, Moon, PenLine, Settings, Sun } from "lucide-react";
+import {
+  CalendarClock,
+  LogOut,
+  Monitor,
+  Moon,
+  PenLine,
+  Plug,
+  Settings,
+  Sun,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/brand/Logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -28,6 +37,10 @@ import type { Theme } from "@/types";
 export const SECTIONS = [
   { to: "/", label: "Today" },
   { to: "/calendar", label: "Plan" },
+  // Distinct from Plan on purpose. The calendar answers "what am I publishing
+  // this week"; this answers "what is FlowPost about to do without me, and did
+  // anything fail" — which is a different question with different actions.
+  { to: "/scheduled", label: "Schedule" },
   { to: "/posts", label: "Library" },
   { to: "/analytics", label: "Insights" },
   { to: "/integrations", label: "Accounts" },
@@ -170,6 +183,24 @@ export function Masthead() {
                 </p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {/* The bottom bar holds four destinations and Compose, so on a
+                  phone this menu is the only way to Schedule and Accounts —
+                  the same reason Settings has always lived here. */}
+              <DropdownMenuItem
+                className="lg:hidden"
+                onClick={() => navigate("/scheduled")}
+              >
+                <CalendarClock />
+                Schedule
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="lg:hidden"
+                onClick={() => navigate("/integrations")}
+              >
+                <Plug />
+                Accounts
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="lg:hidden" />
               <DropdownMenuItem onClick={() => navigate("/settings")}>
                 <Settings />
                 Settings

@@ -32,6 +32,9 @@ export const ActivityAction = {
   POST_PUBLISH_STARTED: 'post.publish_started',
   POST_PUBLISH: 'post.publish',
   POST_PUBLISH_FAILED: 'post.publish_failed',
+  /** A member armed, or called off, a scheduled publish. */
+  POST_SCHEDULED: 'post.scheduled',
+  POST_SCHEDULE_CANCELLED: 'post.schedule_cancelled',
   FAILURE: 'failure',
 } as const;
 

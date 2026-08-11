@@ -10,6 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import Posts from "@/pages/Posts";
 import CreatePost from "@/pages/CreatePost";
 import Calendar from "@/pages/Calendar";
+import Scheduled from "@/pages/Scheduled";
 import Analytics from "@/pages/Analytics";
 import Integrations from "@/pages/Integrations";
 import Settings from "@/pages/Settings";
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="posts/new" element={<CreatePost />} />
             <Route path="posts/:id/edit" element={<CreatePost />} />
             <Route path="calendar" element={<Calendar />} />
+            <Route path="scheduled" element={<Scheduled />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="integrations" element={<Integrations />} />
             <Route path="settings" element={<Settings />} />

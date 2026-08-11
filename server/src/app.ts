@@ -87,4 +87,11 @@ import publishRoutes from './publish/routes/publish.routes';
 
 app.use('/api/posts', publishRoutes);
 
+// Scheduled publishing. Arms a saved post; the worker in
+// `scheduler/scheduler.worker.ts` fires it and calls the same publish service
+// the router above does. See scheduler/scheduled-posts.routes.ts.
+import scheduledPostsRoutes from './scheduler/scheduled-posts.routes';
+
+app.use('/api/scheduled-posts', scheduledPostsRoutes);
+
 export default app;

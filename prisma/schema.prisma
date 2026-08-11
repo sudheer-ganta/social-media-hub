@@ -44,6 +44,19 @@ model Post {
   status       PostStatus @default(DRAFT)
   publish_date DateTime   @default(dbgenerated("CURRENT_DATE")) @db.Date
   publish_time DateTime   @default(dbgenerated("'09:00:00'::time without time zone")) @db.Time(6)
+
+  /// The canonical UTC instant the scheduler fires on, or null for a post that
+  /// has never been scheduled. The *only* column the worker reads — publish_date
+  /// and publish_time above are wall-clock fields the browser writes and every
+  /// list, filter and calendar reads, and a browser in the wrong timezone must
+  /// never be able to move a publish.
+  scheduled_at DateTime? @db.Timestamptz(6)
+
+  /// The IANA zone the member scheduled in, e.g. `Asia/Kolkata`. Preserved so
+  /// editing a schedule reopens on the wall clock they chose rather than on a
+  /// UTC instant retranslated into whatever zone the browser is in today. DST is
+  /// resolved when `scheduled_at` is computed — on the server, never here.
+  timezone String?
   created_by   String     @default(dbgenerated("auth.uid()")) @db.Uuid
   created_at   DateTime   @default(now()) @db.Timestamptz(6)
   updated_at   DateTime   @default(now()) @db.Timestamptz(6)
@@ -271,11 +284,31 @@ model PostPlatform {
   errorMessage String?       @map("error_message")
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  /// How many times the scheduler has *claimed* this destination. Incremented
+  /// by the claim itself, not by the outcome, so a worker that dies mid-publish
+  /// still burns an attempt and cannot loop forever.
+  attempts Int @default(0)
+
+  /// When the last claim happened. The stale-claim reaper reads this: a row
+  /// still PUBLISHING long after its last attempt belongs to a process that no
+  /// longer exists.
+  lastAttemptAt DateTime? @map("last_attempt_at") @db.Timestamptz(6)
+
+  /// When this destination becomes due. Null means "not scheduled" — a manual
+  /// publish never sets it, and the worker's query cannot see the row at all.
+  /// A first run holds the post's `scheduled_at`; a retry holds the backoff.
+  nextAttemptAt DateTime? @map("next_attempt_at") @db.Timestamptz(6)
+
+  /// When this destination actually went out. `posts.published_at` cannot say
+  /// "Instagram at 09:30, LinkedIn at 09:31 after one retry".
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([postId, provider])
   @@index([postId])
   @@index([status])
+  @@index([nextAttemptAt])
   @@map("post_platforms")
 }
 
@@ -284,6 +317,10 @@ enum PublishStatus {
   PUBLISHING
   PUBLISHED
   FAILED
+  /// Set by a cancel on a destination that had not started. Terminal: the
+  /// worker's due query matches PENDING only, so a cancelled row can never be
+  /// claimed.
+  CANCELLED
 
   @@map("publish_status")
 }
@@ -299,6 +336,13 @@ enum PostStatus {
   PUBLISHING @map("publishing")
   PUBLISHED  @map("published")
   FAILED     @map("failed")
+  /// Some destinations went out and some did not. The honest answer for a post
+  /// that reached Instagram and not X — FAILED would hide a live post, and
+  /// PUBLISHED would hide a failure the member has to act on.
+  PARTIALLY_PUBLISHED @map("partially_published")
+  /// A schedule the member called off before it fired. Terminal: the worker
+  /// never executes it and it cannot be rescheduled without a new schedule.
+  CANCELLED  @map("cancelled")
 
   @@map("post_status")
 }

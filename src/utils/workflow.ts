@@ -23,6 +23,14 @@ export function getWorkflowStatus(post: Post): WorkflowStatus {
       return "publishing";
     case "scheduled":
       return "scheduled";
+    // Both written only by the scheduler, and both kept distinct rather than
+    // collapsed: "partially published" is the one state where a member has
+    // something live *and* something to fix, and flattening it into either
+    // neighbour hides half of that.
+    case "partially_published":
+      return "partially_published";
+    case "cancelled":
+      return "cancelled";
     case "draft":
       if (post.ai_status === "generating") return "ai_generating";
       if (post.approved) return "approved";

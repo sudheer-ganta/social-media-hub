@@ -49,6 +49,15 @@ export type PostStatus =
   | "queued"
   | "publishing"
   | "published"
+  /**
+   * Some networks took it and some didn't. Written only by the scheduler,
+   * which is the only thing that publishes a post to several networks in one
+   * go — "Instagram yes, X no" is a real outcome and neither `published` nor
+   * `failed` tells the truth about it.
+   */
+  | "partially_published"
+  /** A schedule the member called off before it fired. Terminal. */
+  | "cancelled"
   | "failed";
 
 export type AiStatus = "pending" | "generating" | "ready" | "failed";
@@ -62,6 +71,8 @@ export type WorkflowStatus =
   | "scheduled"
   | "publishing"
   | "published"
+  | "partially_published"
+  | "cancelled"
   | "failed";
 
 export type Platform =
@@ -101,7 +112,13 @@ export interface PlatformResult {
  * Mirrors the `publish_status` enum in the database — one row per network per
  * post, written only by the backend publisher.
  */
-export type PublishStatus = "PENDING" | "PUBLISHING" | "PUBLISHED" | "FAILED";
+export type PublishStatus =
+  | "PENDING"
+  | "PUBLISHING"
+  | "PUBLISHED"
+  | "FAILED"
+  /** Removed from a schedule, or cancelled with it, before it was attempted. */
+  | "CANCELLED";
 
 /** One network's publish attempt, as `GET /api/posts/:id/publish` returns it. */
 export interface PostPlatformState {
@@ -138,6 +155,56 @@ export interface PublishResult {
   publishedAt: string;
 }
 
+/**
+ * One network on a scheduled post, as `/api/scheduled-posts` returns it.
+ *
+ * Richer than {@link PostPlatformState} because a scheduled destination has a
+ * *future* as well as a past: how many tries it has left and when the next one
+ * happens are the two things a member watching a retry actually wants to know.
+ */
+export interface ScheduledDestination {
+  provider: string;
+  /** Resolved from the backend catalogue, so the UI never maps ids to names. */
+  providerName: string;
+  status: PublishStatus;
+  publishedId: string | null;
+  url: string | null;
+  /** Already written for a member; safe to render as-is. */
+  errorMessage: string | null;
+  attempts: number;
+  /** Automatic tries left. Zero means only a manual retry remains. */
+  attemptsRemaining: number;
+  lastAttemptAt: string | null;
+  nextAttemptAt: string | null;
+  publishedAt: string | null;
+}
+
+/** A scheduled post and where it stands on each network it targets. */
+export interface ScheduledPost {
+  id: string;
+  title: string;
+  caption: string;
+  imageUrl: string;
+  mediaCount: number;
+  status: PostStatus;
+  /** The canonical UTC instant the worker fires on. */
+  scheduledAt: string | null;
+  /** The IANA zone the member picked — `Asia/Kolkata`. */
+  timezone: string | null;
+  /**
+   * The wall clock in that zone, `YYYY-MM-DDTHH:mm`. Sent by the server rather
+   * than derived here: it is the time the member actually chose, and
+   * re-deriving it from the instant in the browser's *current* zone is how an
+   * edit silently moves a schedule.
+   */
+  scheduledLocal: string | null;
+  contextType: PostContext;
+  brandId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  destinations: ScheduledDestination[];
+}
+
 export interface Post {
   id: string;
   title: string;
@@ -147,6 +214,15 @@ export interface Post {
   status: PostStatus;
   publish_date: string;
   publish_time: string;
+  /**
+   * The canonical UTC instant a scheduled post fires on, or null when it has
+   * never been scheduled. Written by the backend from `publish_date` +
+   * `publish_time` + a timezone; the worker reads *only* this, so a browser in
+   * the wrong zone can never move a publish.
+   */
+  scheduled_at: string | null;
+  /** The IANA zone the schedule was set in. Null on unscheduled posts. */
+  timezone: string | null;
   /** Publishing context. brand_id is set exactly when context_type is 'brand'. */
   context_type: PostContext;
   brand_id: string | null;

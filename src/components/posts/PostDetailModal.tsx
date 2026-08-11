@@ -22,7 +22,7 @@ import { PlatformPreview } from "@/components/posts/PlatformPreview";
 import { formatDisplayDate, formatDisplayTime } from "@/utils/date";
 import { PLATFORM_MAP } from "@/constants";
 import { toast } from "sonner";
-import type { Post, Platform } from "@/types";
+import type { Post } from "@/types";
 
 interface PostDetailModalProps {
   post: Post | null;
@@ -31,14 +31,9 @@ interface PostDetailModalProps {
 }
 
 export function PostDetailModal({ post, open, onOpenChange }: PostDetailModalProps) {
-  const [activeTab, setActiveTab] = useState<Platform>("linkedin");
   const [copied, setCopied] = useState(false);
 
   if (!post) return null;
-
-  const currentPlatform = post.platforms.includes(activeTab)
-    ? activeTab
-    : post.platforms[0] || "linkedin";
 
   const handleCopyCaption = async () => {
     try {

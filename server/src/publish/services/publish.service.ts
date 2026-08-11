@@ -71,10 +71,31 @@ export interface PublishResult {
  * side, so a post never carries a LinkedIn-shaped error for something LinkedIn
  * never saw.
  */
+export interface PublishOptions {
+  /**
+   * The caller already owns this attempt.
+   *
+   * Set only by the scheduler, which claims the destination itself — it has to,
+   * because its claim is also where the attempt counter and the backoff clock
+   * are written, and those cannot be done after the fact by a process that may
+   * not survive the publish. Skipping the claim here rather than claiming twice
+   * is what keeps *one* row in PUBLISHING per (post, network): the second claim
+   * would refuse, and this function would report a race against itself.
+   *
+   * Everything else below is unchanged and unconditional. The scheduler runs
+   * the same ownership check, the same connection resolution, the same token
+   * refresh, the same media pipeline and the same provider call as a member
+   * pressing Publish — there is no second publishing implementation and this
+   * flag is deliberately the only thing it may vary.
+   */
+  preClaimed?: boolean;
+}
+
 export async function publishPost(
   userId: string,
   postId: string,
   providerId: string,
+  options: PublishOptions = {},
 ): Promise<PublishResult> {
   if (!isKnownProvider(providerId)) {
     throw new PublishError(`Unknown network: ${providerId}`, 404, true);
@@ -103,7 +124,9 @@ export async function publishPost(
 
   // 4. Claimed *before* the connection is loaded. Everything after this point
   // has to either publish or clean up, which is why it is the first write.
-  const claim = await postRepository.claimPlatformPublish(postId, providerId);
+  const claim = options.preClaimed
+    ? ({ claimed: true } as const)
+    : await postRepository.claimPlatformPublish(postId, providerId);
   if (!claim.claimed) {
     throw new PublishError(
       claim.reason === 'already_published'

@@ -64,6 +64,14 @@ const PRESENTATION = {
     tone: "text-muted-foreground",
     badge: "bg-muted text-muted-foreground border-border",
   },
+  // Removed from a schedule, or cancelled with it. Reads as quietly as a
+  // draft, because that is what it is: nothing was ever sent.
+  CANCELLED: {
+    label: "Cancelled",
+    icon: Send,
+    tone: "text-muted-foreground",
+    badge: "bg-muted text-muted-foreground border-border",
+  },
 } as const;
 
 export function PublishStatus({

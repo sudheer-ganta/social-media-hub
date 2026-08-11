@@ -46,7 +46,8 @@ import { useAuth } from "@/app/AuthProvider";
 import { useMarketingStudio } from "@/features/marketing-studio/useMarketingStudio";
 import { PLATFORM_MAP } from "@/constants";
 import { usePublishPostToProvider, usePublishState } from "@/hooks/usePublish";
-import { postsService } from "@/services";
+import { useSchedulePost } from "@/hooks/useScheduledPosts";
+import { postsService, ScheduleApiError } from "@/services";
 import { fromStudioOutput } from "@/ai/caption";
 import { currentTime, today } from "@/utils/date";
 import { withHashtags } from "@/utils/hashtags";
@@ -59,11 +60,10 @@ import {
 import { MediaFormatPanel } from "./MediaFormatPanel";
 import { PlatformPreview } from "./PlatformPreview";
 import type { AudienceRegister } from "@/ai/caption";
-import {
-  postSchema,
-  validateFutureSchedule,
-  type PostFormValues,
-} from "@/validators";
+// `validateFutureSchedule` is deliberately no longer used here: whether a time
+// is in the future depends on the timezone the member picked, not the
+// browser's, and the server is the only place that knows both.
+import { postSchema, type PostFormValues } from "@/validators";
 import type { AccountContext } from "@/constants/integrations";
 import type {
   Brand,
@@ -115,6 +115,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const studio = useMarketingStudio();
   const generateStrategy = useGenerateWithSettings();
   const publish = usePublishPostToProvider();
+  const schedule = useSchedulePost();
   const { data: publishState } = usePublishState(post?.id);
   const { user } = useAuth();
   const { settings } = useSettings();
@@ -185,6 +186,8 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     defaultValues,
   });
 
+  const [isSaved, setIsSaved] = useState(false);
+
   const title = watch("title");
   const caption = watch("caption");
   const platforms = watch("platforms");
@@ -192,14 +195,14 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
 
   // Save draft state to sessionStorage whenever key form inputs change
   useEffect(() => {
-    if (post) return; // Editing existing database post; no need for temp draft
+    if (post || isSaved) return; // Editing existing database post; no need for temp draft
     try {
       const values = getValues();
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify(values));
     } catch (e) {
       // Ignore quota errors
     }
-  }, [title, caption, platforms, music, post, DRAFT_KEY, getValues]);
+  }, [title, caption, platforms, music, post, isSaved, DRAFT_KEY, getValues]);
   const imageUrl = watch("image_url");
 
   /**
@@ -469,11 +472,25 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     });
   };
 
-  const schedule = {
+  const scheduleValue = {
     publish_date: watch("publish_date"),
     publish_time: watch("publish_time"),
     timezone: watch("timezone"),
   };
+
+  /**
+   * "Aug 20, 9:30 AM" — the moment the button is about to commit to.
+   *
+   * On the button itself rather than only in the picker: the primary action
+   * states the outcome, so nobody has to scroll back up to check what they
+   * chose before pressing it.
+   */
+  const scheduleLabel = (() => {
+    const moment = dayjs(
+      `${scheduleValue.publish_date}T${scheduleValue.publish_time || "00:00"}`,
+    );
+    return moment.isValid() ? moment.format("MMM D, h:mm A") : "later";
+  })();
 
   // The first selected platform with a known slot drives the suggestion chip.
   const selectedPlatforms = watch("platforms");
@@ -515,7 +532,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const setMedia = (next: PostMediaItem[]) => {
     setMediaState(next);
     setMediaDirty(true);
-    if (!post) {
+    if (!post && !isSaved) {
       try {
         sessionStorage.setItem(MEDIA_DRAFT_KEY, JSON.stringify(next));
       } catch (e) {
@@ -585,6 +602,19 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     // The values now on screen *are* what is stored, so nothing is unsaved.
     reset(values, { keepValues: true });
     setMediaDirty(false);
+    setIsSaved(true);
+
+    // Clear temporary drafts from sessionStorage since the post is now saved to the database
+    if (!post) {
+      try {
+        sessionStorage.removeItem(DRAFT_KEY);
+        sessionStorage.removeItem(MEDIA_DRAFT_KEY);
+        sessionStorage.removeItem(AI_DRAFT_KEY);
+        ai.reset();
+      } catch (e) {
+        console.error("Failed to clear session drafts", e);
+      }
+    }
 
     // A generation from this session belongs to the row now that one exists.
     // Storing it keeps the AI panels populated on reload and preserves which
@@ -605,15 +635,6 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
 
   const submitWithStatus = (status: PostStatus) =>
     handleSubmit(async (values) => {
-      if (status === "scheduled") {
-        const scheduleError = validateFutureSchedule(values);
-        if (scheduleError) {
-          setError("publish_date", { message: scheduleError });
-          toast.error(scheduleError);
-          return;
-        }
-      }
-
       // Same reasoning as handlePublish: the save mutations toast their own
       // failures, so this only has to stop — not navigate away from a form
       // whose contents were never stored.
@@ -623,13 +644,80 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         return;
       }
 
-      const messages: Partial<Record<PostStatus, string>> = {
-        draft: "Draft saved",
-        scheduled: "Post scheduled 🎉",
-      };
-      toast.success(messages[status] ?? "Post saved");
-      navigate(status === "scheduled" ? "/calendar" : "/posts");
+      toast.success(status === "draft" ? "Draft saved" : "Post saved");
+      navigate("/posts");
     });
+
+  /**
+   * Hands the post to the scheduler.
+   *
+   * Saved as a **draft**, never as `scheduled`. That column is the scheduler's
+   * to write now, and writing it here is what the old flow did — it produced a
+   * post that said "Scheduled" and had nothing armed behind it, exactly as the
+   * pre-Sprint-4 Publish button produced posts that said "Published" and had
+   * never left the app. `POST /api/scheduled-posts` is what makes it true, and
+   * the row moves to `scheduled` on the strength of that.
+   *
+   * The date and the timezone are sent as the member typed them — a wall clock
+   * and the zone it is in — and the backend resolves the pair into the instant
+   * it fires on. Converting here would put DST arithmetic in the browser, in
+   * whatever zone the laptop happens to be set to, which is the one place it
+   * must not live.
+   *
+   * "Is this in the future?" is deliberately *not* checked here either. The
+   * answer depends on the zone that was picked, not the browser's, and the
+   * server already answers it authoritatively as SCHEDULE_TIME_IN_PAST — which
+   * lands on the date field below.
+   */
+  const handleSchedule = handleSubmit(async (values) => {
+    const targets = values.platforms.filter((p) => publishableProviders.has(p));
+
+    if (targets.length === 0) {
+      toast.error(
+        publishableProviders.size > 0
+          ? `Turn on ${publishableNames} under Platforms to schedule.`
+          : "Connect an account before scheduling a post.",
+      );
+      return;
+    }
+
+    try {
+      const saved = await persist(values, "draft");
+
+      await schedule.mutateAsync({
+        postId: saved.id,
+        scheduledAt: `${values.publish_date}T${values.publish_time}`,
+        timezone: values.timezone,
+        providers: targets,
+      });
+
+      toast.success("Scheduled", {
+        description: `${scheduleLabel} · ${values.timezone}`,
+      });
+      navigate("/scheduled");
+    } catch (cause) {
+      if (!(cause instanceof ScheduleApiError)) {
+        // The *save* failed and has already toasted. Nothing was scheduled.
+        return;
+      }
+
+      // The code, not the prose. A reworded message must not silently stop
+      // putting the error where the member has to fix it.
+      const field: Partial<Record<string, "publish_date" | "platforms">> = {
+        SCHEDULE_TIME_IN_PAST: "publish_date",
+        SCHEDULE_TIME_INVALID: "publish_date",
+        TIMEZONE_INVALID: "publish_date",
+        NO_DESTINATIONS: "platforms",
+        ACCOUNT_NOT_CONNECTED: "platforms",
+        PROVIDER_NOT_SUPPORTED: "platforms",
+      };
+
+      const target = field[cause.code];
+      if (target) setError(target, { message: cause.message });
+
+      toast.error("Couldn't schedule", { description: cause.message });
+    }
+  });
 
   /**
    * The image-backed half of {@link handleGenerate} — the old AI Studio run.
@@ -805,6 +893,19 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     }
   });
 
+  const handleDiscard = () => {
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+      sessionStorage.removeItem(MEDIA_DRAFT_KEY);
+      sessionStorage.removeItem(AI_DRAFT_KEY);
+      ai.reset();
+    } catch (e) {
+      console.error("Failed to discard draft", e);
+    }
+    toast.success("Draft discarded");
+    navigate("/posts");
+  };
+
   // Personal, published: the composer has done its job. Everything the creator
   // wants now — where it landed, what it looks like, how it performs — is in
   // the summary, and "Edit this post" comes back here.
@@ -842,177 +943,177 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   }
 
   return (
-    <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
       {/* Composer left, preview right. The preview column is fixed-width and
           sticky on desktop down the entire form length. */}
-      <div className="grid gap-6 items-start xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0 space-y-6">
+      <div className="grid gap-4 items-start xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] pb-24 lg:pb-28">
+        <div className="min-w-0 space-y-4">
           <fieldset disabled={isPublished} className="contents">
+            {/* Unified Post Content Card */}
             <Card>
-              <CardHeader>
-                <CardTitle>Media</CardTitle>
-                <CardDescription>
-                  Add images to your post — drag the thumbnails to set their order.
+              <CardHeader className="p-4 pb-3">
+                <CardTitle className="text-base font-semibold">Post Content</CardTitle>
+                <CardDescription className="text-xs">
+                  Create your post content by adding a title, caption, media, and optional music.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-5">
-                <MediaUploader
-                  items={media}
-                  onChange={setMedia}
-                  selected={selectedMedia}
-                  onSelect={setSelectedMedia}
-                  maxItems={maxMedia}
-                  disabled={isPublished}
-                />
-                <FieldError message={errors.image_url?.message} />
+              <CardContent className="space-y-4 p-4 pt-0">
+                {/* Title */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="post-title">Title</Label>
+                  <Input
+                    id="post-title"
+                    placeholder="Q3 product launch announcement"
+                    {...register("title")}
+                  />
+                  <FieldError message={errors.title?.message} />
+                </div>
 
-                {media.length > 0 && !isPublished && (
-                  <MediaFormatPanel
+                {/* Caption */}
+                <div className="space-y-1.5">
+                  <Label>Caption</Label>
+                  <Controller
+                    control={control}
+                    name="caption"
+                    render={({ field }) => (
+                      <CaptionEditor value={field.value} onChange={field.onChange} />
+                    )}
+                  />
+                  <FieldError message={errors.caption?.message} />
+                </div>
+
+                {/* Media Section */}
+                <div className="space-y-2 border-t pt-4">
+                  <Label className="text-sm font-semibold">Media</Label>
+                  <MediaUploader
                     items={media}
                     onChange={setMedia}
                     selected={selectedMedia}
                     onSelect={setSelectedMedia}
+                    maxItems={maxMedia}
+                    disabled={isPublished}
                   />
-                )}
-              </CardContent>
-            </Card>
+                  <FieldError message={errors.image_url?.message} />
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Content</CardTitle>
-                <CardDescription>
-                  Title for your workspace, caption for your audience.
-                </CardDescription>
-              </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="post-title">Title</Label>
-                <Input
-                  id="post-title"
-                  placeholder="Q3 product launch announcement"
-                  {...register("title")}
-                />
-                <FieldError message={errors.title?.message} />
-              </div>
-              <div className="space-y-2">
-                <Label>Caption</Label>
-                <Controller
-                  control={control}
-                  name="caption"
-                  render={({ field }) => (
-                    <CaptionEditor value={field.value} onChange={field.onChange} />
-                  )}
-                />
-                <FieldError message={errors.caption?.message} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="post-music">Music / Song</Label>
-                <Input
-                  id="post-music"
-                  placeholder="Add song / music (optional)"
-                  {...register("music")}
-                />
-                <FieldError message={errors.music?.message} />
-              </div>
-              {isBrand && (
-                <details className="rounded-lg border p-3">
-                  <summary className="cursor-pointer text-sm font-medium">
-                    Campaign options
-                  </summary>
-                  <div className="mt-3 space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="post-cta">Call to action</Label>
-                      <Input
-                        id="post-cta"
-                        placeholder={`Try ${contextLabel} today`}
-                        {...register("cta")}
-                      />
-                      <FieldError message={errors.cta?.message} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="post-link">Link</Label>
-                      <Input
-                        id="post-link"
-                        placeholder="https://…"
-                        {...register("link_url")}
-                      />
-                      <FieldError message={errors.link_url?.message} />
-                    </div>
-                  </div>
-                </details>
-              )}
-            </CardContent>
-          </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Platforms</CardTitle>
-                <CardDescription>
-                  {isBrand
-                    ? `Accounts connected to ${contextLabel}.`
-                    : "Your personal connected accounts."}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Controller
-                  control={control}
-                  name="platforms"
-                  render={({ field }) => (
-                    <PlatformSelector
-                      value={field.value}
-                      onChange={field.onChange}
-                      integrations={integrations}
-                      contextLabel={contextLabel}
-                      disabled={isPublished}
+                  {media.length > 0 && !isPublished && (
+                    <MediaFormatPanel
+                      items={media}
+                      onChange={setMedia}
+                      selected={selectedMedia}
+                      onSelect={setSelectedMedia}
                     />
                   )}
-                />
-                <FieldError message={errors.platforms?.message} />
+                </div>
+
+                {/* Music & Campaign options */}
+                <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="post-music">Music / Song</Label>
+                    <Input
+                      id="post-music"
+                      placeholder="Add song / music (optional)"
+                      {...register("music")}
+                    />
+                    <FieldError message={errors.music?.message} />
+                  </div>
+
+                  {isBrand && (
+                    <details className="rounded-lg border p-3 self-start">
+                      <summary className="cursor-pointer text-sm font-medium">
+                        Campaign options
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="post-cta">Call to action</Label>
+                          <Input
+                            id="post-cta"
+                            placeholder={`Try ${contextLabel} today`}
+                            {...register("cta")}
+                          />
+                          <FieldError message={errors.cta?.message} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="post-link">Link</Label>
+                          <Input
+                            id="post-link"
+                            placeholder="https://…"
+                            {...register("link_url")}
+                          />
+                          <FieldError message={errors.link_url?.message} />
+                        </div>
+                      </div>
+                    </details>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
+            {/* Unified Publish Settings Card */}
             <Card>
-              <CardHeader>
-                <CardTitle>Schedule</CardTitle>
-                <CardDescription>
-                  Pick the moment your audience is most active.
+              <CardHeader className="p-4 pb-3">
+                <CardTitle className="text-base font-semibold">Publish Settings</CardTitle>
+                <CardDescription className="text-xs">
+                  Choose which platforms to publish to and when they should go live.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {suggestion && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Suggested:{" "}
-                      <span className="font-semibold text-foreground">
-                        {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
-                      </span>{" "}
-                      for {suggestion.name} — general recommendation, not yet based
-                      on your analytics.
-                    </p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setValue("publish_time", suggestion.time, {
-                          shouldValidate: true,
-                        })
-                      }
-                    >
-                      Use
-                    </Button>
-                  </div>
-                )}
-                <SchedulePicker
-                  value={schedule}
-                  onChange={(next) => {
-                    setValue("publish_date", next.publish_date, { shouldValidate: true });
-                    setValue("publish_time", next.publish_time, { shouldValidate: true });
-                    setValue("timezone", next.timezone, { shouldValidate: true });
-                  }}
-                />
-                <FieldError message={errors.publish_date?.message} />
-                <FieldError message={errors.publish_time?.message} />
+              <CardContent className="space-y-4 p-4 pt-0">
+                {/* Platforms */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Publish Platforms</Label>
+                  <Controller
+                    control={control}
+                    name="platforms"
+                    render={({ field }) => (
+                      <PlatformSelector
+                        value={field.value}
+                        onChange={field.onChange}
+                        integrations={integrations}
+                        contextLabel={contextLabel}
+                        disabled={isPublished}
+                      />
+                    )}
+                  />
+                  <FieldError message={errors.platforms?.message} />
+                </div>
+
+                {/* Schedule */}
+                <div className="space-y-2 border-t pt-4">
+                  <Label className="text-sm font-semibold">Schedule Time</Label>
+                  {suggestion && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2 px-3 mb-2 bg-muted/20">
+                      <p className="text-xs text-muted-foreground">
+                        Suggested:{" "}
+                        <span className="font-semibold text-foreground">
+                          {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
+                        </span>{" "}
+                        for {suggestion.name}
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2.5"
+                        onClick={() =>
+                          setValue("publish_time", suggestion.time, {
+                            shouldValidate: true,
+                          })
+                        }
+                      >
+                        Use
+                      </Button>
+                    </div>
+                  )}
+                  <SchedulePicker
+                    value={scheduleValue}
+                    onChange={(next) => {
+                      setValue("publish_date", next.publish_date, { shouldValidate: true });
+                      setValue("publish_time", next.publish_time, { shouldValidate: true });
+                      setValue("timezone", next.timezone, { shouldValidate: true });
+                    }}
+                  />
+                  <FieldError message={errors.publish_date?.message} />
+                  <FieldError message={errors.publish_time?.message} />
+                </div>
               </CardContent>
             </Card>
           </fieldset>
@@ -1088,8 +1189,8 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         </div>
 
         <div className="min-w-0 xl:sticky xl:top-6 self-start">
-          <Card>
-            <CardContent className="pt-6">
+          <Card className="overflow-hidden">
+            <CardContent className="p-4">
               <PlatformPreview
                 platforms={selectedPlatforms}
                 media={media}
@@ -1117,7 +1218,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         </div>
       </div>
 
-      <div className="sticky bottom-4 z-20">
+      <div className="sticky bottom-20 lg:bottom-4 z-20">
         <div className="glass flex flex-wrap items-center justify-between sm:justify-end gap-2 rounded-lg border p-3 shadow-elevated">
           <p className="w-full sm:w-auto sm:mr-auto flex items-center gap-1.5 text-xs text-muted-foreground pb-1 sm:pb-0">
             {isPublished ? (
@@ -1163,6 +1264,15 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
               <>
                 <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={post ? () => navigate("/posts") : handleDiscard}
+                  className="flex-1 sm:flex-initial text-muted-foreground hover:text-foreground"
+                >
+                  {post ? "Cancel" : "Discard"}
+                </Button>
+                <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   loading={isSubmitting}
@@ -1187,16 +1297,21 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
                     {hasGenerated ? "Regenerate" : "Generate with AI"}
                   </Button>
                 )}
+                {/* Both are kept. Scheduling and publishing now are different
+                    intentions, not two spellings of one — and the label says
+                    which moment it is committing to. */}
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
-                  loading={isSubmitting}
-                  onClick={submitWithStatus("scheduled")}
+                  loading={isSubmitting || schedule.isPending}
+                  onClick={handleSchedule}
                   className="flex-1 sm:flex-initial"
                 >
                   <CalendarClock className="h-4 w-4" />
-                  Schedule
+                  {schedule.isPending
+                    ? "Scheduling…"
+                    : `Schedule ${scheduleLabel}`}
                 </Button>
                 <Button
                   type="button"
@@ -1206,7 +1321,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
                   className="shadow-glow flex-1 sm:flex-initial"
                 >
                   <Send className="h-4 w-4" />
-                  {publish.isPending ? "Publishing…" : "Publish"}
+                  {publish.isPending ? "Publishing…" : "Publish now"}
                 </Button>
               </>
             )}

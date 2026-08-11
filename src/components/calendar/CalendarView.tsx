@@ -53,6 +53,18 @@ const STATUS_PILL: Record<
     text: "text-primary",
     dot: "bg-primary",
   },
+  // Something is live and something is not. Warning rather than success or
+  // destructive — the calendar cell has room for the colour, not the sentence.
+  partially_published: {
+    bg: "bg-warning/15",
+    text: "text-warning",
+    dot: "bg-warning",
+  },
+  cancelled: {
+    bg: "bg-muted",
+    text: "text-muted-foreground",
+    dot: "bg-muted-foreground/60",
+  },
   publishing: {
     bg: "bg-primary/15",
     text: "text-primary",

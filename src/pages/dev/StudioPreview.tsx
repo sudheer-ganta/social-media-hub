@@ -31,6 +31,8 @@ const MOCK_POST: Post = {
   status: "draft",
   publish_date: "2026-08-06",
   publish_time: "09:00",
+  scheduled_at: null,
+  timezone: null,
   context_type: "personal",
   brand_id: null,
   music: null,
