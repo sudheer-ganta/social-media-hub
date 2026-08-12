@@ -67,6 +67,11 @@ export interface UseAiCaption {
    * only wants to fill a textarea can ignore the return.
    */
   generate: (draft: UseAiCaptionDraft) => Promise<CaptionResult | null>;
+  /**
+   * Applies an externally produced generation result (e.g. from the strategy pipeline)
+   * into local React state and sessionStorage.
+   */
+  applyResult: (nextResult: CaptionResult | null) => void;
   /** Forgets the current result, e.g. after the user saves the post. */
   reset: () => void;
 }
@@ -163,10 +168,15 @@ export function useAiCaption(
     [],
   );
 
+  const applyResult = useCallback((nextResult: CaptionResult | null) => {
+    setResult(nextResult);
+    setError(null);
+  }, []);
+
   const reset = useCallback(() => {
     setResult(null);
     setError(null);
   }, []);
 
-  return { result, isGenerating, error, generate, reset };
+  return { result, isGenerating, error, generate, applyResult, reset };
 }

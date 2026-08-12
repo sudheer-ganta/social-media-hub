@@ -518,6 +518,33 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     };
   };
 
+  const applyGeneratedCaption = (
+    result: CaptionResult,
+    selectedPlatforms?: string[],
+    existingCaption?: string,
+  ) => {
+    const firstPlatform = selectedPlatforms?.[0];
+    const platformSpecificCaption =
+      firstPlatform && result.platformCaptions?.[firstPlatform];
+    const generatedCaption =
+      platformSpecificCaption || result.caption || result.variations?.[0]?.caption || "";
+
+    console.info("[ai] generated", {
+      captionLength: generatedCaption.length,
+      hookCount: result.variations?.length ?? 0,
+      hashtagCount: result.hashtags?.length ?? 0,
+      platformVersionCount: Object.keys(result.platformCaptions ?? {}).length,
+    });
+
+    if (generatedCaption && !existingCaption?.trim()) {
+      console.info("[ai] applying generated caption", {
+        length: generatedCaption.length,
+        preview: generatedCaption.slice(0, 80),
+      });
+      setValue("caption", generatedCaption, { shouldValidate: true });
+    }
+  };
+
   const runCaptionOnly = async () => {
     const values = getValues();
 
@@ -572,8 +599,8 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     // to overwrite there is no decision to make. A caption the user has
     // already written or chosen is left alone; the panel's "Use as caption"
     // buttons are how it gets replaced.
-    if (generated && !values.caption.trim()) {
-      setValue("caption", generated.caption, { shouldValidate: true });
+    if (generated) {
+      applyGeneratedCaption(generated, values.platforms, values.caption);
     }
 
     // On a new post (/posts/new), save the draft automatically after generation
@@ -984,10 +1011,17 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     handleSubmit(async (values) => {
       try {
         const saved = await persist(values, post?.status ?? "draft");
-        await generateStrategy.mutateAsync({
+        const updatedPost = await generateStrategy.mutateAsync({
           id: saved.id,
           settings: buildContextSettings(),
         });
+        if (updatedPost?.ai_studio_output) {
+          const generatedResult = fromStudioOutput(updatedPost.ai_studio_output);
+          if (generatedResult) {
+            ai.applyResult(generatedResult);
+            applyGeneratedCaption(generatedResult, values.platforms, values.caption);
+          }
+        }
       } catch {
         // Both mutations toast their own failures; the draft is saved either
         // way, so the retry costs nothing but the click.

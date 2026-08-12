@@ -758,6 +758,13 @@ export const aiService = {
       imageSent: Boolean(request.imageUrl),
     });
 
+    console.info('[ai] generated', {
+      captionLength: result.caption?.length ?? 0,
+      hookCount: result.variations?.length ?? 0,
+      hashtagCount: result.hashtags?.length ?? 0,
+      platformVersionCount: Object.keys(result.platformCaptions || {}).length,
+    });
+
     return result;
   },
 
