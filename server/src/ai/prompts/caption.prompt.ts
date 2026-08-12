@@ -152,15 +152,17 @@ const FUNNEL_BRIEF: Record<string, string> = {
 - Cold audience who does NOT know this brand or product yet.
 - Focus heavily on problem framing, pain-point hooks, education, or relatable insight.
 - Explain the problem, tension, or context first BEFORE introducing any product concept.
-- Sell NOTHING. Use a low-friction or soft CTA (e.g. asking for thoughts or inviting discussion).
+- Sell NOTHING. Use a low-friction or soft CTA (e.g. asking for thoughts, saving for later, or inviting discussion).
 - Do NOT include direct sales pitches, product spec lists, or aggressive conversion CTAs.`,
 
-  MOFU: `MOFU (Middle of Funnel - Consideration & Comparison):
-- Warm audience evaluating options.
-- Focus on practical benefits, trust building, and solution differentiation.`,
+  MOFU: `MOFU (Middle of Funnel - Consideration & Solution Framing):
+- Warm audience evaluating options and seeking practical solutions.
+- Focus on solution framing, practical workflow benefits, product differentiation, and trust building.
+- Explain WHY this approach/solution works compared to status quo or manual work.
+- Use a moderate CTA (e.g. check out the guide, see how it works, explore options).`,
 
   BOFU: `BOFU (Bottom of Funnel - Conversion & Direct Value):
-- Audience is ready to decide.
+- Audience is ready to decide and buy.
 - Lead directly with concrete product value proposition and why this product solves their problem.
 - Remove objections, address friction, and explain specific product capabilities.
 - Use a clear, direct conversion CTA (e.g., try it now, start building, sign up).`,
@@ -528,9 +530,9 @@ function imageSection(analysis: ImageAnalysis): string {
     list('What its elements can symbolise', analysis.symbolism),
     list('Storytelling openings it offers', analysis.storyAngles),
     analysis.targetAudience &&
-      `- It speaks to: ${analysis.targetAudience}`,
+    `- It speaks to: ${analysis.targetAudience}`,
     analysis.suggestedBuyerPersona &&
-      `- Persona it suits: ${analysis.suggestedBuyerPersona}`,
+    `- Persona it suits: ${analysis.suggestedBuyerPersona}`,
   ]);
 
   const confidence =
@@ -741,21 +743,19 @@ export function buildCaptionPrompt(
       `2. Then write one caption per direction, in this order of tones: ${tones.join(', ')}. Each caption must be recognisably the copy for its own direction — swapping two of them should be obviously wrong.`,
       '3. For each option, repeat its opening line as the "hook", name its "angle", and add one sentence on why it works for this audience.',
       request.hashtagCount > 0
-        ? `4. ${request.hashtagCount} hashtags, without the # sign. Draw them from ${
-            imageAnalysis
-              ? 'what is actually in the image and the themes it carries'
-              : 'the subject and audience'
-          }, not just the brand name. Mix broad reach with specific niche tags. No spaces or punctuation inside a tag.`
+        ? `4. ${request.hashtagCount} hashtags, without the # sign. Draw them from ${imageAnalysis
+          ? 'what is actually in the image and the themes it carries'
+          : 'the subject and audience'
+        }, not just the brand name. Mix broad reach with specific niche tags. No spaces or punctuation inside a tag.`
         : '4. An empty hashtags array — the user does not want hashtags.',
       request.platforms.length > 0
         ? `5. The first caption option rewritten for each of: ${request.platforms.join(', ')}, obeying the platform rules above. Keep the angle, change the shape.`
         : null,
       wantsSongSuggestions(request)
-        ? `6. ${SONG_SUGGESTION_COUNT} audio ideas in "songSuggestions": real, well-known released tracks that fit ${
-            imageAnalysis
-              ? 'the mood, pace and setting of the image'
-              : 'the subject and mood of the post'
-          }. Give the real title and artist — never invent a song. For each, one sentence on why it fits this specific post. Do not claim anything is currently trending; you have no live chart data.`
+        ? `6. ${SONG_SUGGESTION_COUNT} audio ideas in "songSuggestions": real, well-known released tracks that fit ${imageAnalysis
+          ? 'the mood, pace and setting of the image'
+          : 'the subject and mood of the post'
+        }. Give the real title and artist — never invent a song. For each, one sentence on why it fits this specific post. Do not claim anything is currently trending; you have no live chart data.`
         : null,
       request.features?.seo
         ? '7. Include an `seo` object with targeted keywords (with relevance & difficulty scores, intent), metaTitle (50-60 chars), metaDescription (120-155 chars), altText, slug, and readabilityScore.'
