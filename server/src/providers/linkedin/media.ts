@@ -1,6 +1,7 @@
 import axios, { type AxiosResponse } from 'axios';
 import { ProviderError } from '../provider.interface';
 import { linkedinConfig } from './config';
+import { uploadVideo } from './video';
 import {
   UPLOAD_TIMEOUT_MS,
   REQUEST_TIMEOUT_MS,
@@ -74,11 +75,32 @@ export async function uploadMedia(input: {
 }): Promise<MediaUploadResult> {
   const { accessToken, ownerUrn, assets } = input;
 
+  // Video is a different API with a different protocol — initialize, PUT the
+  // parts LinkedIn asks for, finalize — so it is routed out rather than folded
+  // into the image loop below. See `video.ts`.
+  //
+  // One video and nothing else, which is what the capability declares
+  // (`maxItems: 1`) and what the resolver enforces before this is reached. A
+  // mixed post is refused rather than half-uploaded: LinkedIn has no post body
+  // that can carry an image and a video together, so uploading either would be
+  // work thrown away.
+  if (assets.some((asset) => asset.kind === 'video')) {
+    if (assets.length > 1) {
+      throw new ProviderError(
+        'A LinkedIn post carries one video on its own. Remove the other media and try again.',
+        400,
+        'linkedin',
+      );
+    }
+    const uploaded = await uploadVideo({ accessToken, ownerUrn, asset: assets[0] });
+    return { endpoint: uploaded.endpoint, media: [uploaded] };
+  }
+
   for (const asset of assets) {
     if (asset.kind !== 'image') {
       // Reached only if the validator's supported-kind list and this branch
       // drift apart. Loud rather than silent: publishing a post that quietly
-      // dropped the member's video would be worse than failing.
+      // dropped the member's media would be worse than failing.
       throw new ProviderError(
         `LinkedIn ${asset.kind} upload is not implemented yet`,
         501,
@@ -275,6 +297,17 @@ async function putBytes(
   accessToken: string,
   asset: LinkedInMediaAsset,
 ): Promise<void> {
+  if (!asset.data) {
+    // Unreachable: only images take this path and an image always resolves to
+    // bytes. Loud rather than a zero-length PUT, which LinkedIn would accept
+    // and turn into a URN for an empty image.
+    throw new ProviderError(
+      'That image could not be read for upload. Try again in a moment.',
+      400,
+      'linkedin',
+    );
+  }
+
   try {
     await axios.put(uploadUrl, asset.data, {
       headers: {

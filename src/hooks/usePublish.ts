@@ -4,6 +4,7 @@ import { publishService } from "@/services";
 import { PLATFORM_MAP } from "@/constants";
 import { postKeys, dashboardKeys } from "./usePosts";
 import type { Platform, PublishResult, PublishState } from "@/types";
+import type { ContentType } from "@/types/capabilities";
 
 export const publishKeys = {
   state: (postId: string) => ["publish", "state", postId] as const,
@@ -45,10 +46,20 @@ export function usePublishPostToProvider() {
     mutationFn: ({
       postId,
       provider,
+      contentType,
     }: {
       postId: string;
       provider?: string;
-    }) => publishService.publishPost(postId, provider),
+      /** The format the member chose for this network. Omit to use count-based inference. */
+      contentType?: ContentType;
+    }) => {
+      console.log("[publish] usePublish mutation received", {
+        postId,
+        provider,
+        contentType: contentType ?? null,
+      });
+      return publishService.publishPost(postId, provider, contentType);
+    },
 
     onSuccess: (result: PublishResult) => {
       // The post's own row changed server-side (status, published_at), so the
@@ -73,6 +84,7 @@ export function usePublishPostToProvider() {
             publishedId: result.publishedId,
             url: result.url,
             errorMessage: null,
+            notice: result.reason ?? null,
           };
 
           const platforms = current?.platforms ?? [];
@@ -96,6 +108,22 @@ export function usePublishPostToProvider() {
       // network is worse than one that says none.
       const network =
         PLATFORM_MAP[result.provider as Platform]?.name ?? result.provider;
+
+      // A publish that lost the member's media is not a plain success and must
+      // not read as one. It went out, so this is not an error toast — but the
+      // headline says what happened and the description is the backend's own
+      // sentence, so nobody discovers the missing image by looking at their
+      // timeline later.
+      if (result.mediaDropped) {
+        toast.warning(`Published to ${network} — without your media`, {
+          description:
+            result.reason ??
+            `${network} couldn't attach the media, so FlowPost published the text only.`,
+          // Longer than a success toast: this one has to actually be read.
+          duration: 10_000,
+        });
+        return;
+      }
 
       toast.success(`Published to ${network} 🚀`, {
         description: result.url

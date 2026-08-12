@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma';
 import type { Post, PostPlatform } from '../generated/prisma/client';
 import { PostStatus, PublishStatus } from '../generated/prisma/enums';
+import type { MediaType } from '../generated/prisma/enums';
 import {
   deriveParentStatus,
   EXECUTABLE_POST_STATUSES,
@@ -50,6 +51,19 @@ export async function armSchedule(
   providers: string[],
   scheduledAt: Date,
   timezone: string,
+  /**
+   * What the member chose to publish as, per network.
+   *
+   * Recorded now because now is when they chose. The worker runs hours later
+   * with no composer to ask, so a format that is not written down here is a
+   * format that resolves from the media count at publish time — which is
+   * correct for every post that never chose, and would be wrong for a Reel.
+   *
+   * Absent, or absent for one provider, is the null path and is deliberate. It
+   * is what every already-armed schedule in the database has, and re-arming
+   * without a choice must not invent one.
+   */
+  contentTypes: Record<string, MediaType> = {},
 ): Promise<void> {
   await prisma.$transaction([
     prisma.post.update({
@@ -78,29 +92,41 @@ export async function armSchedule(
     // network that succeeded, which would publish it a second time. An upsert
     // cannot express that condition, which is why this is an updateMany and a
     // createMany rather than one call per provider.
-    prisma.postPlatform.updateMany({
-      where: {
-        postId,
-        provider: { in: providers },
-        status: { not: PublishStatus.PUBLISHED },
-      },
-      data: {
-        status: PublishStatus.PENDING,
-        nextAttemptAt: scheduledAt,
-        errorMessage: null,
-        attempts: 0,
-      },
-    }),
-    // Rows that do not. `skipDuplicates` leans on the unique (post_id,
-    // provider) index — the same index that arbitrates a manual publish race —
-    // so a provider that already has a row, published or not, is left as the
-    // updateMany above found it.
+    // One update per provider rather than one for all of them, because the
+    // content type differs per provider — the same post is a Reel on Instagram
+    // and an image post on LinkedIn. `status: { not: PUBLISHED }` is unchanged
+    // and still the important half: rescheduling a partially published post
+    // must not re-arm the network that succeeded.
+    ...providers.map((provider) =>
+      prisma.postPlatform.updateMany({
+        where: {
+          postId,
+          provider,
+          status: { not: PublishStatus.PUBLISHED },
+        },
+        data: {
+          status: PublishStatus.PENDING,
+          nextAttemptAt: scheduledAt,
+          errorMessage: null,
+          attempts: 0,
+          // Written through as null when the member chose nothing, so a format
+          // left over from a previous arming cannot outlive the choice that
+          // set it.
+          contentType: contentTypes[provider] ?? null,
+        },
+      }),
+    ),
+    // Rows that do not exist yet. `skipDuplicates` leans on the unique
+    // (post_id, provider) index — the same index that arbitrates a manual
+    // publish race — so a provider that already has a row, published or not, is
+    // left as the updates above found it.
     prisma.postPlatform.createMany({
       data: providers.map((provider) => ({
         postId,
         provider,
         status: PublishStatus.PENDING,
         nextAttemptAt: scheduledAt,
+        contentType: contentTypes[provider] ?? null,
       })),
       skipDuplicates: true,
     }),

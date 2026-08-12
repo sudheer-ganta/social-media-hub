@@ -5,13 +5,19 @@
  * here refers to Prisma, Express or our tables — that is the line the whole
  * provider layer keeps.
  */
+import type { ContentType } from '../../capabilities';
 
 /** The permissions Business Login for Instagram grants. See `config.ts`. */
 export type InstagramScope =
   | 'instagram_business_basic'
   | 'instagram_business_content_publish'
   | 'instagram_business_manage_messages'
-  | 'instagram_business_manage_comments';
+  | 'instagram_business_manage_comments'
+  /**
+   * Media and account insights. Requested only when the deployment declares the
+   * app approved for it — see `providers/analytics-scopes.ts`.
+   */
+  | 'instagram_business_manage_insights';
 
 /** The query string `https://www.instagram.com/oauth/authorize` expects. */
 export interface InstagramAuthorizationParams {
@@ -125,8 +131,27 @@ export interface InstagramMediaContainerRequest {
   /**
    * A publicly reachable URL Meta's servers fetch the image from. There is no
    * byte-upload endpoint for feed images in this API; see `publisher.ts`.
+   *
+   * Optional because a Reel has a {@link video_url} instead. Exactly one of the
+   * two is ever sent.
    */
-  image_url: string;
+  image_url?: string;
+  /**
+   * The same, for video. Meta fetches and transcodes it on its own servers —
+   * which is why a Reel is never downloaded into this process however large it
+   * is. See the `url` transport in `providers/capabilities.ts`.
+   */
+  video_url?: string;
+  /**
+   * Which product this container becomes.
+   *
+   * Absent is a feed image, which is what every container FlowPost created
+   * before Reels and Stories existed sent — so leaving it out keeps those
+   * publishes byte-identical. `REELS` and `STORIES` are the two additions, and
+   * both are authorised by the same `instagram_business_content_publish` grant
+   * a feed post already uses.
+   */
+  media_type?: 'REELS' | 'STORIES';
   caption?: string;
   alt_text?: string;
   /**
@@ -183,6 +208,12 @@ export interface InstagramMediaNode {
  * gets sent, because Meta fetches the image itself. Validating the bytes we
  * downloaded is the only way to know, before spending a request, that the URL
  * we are about to hand over resolves to something Instagram will accept.
+ *
+ * Video is the case where "the bytes are what the validator checks" stops being
+ * true, and deliberately so: a Reel can be a gigabyte and Meta is going to
+ * fetch it from Cloudinary regardless, so nothing is downloaded and the checks
+ * run against the metadata Cloudinary reported at upload time. That is why
+ * `durationMs` is here and why it may be null — see {@link ProviderMediaAsset}.
  */
 export interface InstagramMediaAsset {
   kind: 'image' | 'video' | 'document';
@@ -193,6 +224,8 @@ export interface InstagramMediaAsset {
   altText: string | null;
   /** The public URL these exact bytes were fetched from. */
   sourceUrl: string;
+  /** Video only, and null when nothing measured it. Never guessed. */
+  durationMs?: number | null;
 }
 
 /** Everything `publisher.ts` needs to create one post. */
@@ -203,6 +236,19 @@ export interface InstagramPublishInput {
   providerAccountId: string;
   caption: string;
   media?: InstagramMediaAsset[];
+  /**
+   * What the member is publishing this as.
+   *
+   * The one thing this publisher cannot work out for itself. `IMAGE`,
+   * `CAROUSEL`, `REEL` and `STORY` are four `media_type` values on one edge,
+   * and a video attached to a post is a Reel or a Story depending on nothing
+   * but what the member chose.
+   *
+   * Optional here, required on `ProviderPublishInput` — see LinkedIn's note.
+   * Absent falls back to the count-based resolution, which can only ever
+   * produce IMAGE or CAROUSEL and so can never silently publish a Story.
+   */
+  contentType?: ContentType;
 }
 
 /** What a successful publish hands back. */
@@ -223,4 +269,63 @@ export interface InstagramPublishResult {
    * carousel every child followed by the parent that was published.
    */
   mediaUrns: string[];
+}
+
+// ─── Insights ────────────────────────────────────────────────────────────────
+
+/**
+ * What Instagram files a publication as.
+ *
+ * Two independent axes, and both are needed to read a post correctly.
+ * `media_type` says what the *file* is and `media_product_type` says what
+ * *surface* it was published to — a video with `REELS` is a Reel, the same
+ * video with `FEED` is a feed video, and they do not accept the same metrics.
+ * Asking a Reel for `navigation` or a Story for `saved` fails the whole request.
+ */
+export type InstagramMediaTypeValue =
+  | 'IMAGE'
+  | 'VIDEO'
+  | 'CAROUSEL_ALBUM'
+  | string;
+
+export type InstagramMediaProductType =
+  | 'AD'
+  | 'FEED'
+  | 'STORY'
+  | 'REELS'
+  | string;
+
+/** `GET /?ids=a,b,c&fields=id,media_type,media_product_type,timestamp` */
+export interface InstagramMediaInfoNode {
+  id?: string;
+  media_type?: InstagramMediaTypeValue;
+  media_product_type?: InstagramMediaProductType;
+  timestamp?: string;
+}
+
+/**
+ * One metric from `GET /{ig-media-id}/insights`.
+ *
+ * Two shapes, both live. The older one puts the number in `values[0].value`;
+ * the newer per-metric total puts it in `total_value.value`. Meta serves
+ * whichever the metric uses and does not say which in advance, so both are read
+ * and a metric present in neither stays null rather than becoming zero.
+ */
+export interface InstagramInsightNode {
+  name?: string;
+  period?: string;
+  values?: Array<{ value?: unknown }>;
+  total_value?: { value?: unknown };
+}
+
+export interface InstagramInsightsResponse {
+  data?: InstagramInsightNode[];
+}
+
+/** `GET /{ig-user-id}?fields=followers_count,follows_count,media_count` */
+export interface InstagramAccountNode {
+  id?: string;
+  followers_count?: number;
+  follows_count?: number;
+  media_count?: number;
 }

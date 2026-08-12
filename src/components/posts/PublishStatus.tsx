@@ -94,6 +94,7 @@ export function PublishStatus({
           publishedId: null,
           url: null,
           errorMessage: null,
+          notice: null,
         },
       ];
 
@@ -142,6 +143,14 @@ export function PublishStatus({
                   <p className="mt-1 text-xs text-destructive">
                     {platform.errorMessage}
                   </p>
+                )}
+                {/* A notice sits on a row that PUBLISHED, so it is a warning
+                    tone rather than a destructive one — the post is live and
+                    something about it differs from what was composed. This is
+                    the only place a scheduled fallback is visible: the worker
+                    has no toast to show. */}
+                {platform.notice && status === "PUBLISHED" && (
+                  <p className="mt-1 text-xs text-warning">{platform.notice}</p>
                 )}
               </div>
 

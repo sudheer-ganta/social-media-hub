@@ -1,4 +1,5 @@
 import type { ProviderId } from './provider.interface';
+import { analyticsScopeEnabled } from './analytics-scopes';
 import { LINKEDIN_API_VERSION } from './linkedin/config';
 import { META_API_VERSION } from './meta/config';
 import { X_API_VERSION } from './x/config';
@@ -113,6 +114,24 @@ export interface ProviderMediaCapability {
 }
 
 /**
+ * An analytics permission, listed only where it is actually requested.
+ *
+ * Returns a one-item array or an empty one, so it spreads into a permission
+ * list. The gate is the same switch the scope builders read — see
+ * `providers/analytics-scopes.ts` — because the card must describe the consent
+ * screen the member will actually see. A permission listed here but absent from
+ * the authorization request would render as "not granted" permanently, with
+ * nothing a member could do about it: the worst kind of UI, one that reports a
+ * problem it created and offers no fix.
+ */
+function analyticsPermission(
+  provider: ProviderId,
+  permission: ProviderPermission,
+): ProviderPermission[] {
+  return analyticsScopeEnabled(provider) ? [permission] : [];
+}
+
+/**
  * Scopes we request from LinkedIn. Mirrors `linkedin/config.ts` — that file
  * decides what to *ask* for, this one explains what each one means to a member.
  */
@@ -136,12 +155,26 @@ const LINKEDIN_PERMISSIONS: ProviderPermission[] = [
     required: true,
   },
   {
-    scope: null,
+    scope: 'w_member_social',
     label: 'Upload Images',
-    description: 'Attach images to published posts. Arriving with media posts.',
+    description: 'Attach images to published posts.',
     required: false,
-    planned: true,
   },
+  {
+    scope: 'w_member_social',
+    label: 'Upload Video',
+    description: 'Attach video to published posts.',
+    required: false,
+  },
+  // Listed only when it is actually requested. A permission shown on the card
+  // that never appears on LinkedIn's consent screen would be marked "not
+  // granted" forever, with no action a member could take to change it.
+  ...analyticsPermission('linkedin', {
+    scope: 'r_member_postAnalytics',
+    label: 'Read Post Analytics',
+    description: 'Read impressions and engagement for posts you published.',
+    required: false,
+  }),
 ];
 
 /**
@@ -149,9 +182,12 @@ const LINKEDIN_PERMISSIONS: ProviderPermission[] = [
  * `meta/instagram/config.ts` — that file decides what to *ask* for, this one
  * explains what each one means to a member.
  *
- * The planned entries are honest about the two real limits of this API surface:
- * Stories cannot be published through it at all, and Reels need the video
- * pipeline FlowPost has not built yet.
+ * Reels and Stories are *not* separate permissions. Meta's Content Publishing
+ * API exposes both as `media_type` values on the same `/{ig-id}/media` edge that
+ * publishes a feed image, and the same `instagram_business_content_publish`
+ * grant authorises all four. An earlier revision of this file claimed Stories
+ * "cannot be published through the Instagram API"; that was simply wrong — the
+ * STORIES container has existed on this edge for as long as the REELS one has.
  */
 const INSTAGRAM_PERMISSIONS: ProviderPermission[] = [
   {
@@ -161,27 +197,36 @@ const INSTAGRAM_PERMISSIONS: ProviderPermission[] = [
     required: true,
   },
   {
+    scope: 'instagram_business_content_publish',
+    label: 'Publish Carousels',
+    description: 'Publish up to ten images as one swipeable post.',
+    required: false,
+  },
+  {
+    scope: 'instagram_business_content_publish',
+    label: 'Publish Reels',
+    description: 'Publish short-form vertical video to Reels.',
+    required: false,
+  },
+  {
+    scope: 'instagram_business_content_publish',
+    label: 'Publish Stories',
+    description: 'Publish an image or video to your Story for 24 hours.',
+    required: false,
+  },
+  {
     scope: 'instagram_business_basic',
     label: 'Read Profile',
     description:
       'Read your username and photo so FlowPost can show the account.',
     required: true,
   },
-  {
-    scope: null,
-    label: 'Publish Reels',
-    description: 'Upload short-form video. Arriving with video support.',
+  ...analyticsPermission('instagram', {
+    scope: 'instagram_business_manage_insights',
+    label: 'Read Insights',
+    description: 'Read reach, views and engagement for media you published.',
     required: false,
-    planned: true,
-  },
-  {
-    scope: null,
-    label: 'Publish Stories',
-    description:
-      'Stories cannot be published through the Instagram API — Meta does not offer an endpoint for it.',
-    required: false,
-    planned: true,
-  },
+  }),
 ];
 
 /**
@@ -214,12 +259,25 @@ const FACEBOOK_PERMISSIONS: ProviderPermission[] = [
     required: true,
   },
   {
+    scope: 'pages_manage_posts',
+    label: 'Publish Multi-photo Posts',
+    description: 'Publish several photos as one Page post.',
+    required: false,
+  },
+  {
     scope: null,
     label: 'Publish Reels',
-    description: 'Upload short-form video. Arriving with video support.',
+    description:
+      'Not enabled. Facebook Reels needs a Meta permission FlowPost has not verified against Meta’s documentation, so it is not requested and not offered.',
     required: false,
     planned: true,
   },
+  ...analyticsPermission('facebook', {
+    scope: 'read_insights',
+    label: 'Read Page Insights',
+    description: 'Read impressions, reach and clicks for posts on your Page.',
+    required: false,
+  }),
 ];
 
 /**
@@ -233,9 +291,11 @@ const FACEBOOK_PERMISSIONS: ProviderPermission[] = [
  * does not get a degraded connection, they get one with a short fuse — so it
  * belongs in the list they can see.
  *
- * The planned entry is honest about the real limit here: attaching an image
- * needs X's separate media upload API, whose availability depends on the app's
- * access tier. See `x/validator.ts`.
+ * `media.write` is a real granted scope, not a roadmap item. It is what
+ * `/2/media/upload` authorises, and the X publisher has uploaded image bytes
+ * through it since Sprint 5.1 — an earlier revision of this file listed
+ * "Attach Images" as `planned`, which described a capability that already
+ * shipped. See `x/publisher.ts`.
  */
 const X_PERMISSIONS: ProviderPermission[] = [
   {
@@ -264,12 +324,22 @@ const X_PERMISSIONS: ProviderPermission[] = [
     required: true,
   },
   {
-    scope: null,
+    scope: 'media.write',
     label: 'Attach Images',
-    description:
-      "Images need X's separate media upload API, which depends on the app's access tier.",
+    description: 'Upload up to four images and attach them to a post.',
     required: false,
-    planned: true,
+  },
+  {
+    scope: 'media.write',
+    label: 'Publish GIFs',
+    description: 'Upload an animated GIF and attach it to a post.',
+    required: false,
+  },
+  {
+    scope: 'media.write',
+    label: 'Publish Video',
+    description: "Upload video through X's chunked upload and attach it to a post.",
+    required: false,
   },
 ];
 

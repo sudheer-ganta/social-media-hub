@@ -1,3 +1,4 @@
+import type { ProviderCapabilities } from "@/types/capabilities";
 /**
  * The contract the Integrations page reads, and nothing more.
  *
@@ -146,6 +147,19 @@ export interface Integration {
   permissions: IntegrationPermission[];
   /** What this network takes on one post. Drives the composer's compatibility list. */
   media: MediaCapability;
+  /**
+   * Every format this network publishes, and the rules for each.
+   *
+   * The composer's source of truth for what to offer, and the Integrations
+   * card's for what to list — both read this rather than holding a table, so
+   * the two can never disagree with each other or with the publish path. Served
+   * from `server/src/providers/capabilities.ts`, which is what publishing
+   * validates against.
+   *
+   * Optional so a browser talking to an older API renders the card it always
+   * did rather than an empty one.
+   */
+  contentTypes?: ProviderCapabilities;
   health: ConnectionHealth | null;
   account: ConnectedAccount | null;
 }

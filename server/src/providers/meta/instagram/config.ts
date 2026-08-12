@@ -1,5 +1,6 @@
 import { env } from '../../../config/env';
 import { META_API_VERSION } from '../config';
+import { analyticsScopeEnabled } from '../../analytics-scopes';
 import type { InstagramScope } from './types';
 
 /**
@@ -79,7 +80,15 @@ export const INSTAGRAM_REFRESH_TOKEN_URL = `${INSTAGRAM_GRAPH_HOST}/refresh_acce
 export const INSTAGRAM_SCOPES: InstagramScope[] = [
   'instagram_business_basic',
   'instagram_business_content_publish',
+  // Insights, and only where the app is approved for it — see
+  // `providers/analytics-scopes.ts`.
+  ...(analyticsScopeEnabled('instagram')
+    ? (['instagram_business_manage_insights'] as const)
+    : []),
 ];
+
+/** The scope media and account insights require. */
+export const INSTAGRAM_ANALYTICS_SCOPE = 'instagram_business_manage_insights';
 
 /**
  * Instagram wants scopes comma-delimited, where LinkedIn wants spaces. Getting

@@ -32,6 +32,8 @@ import {
   type ProviderCatalogEntry,
   type ProviderId,
   type ProviderMediaCapability,
+  capabilitiesFor,
+  type ProviderCapabilities,
 } from '../providers';
 
 /**
@@ -107,6 +109,21 @@ export interface IntegrationDto {
    * offer a carousel the publish path would reject.
    */
   media: ProviderMediaCapability;
+  /**
+   * Every format this network publishes, with the rules for each.
+   *
+   * **The composer's whole source of truth.** It sends the same declaration the
+   * publish path validates against, so "Instagram: Post, Carousel, Reel, Story"
+   * is not a list the browser holds — it is this object's keys. That is what
+   * stops an `InstagramRules.ts` existing on the frontend, and it is why a
+   * format missing here is a format the composer cannot offer: absence is
+   * unsupported, on both sides, from one declaration.
+   *
+   * The browser still gets no authority from this. Every rule below is
+   * re-checked on publish; sending them is what lets the UI say *why* something
+   * is unavailable instead of discovering it on a 400.
+   */
+  contentTypes: ProviderCapabilities;
   /** Null when there is no connection to assess. */
   health: ConnectionHealth | null;
   account: IntegrationAccountDto | null;
@@ -158,6 +175,7 @@ function toIntegrationDto(
     guidance: account ? statusGuidance(status, catalog.displayName) : null,
     permissions,
     media: catalog.media,
+    contentTypes: capabilitiesFor(catalog.id),
     health: account ? assessHealth(account, permissions, now, warningMs) : null,
     account: account ? toAccountDto(account) : null,
   };

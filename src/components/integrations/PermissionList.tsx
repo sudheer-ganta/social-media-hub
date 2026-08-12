@@ -11,10 +11,17 @@ interface PermissionListProps {
 /**
  * What this connection is allowed to do, shown rather than hidden.
  *
- * Three states, not two: granted, withheld, and planned. Planned capabilities
- * ("Upload Images", "Reels") are on the roadmap and have no scope yet — marking
- * them with an ✗ would read as something being broken, so they get a clock and
- * sit greyed out.
+ * Three states, not two: granted, withheld, and planned. A planned capability
+ * has no scope yet — today that is Facebook Reels alone, which needs a Meta
+ * permission FlowPost has not verified against Meta's own documentation.
+ * Marking it with an ✗ would read as something being broken, so it gets a clock,
+ * sits greyed out, and its tooltip carries the actual reason.
+ *
+ * Every entry, and every one of the three states, comes from the server —
+ * `providers/catalog.ts` for the labels and the member's granted scopes for the
+ * marks. There is no list of capabilities in this file, which is why correcting
+ * a wrong one ("Stories cannot be published through the Instagram API", which
+ * was never true) was a backend edit and nothing here.
  */
 export function PermissionList({ permissions, connected }: PermissionListProps) {
   if (permissions.length === 0) return null;

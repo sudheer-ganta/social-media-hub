@@ -13,7 +13,11 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CropView } from "./CropView";
 import { cloudinaryService } from "@/services";
-import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES } from "@/constants";
+import {
+  ACCEPTED_MEDIA_TYPES,
+  MAX_IMAGE_SIZE_BYTES,
+  MAX_VIDEO_SIZE_BYTES,
+} from "@/constants";
 import {
   computeCrop,
   focusOf,
@@ -141,16 +145,25 @@ export function MediaFormatPanel({
   const handleReplace = async (file: File | undefined) => {
     if (!file || !item) return;
 
-    if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      toast.error("Image is too large — maximum size is 20MB.");
+    // Replace takes whatever Add takes — one media collection means one set of
+    // accepted files, and a member swapping a photo for a clip is doing an
+    // ordinary thing rather than a special one.
+    const isVideo = file.type.startsWith("video/");
+    const ceiling = isVideo ? MAX_VIDEO_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES;
+    if (file.size > ceiling) {
+      toast.error(
+        isVideo
+          ? "Video is too large — maximum size is 1GB."
+          : "Image is too large — maximum size is 20MB.",
+      );
       return;
     }
 
     setReplacing(true);
     const previousUrl = item.url;
     try {
-      const [{ url }, dimensions] = await Promise.all([
-        cloudinaryService.uploadImage(file),
+      const [uploaded, dimensions] = await Promise.all([
+        cloudinaryService.uploadMedia(file),
         readDimensions(file),
       ]);
 
@@ -158,20 +171,28 @@ export function MediaFormatPanel({
       // different picture in it. The crop is recomputed rather than carried
       // over: it was a rectangle over the old image's dimensions, and reusing
       // it on a differently shaped file would frame something arbitrary.
+      const width = uploaded.width ?? dimensions.width;
+      const height = uploaded.height ?? dimensions.height;
+
       updateItem({
         ...item,
-        url,
-        width: dimensions.width,
-        height: dimensions.height,
+        url: uploaded.url,
+        type: uploaded.kind,
+        width,
+        height,
         crop: item.crop
-          ? cropFor(
-              { ...item, width: dimensions.width, height: dimensions.height },
-              item.crop.ratio,
-            )
+          ? cropFor({ ...item, width, height }, item.crop.ratio)
           : null,
+        // Replaced wholesale rather than merged: the old file's duration and
+        // poster describe a file that is no longer here, and a stale poster is
+        // a thumbnail of something the member did not publish.
+        mimeType: uploaded.mimeType,
+        bytes: uploaded.bytes,
+        durationMs: uploaded.durationMs,
+        posterUrl: uploaded.posterUrl,
       });
       cloudinaryService.deleteImage(previousUrl);
-      toast.success("Image replaced");
+      toast.success(uploaded.kind === "video" ? "Video replaced" : "Image replaced");
     } catch (error) {
       toast.error("Replace failed", {
         description: error instanceof Error ? error.message : undefined,
@@ -295,7 +316,7 @@ export function MediaFormatPanel({
             <input
               ref={replaceInput}
               type="file"
-              accept={Object.keys(ACCEPTED_IMAGE_TYPES).join(",")}
+              accept={Object.keys(ACCEPTED_MEDIA_TYPES).join(",")}
               className="sr-only"
               onChange={(event) => {
                 void handleReplace(event.target.files?.[0]);
@@ -319,7 +340,10 @@ export function MediaFormatPanel({
           {cropping && (
             <div className="grid gap-4 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[minmax(0,240px)_1fr]">
               <CropView
-                imageUrl={item.url}
+                // The still, deliberately: a crop rectangle dragged over
+                // moving footage is a rectangle nobody can place. The preview
+                // is where the clip plays.
+                imageUrl={item.type === "video" ? (item.posterUrl ?? "") : item.url}
                 crop={item.crop}
                 imageAspect={itemAspect(item)}
                 onFocus={(x, y) => reframe({ focusX: x, focusY: y })}
@@ -430,19 +454,33 @@ function FormatGlyph({
   );
 }
 
-/** The replacement file's own dimensions, from the browser's decode. */
+/**
+ * The replacement file's own dimensions, from the browser's decode.
+ *
+ * A fallback only: Cloudinary's numbers win, because it decoded the file that
+ * was actually stored. This is what fills the gap when it reports none, and
+ * zeroes mean "unmeasured" rather than a zero-sized picture.
+ */
 function readDimensions(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
+    const done = (width: number, height: number) => {
+      resolve({ width, height });
+      URL.revokeObjectURL(url);
+    };
+
+    if (file.type.startsWith("video/")) {
+      const element = document.createElement("video");
+      element.preload = "metadata";
+      element.onloadedmetadata = () => done(element.videoWidth, element.videoHeight);
+      element.onerror = () => done(0, 0);
+      element.src = url;
+      return;
+    }
+
     const image = new Image();
-    image.onload = () => {
-      resolve({ width: image.naturalWidth, height: image.naturalHeight });
-      URL.revokeObjectURL(url);
-    };
-    image.onerror = () => {
-      resolve({ width: 0, height: 0 });
-      URL.revokeObjectURL(url);
-    };
+    image.onload = () => done(image.naturalWidth, image.naturalHeight);
+    image.onerror = () => done(0, 0);
     image.src = url;
   });
 }

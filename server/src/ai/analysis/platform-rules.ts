@@ -356,3 +356,37 @@ export function platformFitScore(fits: readonly PlatformFit[]): number | null {
 export function platformLabel(platform: string): string {
   return rulesFor(platform).label;
 }
+
+/**
+ * The band where hashtag count stops helping on one network.
+ *
+ * Exported so the hashtag generator asks for a count this file would not mark
+ * down. Before it, "how many hashtags suit LinkedIn" had one answer here and
+ * another wherever generation happened to be written — and a generator that
+ * produces eight tags for a network the analyser caps at three is a product
+ * arguing with itself in front of the member.
+ */
+export function hashtagBandFor(platform: string): { min: number; max: number } {
+  return rulesFor(platform).hashtags;
+}
+
+/**
+ * The tightest band across several networks.
+ *
+ * `min` is the largest of the minimums and `max` the smallest of the maximums,
+ * which is the only band that satisfies every selected network at once. A
+ * cross-post to Instagram (3–10) and X (0–2) has no overlap at all, and the
+ * empty result is the honest answer — the caller then knows to put the tags
+ * where they suit rather than to split the difference and be wrong twice.
+ */
+export function sharedHashtagBand(
+  platforms: readonly string[],
+): { min: number; max: number } {
+  if (platforms.length === 0) return { ...GENERIC_RULES.hashtags };
+
+  const bands = platforms.map(hashtagBandFor);
+  return {
+    min: Math.max(...bands.map((band) => band.min)),
+    max: Math.min(...bands.map((band) => band.max)),
+  };
+}

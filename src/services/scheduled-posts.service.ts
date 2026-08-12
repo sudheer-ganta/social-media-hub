@@ -103,6 +103,14 @@ export interface ScheduleInput {
   /** IANA zone the wall clock is in. */
   timezone: string;
   providers?: string[];
+  /**
+   * What to publish as, per network — `{ instagram: "REEL" }`.
+   *
+   * Omitted, or omitted for one network, is the backward-compatible path: that
+   * destination resolves its format from the media count at publish time,
+   * exactly as every schedule armed before this existed does.
+   */
+  contentTypes?: Record<string, string>;
 }
 
 function toClientScheduledPost(post: ScheduledPost): ScheduledPost {

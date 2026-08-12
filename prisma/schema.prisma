@@ -269,6 +269,17 @@ model SocialAccount {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  /// Publications that went out through this connection. SET NULL on delete,
+  /// never CASCADE: disconnecting an account must not erase the record that a
+  /// post was published, and the publication's own context lives on the post.
+  publications PostPlatform[]
+
+  /// Account-level history. Also SET NULL — see AccountMetricSnapshot, which
+  /// carries its own copy of the scope so a disconnect cannot orphan it.
+  metricSnapshots AccountMetricSnapshot[]
+
+  syncState MetricSyncState?
+
   @@index([userId])
   @@index([userId, provider])
   @@index([provider, status])
@@ -321,6 +332,24 @@ model PostPlatform {
   permalink String? @map("permalink")
 
   errorMessage String?       @map("error_message")
+
+  /// Something worth telling the member about a publication that *succeeded*.
+  ///
+  /// Distinct from `errorMessage` on purpose, and the distinction is the whole
+  /// reason this column exists: an error means nothing was published and the
+  /// row is FAILED, where a notice means the post is live and something about
+  /// it differs from what was composed. Reusing `errorMessage` would put that
+  /// sentence everywhere failures are rendered and make a successful post look
+  /// broken.
+  ///
+  /// Today it carries exactly one thing: X refused the attached media and the
+  /// text was published without it. Null on every other publication, which is
+  /// almost all of them.
+  ///
+  /// Written for a member and safe to display — the provider composes it and
+  /// never puts a status code or a response body in it.
+  notice String? @map("notice")
+
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
   /// How many times the scheduler has *claimed* this destination. Incremented
@@ -342,13 +371,220 @@ model PostPlatform {
   /// "Instagram at 09:30, LinkedIn at 09:31 after one retry".
   publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
 
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  /// Which connection this went out through.
+  ///
+  /// `provider` alone stopped being enough once a member could hold a personal
+  /// and a brand LinkedIn at the same time: analytics has to present *the token
+  /// that owns the post* to read its metrics, and re-deriving that from the
+  /// post's context at read time is a guess that goes wrong the moment an
+  /// account is disconnected and reconnected.
+  ///
+  /// Nullable, and SET NULL rather than CASCADE on delete: rows published
+  /// before this column existed have no answer, and a disconnect must leave the
+  /// publication record standing. A null here means "cannot be re-synced",
+  /// never "was not published".
+  socialAccountId String?        @map("social_account_id") @db.Uuid
+  socialAccount   SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+
+  /// What the member asked to publish, before anything was sent.
+  ///
+  /// The *requested* format, where `mediaType` below is the *observed* one.
+  /// Both are kept because they disagree in ways worth seeing: a member choosing
+  /// "Reel" and Instagram filing it as something else is only visible if the
+  /// request survives alongside the observation.
+  ///
+  /// Reuses `MediaType` rather than declaring a parallel enum — the six words
+  /// mean the same thing on both sides, which is what lets analytics group
+  /// requested against observed without a translation table. `OTHER` is never
+  /// written here: it is an answer a network can give, not a choice a member
+  /// can make.
+  ///
+  /// Null on every row written before the composer offered a choice, and never
+  /// backfilled. Null is an instruction, not a gap — it means "resolve this the
+  /// way it was resolved before this column existed", which is the rule that
+  /// keeps already-scheduled posts publishing exactly as they would have.
+  /// See `publish/services/content-type.ts`.
+  contentType MediaType? @map("content_type")
+
+  /// What this publication actually *is* on that network.
+  ///
+  /// Per publication, not per post: the same FlowPost content is a REEL on
+  /// Instagram and an IMAGE on LinkedIn, and media-type performance is
+  /// meaningless if both are filed under one label. Null until something says
+  /// otherwise — an unknown format is not a TEXT post.
+  mediaType MediaType? @map("media_type")
+
+  /// Whether `mediaType` came from the network or from what was uploaded.
+  ///
+  /// The network is the authority: a video posted to Instagram comes back as a
+  /// REEL whatever we sent, and only Instagram knows that. False means the
+  /// value was inferred at publish time from the attached media, and a later
+  /// sync is allowed to overwrite it. True means the network told us, and
+  /// nothing may downgrade it back to an inference.
+  mediaTypeFromPlatform Boolean @default(false) @map("media_type_from_platform")
+
+  post            Post                 @relation(fields: [postId], references: [id], onDelete: Cascade)
+  metricSnapshots PostMetricSnapshot[]
 
   @@unique([postId, provider])
   @@index([postId])
   @@index([status])
   @@index([nextAttemptAt])
+  @@index([socialAccountId])
+  /// The analytics read path: "the last N things this connection published".
+  @@index([status, publishedAt(sort: Desc)])
   @@map("post_platforms")
+}
+
+/// What a publication is, normalised across networks.
+///
+/// A closed list on purpose. `OTHER` is the honest home for a format we have no
+/// column for yet — inventing an enum value per network would put
+/// `INSTAGRAM_REEL` and `X_VIDEO` in the same comparison and make "which format
+/// works best" unanswerable, which is the entire point of storing this.
+enum MediaType {
+  TEXT
+  IMAGE
+  VIDEO
+  CAROUSEL
+  REEL
+  STORY
+  /// A real format we do not model. The platform's own label is kept in the
+  /// snapshot's `raw`, so this is recoverable rather than lost.
+  OTHER
+
+  @@map("media_type")
+}
+
+/// Where a snapshot's numbers came from.
+///
+/// There is deliberately no `UNAVAILABLE` member. A metric a network does not
+/// report is a NULL *column*, not a differently-sourced row — and every metric
+/// column below is nullable for exactly that reason. Collapsing "we asked and
+/// the answer was none of your business" into `0` is the failure this whole
+/// table exists to prevent.
+enum MetricSource {
+  /// Read from the network's own analytics API.
+  PLATFORM_API
+  /// Computed by FlowPost from other stored values. Nothing writes this yet.
+  DERIVED
+
+  @@map("metric_source")
+}
+
+/// One observation of one publication's performance, at one moment.
+///
+/// **Append-only.** A post's numbers an hour after publishing and a week after
+/// publishing are two facts, not one fact revised — and the difference between
+/// them is the only place a post's lifecycle, and eventually a best-time
+/// recommendation, can come from. Nothing in the codebase updates a row here.
+///
+/// Every metric is nullable and every one means the same thing when null: this
+/// network does not report it, or did not report it this time. Readers must
+/// propagate the null rather than defaulting it.
+///
+/// `raw` keeps the network's untouched response. Meta is removing Page Insights
+/// metrics in June 2026 and has already replaced `impressions` with `views`;
+/// keeping the original payload is what lets history be re-normalised after a
+/// shape change instead of being thrown away.
+model PostMetricSnapshot {
+  id             String @id @default(uuid()) @db.Uuid
+  postPlatformId String @map("post_platform_id") @db.Uuid
+
+  /// Floored to the hour by the sync service — see the unique index below.
+  capturedAt DateTime     @map("captured_at") @db.Timestamptz(6)
+  source     MetricSource @default(PLATFORM_API)
+
+  impressions Int?
+  reach       Int?
+  views       Int?
+  likes       Int?
+  comments    Int?
+  shares      Int?
+  reposts     Int?
+  saves       Int?
+  clicks      Int?
+  videoViews  Int? @map("video_views")
+  watchTimeMs Int? @map("watch_time_ms")
+
+  /// The network's response, unmodified.
+  raw Json?
+
+  postPlatform PostPlatform @relation(fields: [postPlatformId], references: [id], onDelete: Cascade)
+
+  /// Idempotency. A sync re-run inside the same hour collides here and is
+  /// skipped, so a retry after a partial failure cannot double-count.
+  @@unique([postPlatformId, capturedAt])
+  @@index([postPlatformId, capturedAt(sort: Desc)])
+  @@map("post_metric_snapshots")
+}
+
+/// One observation of an account's audience, at one moment.
+///
+/// The scope columns (`userId`, `contextType`, `brandId`, `provider`,
+/// `providerAccountId`) are duplicated from the connection deliberately. A
+/// member who disconnects and reconnects Instagram gets a new `social_accounts`
+/// row, and without these the follower history from before the reconnect would
+/// become unattributable — which is the same as losing it. They are also what
+/// lets the context filter run as a column predicate rather than a join, so
+/// Personal can never accidentally read a brand's audience.
+model AccountMetricSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Null once the connection it was taken through has been deleted. The
+  /// snapshot survives; only the pointer goes.
+  socialAccountId String?        @map("social_account_id") @db.Uuid
+  socialAccount   SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+
+  userId            String  @map("user_id") @db.Uuid
+  contextType       String  @default("personal") @map("context_type")
+  brandId           String? @map("brand_id") @db.Uuid
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+
+  capturedAt DateTime     @map("captured_at") @db.Timestamptz(6)
+  source     MetricSource @default(PLATFORM_API)
+
+  followers    Int?
+  following    Int?
+  postCount    Int? @map("post_count")
+  impressions  Int?
+  reach        Int?
+  profileViews Int? @map("profile_views")
+
+  raw Json?
+
+  /// One observation per account per hour. Same reasoning as the post snapshot.
+  @@unique([userId, provider, providerAccountId, capturedAt])
+  @@index([userId, contextType, brandId, capturedAt(sort: Desc)])
+  @@map("account_metric_snapshots")
+}
+
+/// Where one connection's analytics sync has got to.
+///
+/// One row per connection, updated in place — this is *state*, not history, and
+/// it is the only table in this feature that is not append-only. Deleted with
+/// the connection, because a sync cursor for a connection that no longer exists
+/// is not worth keeping.
+model MetricSyncState {
+  socialAccountId String        @id @map("social_account_id") @db.Uuid
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  /// Last attempt, successful or not.
+  lastSyncAt DateTime? @map("last_sync_at") @db.Timestamptz(6)
+  /// Last attempt that actually stored something.
+  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz(6)
+
+  consecutiveFailures Int     @default(0) @map("consecutive_failures")
+  lastError           String? @map("last_error")
+
+  /// Set when the network says to back off. Nothing reads it yet; the periodic
+  /// worker that will is Phase 2.
+  rateLimitedUntil DateTime? @map("rate_limited_until") @db.Timestamptz(6)
+
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("metric_sync_state")
 }
 
 enum PublishStatus {

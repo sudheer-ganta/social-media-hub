@@ -7,12 +7,14 @@ import {
   GripHorizontal,
   ImageIcon,
   ImagePlus,
+  Play,
   Plus,
   Trash2,
+  Video as VideoIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cloudinaryService } from "@/services";
-import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_SIZE_BYTES } from "@/constants";
+import { ACCEPTED_MEDIA_TYPES, MAX_VIDEO_SIZE_BYTES } from "@/constants";
 import { reorderMedia } from "@/utils/media";
 import { cn } from "@/lib/utils";
 import type { PostMediaItem } from "@/types";
@@ -66,34 +68,57 @@ interface PendingUpload {
 }
 
 /**
- * The file's own decoded dimensions.
+ * The file's own decoded dimensions, before it has finished uploading.
  *
- * Read from the browser rather than asked of Cloudinary: it is one fewer
- * request and it is the same two numbers. Resolves to zeroes if the decode
- * fails, which the rest of the composer treats as "unmeasured" and falls back
- * to a square aspect for — a wrong-looking preview, never a broken one.
+ * Read from the browser so a tile can show its real shape immediately rather
+ * than waiting on a round trip. Cloudinary's numbers replace these the moment
+ * the upload resolves — it decoded the stored file, where this decoded the
+ * selected one, and for video especially the two can differ on rotation.
+ *
+ * Resolves to zeroes if the decode fails, which the rest of the composer treats
+ * as "unmeasured" and falls back to a square aspect for — a wrong-looking
+ * preview, never a broken one.
  */
 function readDimensions(file: File): Promise<{ width: number; height: number }> {
+  const isVideo = file.type.startsWith("video/");
+
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
+    const done = (width: number, height: number) => {
+      resolve({ width, height });
+      URL.revokeObjectURL(url);
+    };
+
+    if (isVideo) {
+      const element = document.createElement("video");
+      element.preload = "metadata";
+      element.onloadedmetadata = () => done(element.videoWidth, element.videoHeight);
+      element.onerror = () => done(0, 0);
+      element.src = url;
+      return;
+    }
+
     const image = new Image();
-    image.onload = () => {
-      resolve({ width: image.naturalWidth, height: image.naturalHeight });
-      URL.revokeObjectURL(url);
-    };
-    image.onerror = () => {
-      resolve({ width: 0, height: 0 });
-      URL.revokeObjectURL(url);
-    };
+    image.onload = () => done(image.naturalWidth, image.naturalHeight);
+    image.onerror = () => done(0, 0);
     image.src = url;
   });
 }
 
 function rejectionMessage(rejection: FileRejection): string {
   const code = rejection.errors[0]?.code;
-  return code === "file-too-large"
-    ? `${rejection.file.name} is over 20MB.`
-    : `${rejection.file.name} is not a PNG, JPG or WEBP.`;
+  if (code === "file-too-large") {
+    return rejection.file.type.startsWith("video/")
+      ? `${rejection.file.name} is over 1GB.`
+      : `${rejection.file.name} is over 20MB.`;
+  }
+  return `${rejection.file.name} isn't an image or video FlowPost can use.`;
+}
+
+/** "0:18" — a video's length on its tile. */
+function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 export function MediaUploader({
@@ -134,10 +159,13 @@ export function MediaUploader({
       );
       const files = accepted.slice(0, room);
       if (accepted.length > room) {
+        // "Items", not "images". One picker takes both, so a member who just
+        // dropped a video would read an image-only limit as a format refusal
+        // and go looking for a separate video control that does not exist.
         toast.error(
           room === 0
-            ? `This post already has the ${maxItems} images your networks accept.`
-            : `Only ${room} more ${room === 1 ? "image fits" : "images fit"} on this post.`,
+            ? `This post already has the ${maxItems} ${maxItems === 1 ? "item" : "items"} your networks accept.`
+            : `Only ${room} more ${room === 1 ? "item fits" : "items fit"} on this post.`,
         );
       }
       if (files.length === 0) return;
@@ -158,8 +186,8 @@ export function MediaUploader({
             );
 
           try {
-            const [{ url }, dimensions] = await Promise.all([
-              cloudinaryService.uploadImage(file, setProgress),
+            const [uploaded, decoded] = await Promise.all([
+              cloudinaryService.uploadMedia(file, setProgress),
               readDimensions(file),
             ]);
 
@@ -167,14 +195,29 @@ export function MediaUploader({
               ...latest.current,
               {
                 id,
-                url,
-                type: "image",
-                width: dimensions.width,
-                height: dimensions.height,
+                url: uploaded.url,
+                // What the file *is*, not what the post will be. A video here
+                // is not a Reel — that is a publishing choice the member makes
+                // in the format picker, and inferring it would be deciding for
+                // them.
+                type: uploaded.kind,
+                // Cloudinary's measurement wins: it decoded the file that was
+                // actually stored, where the browser decoded the one that was
+                // selected. The local decode is the fallback for the rare case
+                // Cloudinary reports nothing.
+                width: uploaded.width ?? decoded.width,
+                height: uploaded.height ?? decoded.height,
                 // Unframed on arrival. The format panel is where a crop is
                 // chosen, and "no crop" is a real answer — it publishes the
-                // picture at the shape it was uploaded.
+                // media at the shape it was uploaded.
                 crop: null,
+                // Spread, so a field Cloudinary did not report stays absent
+                // rather than becoming a zero that later validates as a
+                // measurement.
+                ...(uploaded.mimeType && { mimeType: uploaded.mimeType }),
+                ...(uploaded.bytes && { bytes: uploaded.bytes }),
+                ...(uploaded.durationMs && { durationMs: uploaded.durationMs }),
+                ...(uploaded.posterUrl && { posterUrl: uploaded.posterUrl }),
               },
             ]);
             setPending((current) => current.filter((entry) => entry.id !== id));
@@ -203,8 +246,11 @@ export function MediaUploader({
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop: handleDrop,
-    accept: ACCEPTED_IMAGE_TYPES,
-    maxSize: MAX_IMAGE_SIZE_BYTES,
+    accept: ACCEPTED_MEDIA_TYPES,
+    // The generous ceiling, because one picker takes both. A 20MB image cap
+    // here would reject every video; the per-network limits are capabilities
+    // and are checked once a destination and a format are known.
+    maxSize: MAX_VIDEO_SIZE_BYTES,
     multiple: true,
     disabled: disabled || remaining === 0,
     // With images on screen the tiles are the click targets; a click anywhere
@@ -263,11 +309,14 @@ export function MediaUploader({
             <ImagePlus className="h-7 w-7" />
           </motion.span>
           <span>
+            {/* One control, and the copy has to say so. "Add media" leaves a
+                member wondering whether video counts; naming both formats is
+                what tells them there is no second button to look for. */}
             <span className="block text-sm font-semibold">
-              No media attached
+              Add photos or videos
             </span>
             <span className="mt-1 block text-xs text-muted-foreground">
-              {disabled ? "This post is published and cannot be modified." : "Drag & drop files here or click to browse"}
+              {disabled ? "This post is published and cannot be modified." : "Drag & drop files here, or click to browse"}
             </span>
           </span>
         </button>
@@ -344,12 +393,23 @@ export function MediaUploader({
                 }}
                 className="block h-full w-full focus-visible:outline-none"
               >
+                {/* A video's poster, which Cloudinary renders from the stored
+                    asset on request. An <img> rather than a <video>: a tray of
+                    ten <video> elements each fetching its own metadata is a
+                    slow, janky rail, and the frame is all a thumbnail needs. */}
                 <img
-                  src={item.url}
+                  src={item.type === "video" ? (item.posterUrl ?? item.url) : item.url}
                   alt=""
                   draggable={false}
                   className="h-full w-full object-cover"
                 />
+                {item.type === "video" && (
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white">
+                      <Play className="ml-0.5 h-3.5 w-3.5 fill-current" />
+                    </span>
+                  </span>
+                )}
               </button>
 
               <span className="pointer-events-none absolute left-1.5 top-1.5 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white">
@@ -362,10 +422,21 @@ export function MediaUploader({
                 </span>
               )}
 
-              {/* Says what the tile is. One kind today; the badge is here so a
-                  video's play indicator has an obvious home later. */}
-              <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-black/65 p-1 text-white">
-                <ImageIcon className="h-3 w-3" />
+              {/* What the tile is, and — for video — how long it runs. The
+                  duration is on the tile rather than in a tooltip because
+                  "is this the 18-second cut or the 40?" is the question a
+                  member actually has while looking at a rail of clips. */}
+              <span className="pointer-events-none absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded bg-black/65 px-1 py-1 text-white">
+                {item.type === "video" ? (
+                  <VideoIcon className="h-3 w-3" />
+                ) : (
+                  <ImageIcon className="h-3 w-3" />
+                )}
+                {item.type === "video" && item.durationMs ? (
+                  <span className="text-[10px] font-medium tabular-nums leading-none">
+                    {formatDuration(item.durationMs)}
+                  </span>
+                ) : null}
               </span>
 
               {!disabled && (

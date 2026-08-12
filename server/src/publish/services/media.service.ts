@@ -1,8 +1,11 @@
+import { Readable } from 'node:stream';
 import { providerForRole } from '../../ai/providers';
 import { generateAltText } from '../../ai/generators/alt-text.generator';
 import { fetchImageBytes, ImageFetchError } from '../../ai/vision/image-source';
 import type {
+  MediaTransport,
   ProviderMediaAsset,
+  ProviderMediaKind,
   ProviderMediaRequirements,
 } from '../../providers';
 import type { Post } from '../../generated/prisma/client';
@@ -103,6 +106,23 @@ export async function resolvePostMedia(
     requirements?: ProviderMediaRequirements;
     /** Which network's framing to deliver. Omitted means the whole image. */
     providerId?: string;
+    /**
+     * How this network wants the media delivered — see
+     * `providers/capabilities.ts`.
+     *
+     * Only ever consulted for **video**. A still image takes the same
+     * download-and-check path it always has, on every network and every
+     * transport, because that path is what proves a URL we hand Meta resolves
+     * to a JPEG under 8MB and it costs a few megabytes to run. Branching images
+     * on transport would change publishing behaviour that works.
+     *
+     * Video is the opposite case and the reason this parameter exists: the file
+     * is up to a gigabyte, the check that matters (format, size, duration) was
+     * already answered by Cloudinary at upload time, and downloading it would
+     * buy nothing but heap. So a video is never fetched here — it travels as a
+     * URL Meta pulls, or as a stream piped through a chunked upload.
+     */
+    transport?: MediaTransport;
   } = {},
 ): Promise<ProviderMediaAsset[]> {
   const requirements = options.requirements ?? DEFAULT_REQUIREMENTS;
@@ -130,14 +150,136 @@ export async function resolvePostMedia(
   // to matter for large carousels.
   const assets: ProviderMediaAsset[] = [];
   for (const item of items) {
-    assets.push(await resolveImage(item.url, requirements, options.caption));
+    assets.push(
+      item.kind === 'video'
+        ? resolveVideo(item, options.transport ?? 'url')
+        : await resolveImage(item.url, requirements, options.caption),
+    );
   }
   return assets;
 }
 
-/** One attached image, already framed for the network being published to. */
+/** One attached item, already framed for the network being published to. */
 interface ResolvedMediaItem {
   url: string;
+  kind: ProviderMediaKind;
+  /**
+   * Everything Cloudinary measured at upload time, as the browser stored it.
+   *
+   * Untrusted like every other value in that column, so each field is read
+   * defensively and a missing one stays null. Null means "nobody measured
+   * this", never zero — a video of unknown length must not validate as a video
+   * of length nought.
+   */
+  mimeType: string | null;
+  byteLength: number | null;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+  posterUrl: string | null;
+}
+
+/**
+ * A video, without downloading it.
+ *
+ * **This function does not fetch anything, and that is the whole point.** A
+ * Reel is up to a gigabyte; `resolveImage` below would put all of it in a
+ * Buffer, and doing that on the publish path is how one video takes the API
+ * process down with it. There is no branch here that can reach a download —
+ * see `media.video.test.ts`, which asserts exactly that.
+ *
+ * What replaces the download is metadata Cloudinary produced when it ingested
+ * the file, stored on the media item at upload time. Nothing here invents a
+ * value it was not given: an absent duration stays null, and the validators
+ * treat null as "unknown, let the network decide" rather than as a failure.
+ */
+function resolveVideo(
+  item: ResolvedMediaItem,
+  transport: MediaTransport,
+): ProviderMediaAsset {
+  return {
+    kind: 'video',
+    // Cloudinary reports the container it stored. Falling back to MP4 would be
+    // claiming a format nobody checked, so an unknown one stays empty and the
+    // capability check refuses it with a message about the format.
+    mimeType: item.mimeType ?? '',
+    // Never the bytes. For `url` Meta fetches sourceUrl itself; for `chunked`
+    // the stream below yields one piece at a time.
+    data: null,
+    byteLength: item.byteLength ?? 0,
+    sourceUrl: item.url,
+    width: item.width,
+    height: item.height,
+    durationMs: item.durationMs,
+    posterUrl: item.posterUrl ?? toVideoPosterUrl(item.url),
+    // No alt text: the vision model describes a still image, and handing it a
+    // video URL would either fail or describe a frame we never chose.
+    altText: null,
+    ...(transport === 'chunked'
+      ? { openStream: () => openMediaStream(item.url) }
+      : {}),
+  };
+}
+
+/**
+ * Opens a byte stream over a stored asset, for the chunked transport.
+ *
+ * `fetch` rather than the vetted image fetcher, and the difference matters: the
+ * image fetcher's job is to make a *member-supplied* address safe to download,
+ * and it does that partly by reading the whole response into a bounded Buffer.
+ * That is the exact behaviour a chunked upload exists to avoid.
+ *
+ * What makes this safe instead is that it is not an arbitrary address. Only a
+ * Cloudinary delivery URL reaches here — asserted below rather than assumed —
+ * so there is no member-controlled host to point at an internal service. The
+ * body is handed to the caller as a stream and never collected.
+ */
+async function openMediaStream(url: string): Promise<NodeJS.ReadableStream> {
+  if (!isCloudinaryDeliveryUrl(url)) {
+    throw new MediaResolutionError(
+      "That video isn't stored where FlowPost can upload it from. Re-upload it and try again.",
+      `refusing to stream a non-Cloudinary URL: ${url}`,
+    );
+  }
+
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new MediaResolutionError(
+      'That video could not be read for upload. Try again in a moment.',
+      `stream open failed with HTTP ${response.status} for ${url}`,
+    );
+  }
+
+  // Web ReadableStream → Node stream, without buffering: `Readable.fromWeb`
+  // wraps it and pulls one chunk at a time as the consumer asks for it.
+  return Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]);
+}
+
+/** True for a URL served by the Cloudinary account this app uploads to. */
+function isCloudinaryDeliveryUrl(url: string): boolean {
+  try {
+    return /(^|\.)cloudinary\.com$/i.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A still frame for a stored video, as a delivery URL.
+ *
+ * Cloudinary renders one on request by swapping the extension: the same asset,
+ * a different representation. Not an upload, not a second stored file, and it
+ * leaves the master exactly as it was.
+ *
+ * Only used when the item carries no `posterUrl` of its own — the composer
+ * records one at upload time, and a stored value always wins over a derived
+ * one.
+ */
+export function toVideoPosterUrl(url: string): string | null {
+  if (!isCloudinaryDeliveryUrl(url)) return null;
+  const at = url.lastIndexOf('.');
+  if (at === -1) return null;
+  return `${url.slice(0, at)}.jpg`;
 }
 
 /**
@@ -164,9 +306,25 @@ function readMediaItems(post: Post, providerId?: string): ResolvedMediaItem[] {
       const url = typeof record.url === 'string' ? record.url.trim() : '';
       if (!url) continue;
 
+      // `type` has been on this column since it was added, carrying `"image"`
+      // on every row ever written. Reading it as anything else only became
+      // possible when the uploader learned to accept video, so an unrecognised
+      // or absent value is still an image — which is what every existing post
+      // is, and what every existing post must keep publishing as.
+      const kind = record.type === 'video' ? 'video' : 'image';
+
       // Each item carries its own framing — this is the multi-image model,
       // where `platform_media` frames one shared image per network.
-      items.push({ url: applyStoredCropValue(url, record.crop) });
+      items.push({
+        url: applyStoredCropValue(url, record.crop),
+        kind,
+        mimeType: readString(record.mimeType)?.toLowerCase() ?? null,
+        byteLength: readPositive(record.bytes),
+        width: readPositive(record.width),
+        height: readPositive(record.height),
+        durationMs: readPositive(record.durationMs),
+        posterUrl: readString(record.posterUrl),
+      });
     }
   }
 
@@ -175,13 +333,41 @@ function readMediaItems(post: Post, providerId?: string): ResolvedMediaItem[] {
   const imageUrl = post.image_url?.trim();
   if (!imageUrl) return [];
 
+  // The single-image fallback. `image_url` predates both the media array and
+  // video, so anything reaching here is an image by construction.
   return [
     {
       url: providerId
         ? applyStoredCrop(imageUrl, post.platform_media, providerId)
         : imageUrl,
+      kind: 'image',
+      mimeType: null,
+      byteLength: null,
+      width: null,
+      height: null,
+      durationMs: null,
+      posterUrl: null,
     },
   ];
+}
+
+/** A trimmed string from untrusted JSON, or null. Never an empty string. */
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * A positive finite number from untrusted JSON, or null.
+ *
+ * Zero reads as null on purpose. Every field this parses is a measurement —
+ * bytes, pixels, milliseconds — and a stored zero means the browser had nothing
+ * to write, not that the video is zero seconds long. Letting it through as 0
+ * would fail a duration check against a number nobody measured.
+ */
+function readPositive(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : null;
 }
 
 /**
@@ -245,12 +431,22 @@ export function applyStoredCropValue(url: string, entry: unknown): string {
   // transform only when the destination actually requires it.
   if (x <= 0.001 && y <= 0.001 && w >= 0.999 && h >= 0.999) return url;
 
-  const at = url.indexOf('/image/upload/');
-  if (at === -1) return url;
+  // Both delivery types, because a crop chosen on a video has to actually
+  // reach the video. Cloudinary serves video under `/video/upload/` and takes
+  // the same `c_crop` directive there — an earlier revision looked for the
+  // image marker only, so a crop stored against a Reel silently did nothing and
+  // the member published the uncropped original believing otherwise. Silently
+  // ignoring a framing decision is the same class of bug as silently dropping
+  // an image.
+  const marker = ['/image/upload/', '/video/upload/'].find((candidate) =>
+    url.includes(candidate),
+  );
+  if (!marker) return url;
 
-  const head = url.slice(0, at + '/image/upload/'.length);
+  const at = url.indexOf(marker);
+  const head = url.slice(0, at + marker.length);
   const directive = `c_crop,w_${w},h_${h},x_${x},y_${y}`;
-  return `${head}${directive}/${url.slice(at + '/image/upload/'.length)}`;
+  return `${head}${directive}/${url.slice(at + marker.length)}`;
 }
 
 /**
@@ -622,6 +818,7 @@ export const mediaService = {
   resolvePostMedia,
   probeImageSize,
   toJpegDeliveryUrl,
+  toVideoPosterUrl,
   applyStoredCrop,
   applyStoredCropValue,
 };

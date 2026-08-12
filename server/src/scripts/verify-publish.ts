@@ -511,11 +511,15 @@ async function verifyMedia() {
   const imageAsset = {
     kind: 'image' as const,
     mimeType: 'image/png',
-    data: PNG_1X1,
+    data: PNG_1X1 as Buffer | null,
     byteLength: PNG_1X1.byteLength,
+    // Where these bytes came from. Required on every asset since the media
+    // model learned about URL-delivered video — an image still carries it, and
+    // for an image it is still the URL the bytes were downloaded from.
+    sourceUrl: 'https://res.cloudinary.com/demo/image/upload/v1/pixel.png',
     width: 1,
     height: 1,
-    altText: 'A single grey pixel',
+    altText: 'A single grey pixel' as string | null,
   };
 
   // ─── Dimension probing ─────────────────────────────────────────────────────

@@ -174,23 +174,17 @@ const MOCK_POST: Post = {
         {
           category: "trending",
           suggestedQuantity: 5,
-          hashtags: [
-            { tag: "skincare", difficultyScore: 88, popularityScore: 96 },
-            { tag: "vitaminc", difficultyScore: 71, popularityScore: 84 },
-          ],
+          hashtags: [{ tag: "skincare" }, { tag: "vitaminc" }],
         },
         {
           category: "niche",
           suggestedQuantity: 8,
-          hashtags: [
-            { tag: "ingredientfirst", difficultyScore: 22, popularityScore: 41 },
-            { tag: "phbalanced", difficultyScore: 18, popularityScore: 33 },
-          ],
+          hashtags: [{ tag: "ingredientfirst" }, { tag: "phbalanced" }],
         },
         {
           category: "branded",
           suggestedQuantity: 2,
-          hashtags: [{ tag: "auroraritual", difficultyScore: 4, popularityScore: 12 }],
+          hashtags: [{ tag: "auroraritual" }],
         },
       ],
     },

@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { ContentType } from './capabilities';
 
 /**
  * The contract every social network integration implements.
@@ -118,6 +119,182 @@ export interface Provider {
    * only authority and a rejection is handled as a publish failure.
    */
   canPublish?(scopes: string[]): boolean;
+
+  /**
+   * Optional. How to read this network's performance data.
+   *
+   * Absent means FlowPost cannot read analytics from this network *at all* —
+   * which today is true only of YouTube, which has no implementation. Absent is
+   * a permanent, honest "no" that the sync service reports as `unsupported`; it
+   * is never a reason to estimate a number instead.
+   *
+   * Present is **not** a promise that analytics will work for a given
+   * connection. X's scopes are granted on every connection, but LinkedIn,
+   * Instagram and Facebook each need a permission behind App Review that a
+   * member can decline and that older connections predate. That case is
+   * {@link ProviderAnalytics.hasRequiredScopes} answering false, and the sync
+   * service reports it as `missing_scopes` — "reconnect to enable analytics".
+   * The two are deliberately different answers because only one of them is
+   * something a member can fix.
+   *
+   * Its own object rather than three more optional methods on `Provider`
+   * because analytics has state the rest of the contract does not: which scopes
+   * it needs, and how far back the network will still answer. Both have to be
+   * readable *without* calling anything, so the API can say "reconnect to
+   * enable analytics" rather than discovering it on a 403.
+   */
+  readonly analytics?: ProviderAnalytics;
+}
+
+/**
+ * What a network can tell us about performance, and what it costs to ask.
+ *
+ * Everything here is provider-neutral: no Prisma types, no table names, no
+ * `SocialAccount`. The adapter takes a token and ids and hands back normalised
+ * numbers — persisting them is `services/analytics-sync.service.ts`'s job, the
+ * same division that keeps `publish` from knowing what a `post_platforms` row
+ * is.
+ */
+export interface ProviderAnalytics {
+  /**
+   * The scopes a connection must actually hold before any call here will work.
+   *
+   * Read from `social_accounts.scopes` — what the member *granted*, which can
+   * be narrower than what we asked for. This is what turns a would-be 403 into
+   * a "Reconnect to enable analytics" before a single request goes out.
+   */
+  readonly requiredScopes: readonly string[];
+
+  /**
+   * How far back post metrics can still be read, in days.
+   *
+   * A hard property of the network, not a policy of ours: X serves organic
+   * metrics for posts from the last 30 days and nothing older, ever. The sync
+   * service uses it to stop asking for posts it can never get an answer for,
+   * which is the difference between a bounded sync and one that re-requests
+   * every post the member has published since they joined.
+   *
+   * Absent means no known limit.
+   */
+  readonly postMetricsMaxAgeDays?: number;
+
+  /**
+   * How many post ids one call may carry. Absent means one per call.
+   */
+  readonly postMetricsBatchSize?: number;
+
+  /** Whether a connection's granted scopes permit reading analytics. */
+  hasRequiredScopes(grantedScopes: string[]): boolean;
+
+  /**
+   * Reads performance for specific published posts.
+   *
+   * Takes the network's own post ids — what `post_platforms.published_id`
+   * holds. Returns one entry per id the network answered for, which may be
+   * *fewer* than were asked for: a deleted post simply does not come back, and
+   * that is a normal outcome rather than an error. Callers must key the result
+   * by `platformPostId` rather than by position.
+   *
+   * Throws only when the call itself failed — a dead token, a rate limit, a
+   * network that is down. A post that returned no data is an absence, not an
+   * exception.
+   */
+  fetchPostMetrics?(
+    input: ProviderMetricsRequest,
+  ): Promise<ProviderPostMetrics[]>;
+
+  /**
+   * Reads the connected account's own audience figures.
+   *
+   * Same rules: throws on a failed call, returns nulls for anything the network
+   * does not report.
+   */
+  fetchAccountMetrics?(
+    input: ProviderAccountMetricsRequest,
+  ): Promise<ProviderAccountMetrics>;
+}
+
+export interface ProviderMetricsRequest {
+  /** Plaintext, decrypted by the caller immediately before the call. */
+  accessToken: string;
+  /** The network's own ids, from `post_platforms.published_id`. */
+  platformPostIds: string[];
+}
+
+export interface ProviderAccountMetricsRequest {
+  accessToken: string;
+  providerAccountId: string;
+}
+
+/**
+ * What a publication is, in provider-neutral terms.
+ *
+ * Deliberately the same seven labels as the `MediaType` enum in the database,
+ * and deliberately *not* imported from the generated Prisma client — providers
+ * must not depend on our schema. `analytics/normalise.ts` holds an exhaustive
+ * mapping between the two, so a value added on either side fails typecheck
+ * rather than silently falling through to OTHER.
+ */
+export type ProviderMediaType =
+  | 'TEXT'
+  | 'IMAGE'
+  | 'VIDEO'
+  | 'CAROUSEL'
+  | 'REEL'
+  | 'STORY'
+  | 'OTHER';
+
+/**
+ * One publication's numbers, normalised.
+ *
+ * **Null is the whole point of this shape.** Every field is optional-and-
+ * nullable, and null carries exactly one meaning: this network did not report
+ * this metric. Adapters must never substitute `0` for an absent field — a post
+ * with no reported reach and a post with a genuine reach of zero are different
+ * facts, and only one of them should be averaged.
+ */
+export interface NormalizedPostMetrics {
+  impressions?: number | null;
+  reach?: number | null;
+  views?: number | null;
+  likes?: number | null;
+  comments?: number | null;
+  shares?: number | null;
+  reposts?: number | null;
+  saves?: number | null;
+  clicks?: number | null;
+  videoViews?: number | null;
+  watchTimeMs?: number | null;
+}
+
+export interface NormalizedAccountMetrics {
+  followers?: number | null;
+  following?: number | null;
+  postCount?: number | null;
+  impressions?: number | null;
+  reach?: number | null;
+  profileViews?: number | null;
+}
+
+export interface ProviderPostMetrics {
+  /** The network's own id. Callers key on this, never on array position. */
+  platformPostId: string;
+  /**
+   * What the network says this post is, or null when it does not say.
+   *
+   * Null is not "text". It means the format is unknown and whatever was
+   * inferred at publish time still stands — see
+   * `post_platforms.media_type_from_platform`.
+   */
+  mediaType: ProviderMediaType | null;
+  metrics: NormalizedPostMetrics;
+  /** The network's untouched response for this post. Stored verbatim. */
+  raw: unknown;
+}
+
+export interface ProviderAccountMetrics {
+  metrics: NormalizedAccountMetrics;
+  raw: unknown;
 }
 
 /** A network's media rules, applied before anything is downloaded. */
@@ -167,7 +344,34 @@ export interface ProviderMediaAsset {
   kind: ProviderMediaKind;
   /** From the response that produced these bytes. Lowercased, no charset. */
   mimeType: string;
-  data: Buffer;
+  /**
+   * The whole asset in memory — or **null**, which is the important case.
+   *
+   * Null means nothing was downloaded, and it is the normal state of a video.
+   * A Reel can be a gigabyte; buffering one to hand Meta a URL it was going to
+   * fetch from Cloudinary anyway is how a publish takes the API process out
+   * with it. Which transport an asset took is declared per content type in
+   * `providers/capabilities.ts`:
+   *
+   *   • `url`     → data is null. The network fetches {@link sourceUrl}.
+   *   • `bytes`   → data is the whole asset. Images only, under a stated
+   *                 ceiling — this is what LinkedIn and X images have always
+   *                 done and it is unchanged.
+   *   • `chunked` → data is null; {@link openStream} yields the bytes a chunk
+   *                 at a time.
+   *
+   * A provider that needs bytes must handle null rather than assume — the type
+   * is what makes forgetting a typecheck failure instead of a crash on the
+   * first large upload.
+   */
+  data: Buffer | null;
+  /**
+   * The asset's size.
+   *
+   * Always real, whether or not {@link data} is present: for a streamed or
+   * URL-delivered asset it comes from Cloudinary's own metadata, which is also
+   * what lets a ceiling be enforced *before* a byte moves.
+   */
   byteLength: number;
   /**
    * The public URL these exact bytes were fetched from.
@@ -191,6 +395,41 @@ export interface ProviderMediaAsset {
   height: number | null;
   /** Accessibility text, or null to omit it. Never an empty string. */
   altText: string | null;
+
+  /**
+   * How long the video runs, or null.
+   *
+   * Null for every still image, and for a video whose duration nothing
+   * reported. It is **never guessed**: the value comes from Cloudinary's
+   * response at upload time, which is the one party that has actually decoded
+   * the file. Parsing an MP4 container in this process to recover it would mean
+   * reading the file we deliberately did not download.
+   *
+   * A null duration is not a validation failure. Every network below re-checks
+   * the file itself, and refusing a publish because *we* could not measure it
+   * would fail posts the network would have accepted.
+   */
+  durationMs?: number | null;
+
+  /**
+   * A still frame for the video, as a URL. Null for images and when none exists.
+   *
+   * Cloudinary derives it on delivery from the stored video — it is not a second
+   * upload and it does not touch the master.
+   */
+  posterUrl?: string | null;
+
+  /**
+   * Opens a byte stream over the asset, for the `chunked` transport.
+   *
+   * Present only on assets whose content type declared `chunked`. The caller
+   * pipes it into the network's multi-part upload and never collects it: the
+   * whole point is that one chunk is resident at a time, so a `for await` that
+   * pushes each piece straight out is the only correct use, and concatenating
+   * the stream into a Buffer would reintroduce exactly the problem this exists
+   * to avoid.
+   */
+  openStream?: () => Promise<NodeJS.ReadableStream>;
 }
 
 /**
@@ -217,6 +456,21 @@ export interface ProviderPublishInput {
    * that fails with a reason.
    */
   media?: ProviderMediaAsset[];
+
+  /**
+   * What the member is publishing this *as*.
+   *
+   * The one thing a provider cannot work out for itself. One video is a REEL, a
+   * STORY or a VIDEO depending on nothing but intent, and inferring it from the
+   * attached media — "it is a video, so it must be a Reel" — is the guess this
+   * field exists to stop.
+   *
+   * Always set by the publish service, which resolves it from what the member
+   * asked for and what the network can carry. See
+   * `publish/services/content-type.ts`; a post that never named one resolves to
+   * exactly what it would have published before this field existed.
+   */
+  contentType: ContentType;
 }
 
 /** What a successful publish reports back. */
@@ -237,6 +491,44 @@ export interface ProviderPublishResult {
   endpoint?: string;
   /** The network's ids for any media attached, in post order. */
   mediaUrns?: string[];
+
+  /**
+   * What actually went out, when it is not what was asked for.
+   *
+   * Absent — the normal case, on every network — means the publish carried
+   * exactly what it was given. `text_only_fallback` means the media was
+   * refused by the network and the text was published without it.
+   *
+   * Optional rather than defaulted so that a provider which does not implement
+   * any fallback cannot accidentally claim one, and so that every existing
+   * publisher is unchanged. Only X sets it today; see
+   * `providers/x/media-fallback.ts`.
+   */
+  publishedAs?: 'full' | 'text_only_fallback';
+
+  /**
+   * Whether media the member attached did not make it onto the publication.
+   *
+   * The flag the rest of the system keys on, kept separate from
+   * {@link publishedAs} because "what was published" and "was something lost"
+   * are different questions and a later fallback mode might answer them
+   * differently.
+   *
+   * **This must never be true without {@link reason} also being set.** Silently
+   * dropping a member's media is the failure mode the whole feature is built to
+   * avoid; a dropped asset that produces no sentence on screen is exactly that
+   * failure wearing a success.
+   */
+  mediaDropped?: boolean;
+
+  /**
+   * Why the media was dropped, written for a member and safe to display.
+   *
+   * Never a status code, an endpoint or anything from the network's response
+   * body — those go to the log. This is rendered beside a post that *did*
+   * publish, so it has to read as a notice rather than an error.
+   */
+  reason?: string;
 }
 
 /**

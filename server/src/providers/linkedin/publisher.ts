@@ -1,5 +1,7 @@
 import axios, { type AxiosResponse } from 'axios';
 import { ProviderError } from '../provider.interface';
+import { capabilityFor, type ContentType } from '../capabilities';
+import { LINKEDIN_MIN_MULTI_IMAGE_ITEMS } from './validator';
 import { linkedinConfig } from './config';
 import {
   buildLegacyMediaPostBody,
@@ -87,11 +89,23 @@ import type {
 export async function publish(
   input: LinkedInPublishInput,
 ): Promise<LinkedInPublishResult> {
+  // The format's rules, resolved here rather than inside the validator — the
+  // validator is what `capabilities.ts` is built from and must not import it
+  // back. See the import note in `validator.ts`.
+  //
+  // A caller that named no content type falls back to the count-based
+  // resolution, which is what publishing did before the field existed.
+  const count = input.media?.length ?? 0;
+  const contentType: ContentType =
+    input.contentType ??
+    (count === 0 ? 'TEXT' : count >= LINKEDIN_MIN_MULTI_IMAGE_ITEMS ? 'CAROUSEL' : 'IMAGE');
+
   // Everything knowable without a network call, checked before we spend one —
   // including on the media, so an unsupported format costs nothing.
   const { caption, media } = validatePost({
     caption: input.caption,
     media: input.media,
+    capability: capabilityFor('linkedin', contentType),
   });
   const authorUrn = toPersonUrn(input.providerAccountId);
 

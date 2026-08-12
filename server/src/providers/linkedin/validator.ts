@@ -1,4 +1,6 @@
 import { ProviderError } from '../provider.interface';
+import { validateAgainstCapability } from '../media-rules';
+import type { ContentTypeCapability } from '../capabilities';
 import type { LinkedInMediaAsset, LinkedInMediaKind } from './types';
 
 /**
@@ -8,6 +10,13 @@ import type { LinkedInMediaAsset, LinkedInMediaKind } from './types';
  * Pure and provider-local: no HTTP, no database. The point is that a post which
  * cannot possibly succeed fails here — with a message a member can act on —
  * rather than as a 422 from LinkedIn that we would then have to translate.
+ *
+ * ─── One import rule ─────────────────────────────────────────────────────────
+ *
+ * This file exports the numbers `providers/capabilities.ts` builds LinkedIn's
+ * capability set from, so it must never import that module back — only its
+ * types, which erase at compile time. The capability a check needs is passed in
+ * by the publisher. See the same note in `providers/x/validator.ts`.
  */
 
 /**
@@ -109,9 +118,33 @@ export const LINKEDIN_MAX_MEDIA_ITEMS = 20;
 /** Below this a post uses `content.media`; at or above it, `content.multiImage`. */
 export const LINKEDIN_MIN_MULTI_IMAGE_ITEMS = 2;
 
+/**
+ * What LinkedIn's Videos API accepts.
+ *
+ * MP4 only. LinkedIn documents other containers for the Vector/Assets surface
+ * this integration does not use, and listing them here would promise a format
+ * the upload path cannot actually carry.
+ */
+export const LINKEDIN_VIDEO_MIME_TYPES = ['video/mp4'] as const;
+
+/**
+ * LinkedIn's documented ceiling for a video upload.
+ *
+ * Unlike {@link LINKEDIN_MAX_IMAGE_BYTES} this is *not* also a heap budget: a
+ * video takes the chunked transport and is streamed from Cloudinary through
+ * LinkedIn's multi-part upload, so no part of it is ever held whole. See
+ * `providers/capabilities.ts`.
+ */
+export const LINKEDIN_MAX_VIDEO_BYTES = 500 * 1024 * 1024;
+
+/** LinkedIn's documented video duration window. */
+export const LINKEDIN_MIN_VIDEO_DURATION_MS = 3_000;
+export const LINKEDIN_MAX_VIDEO_DURATION_MS = 30 * 60 * 1000;
+
 /** Kinds `media.ts` can actually upload right now. */
 const SUPPORTED_MEDIA_KINDS: ReadonlySet<LinkedInMediaKind> = new Set<LinkedInMediaKind>([
   'image',
+  'video',
 ]);
 
 /** Member-facing names for the kinds we do not upload yet. */
@@ -135,6 +168,7 @@ const KIND_LABELS: Record<LinkedInMediaKind, string> = {
  */
 export function validateMedia(
   media: LinkedInMediaAsset[] | undefined,
+  capability?: ContentTypeCapability,
 ): LinkedInMediaAsset[] {
   if (!media || media.length === 0) return [];
 
@@ -147,6 +181,13 @@ export function validateMedia(
     );
   }
 
+  // Format, size and duration, read from the capability rather than restated —
+  // see `providers/media-rules.ts`. This is what lets a video post accept MP4
+  // and an image post refuse it without either rule existing twice.
+  if (capability) {
+    validateAgainstCapability(capability, media, 'linkedin', 'LinkedIn');
+  }
+
   return media.map((asset) => {
     if (!SUPPORTED_MEDIA_KINDS.has(asset.kind)) {
       throw new ProviderError(
@@ -157,47 +198,56 @@ export function validateMedia(
       );
     }
 
-    if (!LINKEDIN_IMAGE_MIME_TYPES.has(asset.mimeType)) {
-      throw new ProviderError(
-        `LinkedIn accepts JPG, PNG and GIF images. This one is ${
-          asset.mimeType || 'an unrecognised format'
-        } — convert it and try again.`,
-        400,
-        'linkedin',
-      );
-    }
+    // The image-only checks. Skipped for video, which the capability above
+    // already checked against LinkedIn's video rules — running an image's
+    // format allow-list over an MP4 would reject every video ever uploaded.
+    if (asset.kind === 'image') {
+      if (!capability && !LINKEDIN_IMAGE_MIME_TYPES.has(asset.mimeType)) {
+        throw new ProviderError(
+          `LinkedIn accepts JPG, PNG and GIF images. This one is ${
+            asset.mimeType || 'an unrecognised format'
+          } — convert it and try again.`,
+          400,
+          'linkedin',
+        );
+      }
 
-    if (asset.byteLength === 0) {
-      throw new ProviderError(
-        "That image file is empty. Re-upload it and try again.",
-        400,
-        'linkedin',
-      );
-    }
+      if (asset.byteLength === 0) {
+        throw new ProviderError(
+          "That image file is empty. Re-upload it and try again.",
+          400,
+          'linkedin',
+        );
+      }
 
-    if (asset.byteLength > LINKEDIN_MAX_IMAGE_BYTES) {
-      throw new ProviderError(
-        `That image is ${formatMegabytes(asset.byteLength)}, over the ` +
-          `${formatMegabytes(LINKEDIN_MAX_IMAGE_BYTES)} limit. Compress it and try again.`,
-        400,
-        'linkedin',
-      );
-    }
+      if (asset.byteLength > LINKEDIN_MAX_IMAGE_BYTES) {
+        throw new ProviderError(
+          `That image is ${formatMegabytes(asset.byteLength)}, over the ` +
+            `${formatMegabytes(LINKEDIN_MAX_IMAGE_BYTES)} limit. Compress it and try again.`,
+          400,
+          'linkedin',
+        );
+      }
 
-    // Null dimensions mean the header could not be read, not that the image is
-    // bad. A GIF with an unusual header should not be blocked by our probe
-    // failing — LinkedIn is the authority on its own limit, and it enforces it.
-    if (
-      asset.width !== null &&
-      asset.height !== null &&
-      asset.width * asset.height >= LINKEDIN_MAX_IMAGE_PIXELS
-    ) {
-      throw new ProviderError(
-        `That image is ${asset.width}×${asset.height}, above LinkedIn's ` +
-          `${LINKEDIN_MAX_IMAGE_PIXELS.toLocaleString()} pixel limit. Resize it and try again.`,
-        400,
-        'linkedin',
-      );
+      // Null dimensions mean the header could not be read, not that the image is
+      // bad. A GIF with an unusual header should not be blocked by our probe
+      // failing — LinkedIn is the authority on its own limit, and it enforces it.
+      //
+      // LinkedIn's own limit, with no equivalent in the capability model
+      // because no other network states one. It stays here rather than becoming
+      // a field every other provider would leave undefined.
+      if (
+        asset.width !== null &&
+        asset.height !== null &&
+        asset.width * asset.height >= LINKEDIN_MAX_IMAGE_PIXELS
+      ) {
+        throw new ProviderError(
+          `That image is ${asset.width}×${asset.height}, above LinkedIn's ` +
+            `${LINKEDIN_MAX_IMAGE_PIXELS.toLocaleString()} pixel limit. Resize it and try again.`,
+          400,
+          'linkedin',
+        );
+      }
     }
 
     const altText = asset.altText?.trim() || null;
@@ -225,9 +275,11 @@ function formatMegabytes(bytes: number): string {
 export function validatePost(input: {
   caption: string | null | undefined;
   media?: LinkedInMediaAsset[];
+  /** LinkedIn's rules for the format being published. Resolved by the publisher. */
+  capability?: ContentTypeCapability;
 }): { caption: string; media: LinkedInMediaAsset[] } {
   const { caption } = validateTextPost({ caption: input.caption });
-  return { caption, media: validateMedia(input.media) };
+  return { caption, media: validateMedia(input.media, input.capability) };
 }
 
 /**

@@ -73,6 +73,23 @@ function strings(value: unknown): string[] | undefined {
   return items.length ? items : undefined;
 }
 
+/**
+ * A `{ provider: contentType }` map from an untrusted body.
+ *
+ * Shape only — every value is a plain string here and the *meaning* is checked
+ * by the service, which is the layer that knows which formats each network
+ * publishes. Undefined when the body carried nothing usable, which is the null
+ * path and the same thing an older client sends.
+ */
+function stringMap(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    (entry): entry is [string, string] => typeof entry[1] === 'string',
+  );
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 router.post(
   '/',
   requireAuth,
@@ -85,6 +102,9 @@ router.post(
         scheduledAt: str(body.scheduledAt) ?? '',
         timezone: str(body.timezone) ?? '',
         ...(strings(body.providers) && { providers: strings(body.providers)! }),
+        ...(stringMap(body.contentTypes) && {
+          contentTypes: stringMap(body.contentTypes)!,
+        }),
       }),
     );
   }),
@@ -125,6 +145,9 @@ router.patch(
         ...(str(body.scheduledAt) && { scheduledAt: str(body.scheduledAt)! }),
         ...(str(body.timezone) && { timezone: str(body.timezone)! }),
         ...(strings(body.providers) && { providers: strings(body.providers)! }),
+        ...(stringMap(body.contentTypes) && {
+          contentTypes: stringMap(body.contentTypes)!,
+        }),
       }),
     );
   }),

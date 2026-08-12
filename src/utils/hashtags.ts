@@ -45,9 +45,15 @@ export function hashtagLimitFor(platforms: readonly string[]): number {
  * The one reader of hashtag state anywhere in the composer: what the analyser
  * scores and what the deduplication below checks are the same text the network
  * will receive, because there is nowhere else for them to disagree.
+ *
+ * `\p{M}` — combining marks — matters and is easy to leave out. Without it this
+ * reads `#दिल्ली` as `द`, because Devanagari vowel signs are marks rather than
+ * letters; the deduplication below would then compare a truncated key and append
+ * a tag the caption already carries. Arabic, Tamil and Thai behave the same way.
+ * The backend's `ai/hashtags/rules.ts` cleans with the same class.
  */
 export function hashtagsIn(caption: string): string[] {
-  return [...caption.matchAll(/#([\p{L}\p{N}_]+)/gu)].map((match) => match[1]);
+  return [...caption.matchAll(/#([\p{L}\p{N}\p{M}_]+)/gu)].map((match) => match[1]);
 }
 
 /**

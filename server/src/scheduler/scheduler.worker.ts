@@ -1,6 +1,7 @@
 import { scheduleRepository, type DueDestination } from '../repositories/schedule.repository';
 import { publishService, PublishError } from '../publish/services/publish.service';
 import { isRetryable, nextAttemptAt, toStoredMessage, MAX_ATTEMPTS } from './retry';
+import { maybeSweepAnalytics, isAnalyticsSyncEnabled } from './analytics-sweep';
 
 /**
  * The scheduler.
@@ -227,6 +228,21 @@ async function safeTick(): Promise<void> {
     console.error('[scheduler] tick failed', {
       error: error instanceof Error ? error.message : error,
     });
+  }
+
+  try {
+    // Analytics rides the same doorbell rather than a second interval — see
+    // `analytics-sweep.ts`. It self-gates to roughly every fifteen minutes, so
+    // this is a cheap comparison on almost every tick.
+    //
+    // Deliberately outside the publish `try` and after it: collecting metrics
+    // must never delay or fail a scheduled publish, and a publish tick that
+    // threw must not skip the sweep.
+    await maybeSweepAnalytics();
+  } catch (error) {
+    console.error('[analytics-sweep] sweep failed', {
+      error: error instanceof Error ? error.message : error,
+    });
   } finally {
     ticking = false;
   }
@@ -250,6 +266,10 @@ export function startScheduler(): void {
     batch: BATCH,
     staleClaimMs: STALE_CLAIM_MS,
     maxAttempts: MAX_ATTEMPTS,
+    // Whether this process will also collect analytics. Logged because the two
+    // are independently switchable and "why is nothing syncing" should be
+    // answerable from the boot line rather than from the environment.
+    analyticsSync: isAnalyticsSyncEnabled(),
   });
 
   void safeTick();

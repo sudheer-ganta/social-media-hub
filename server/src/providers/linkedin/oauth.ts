@@ -10,6 +10,7 @@ import {
   assertContextOwned,
 } from '../../services/account-context';
 import { assertLinkedInConfigured, linkedinConfig } from './config';
+import { linkedinAnalytics } from './analytics';
 import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode } from './token';
 import { verify } from './verify';
@@ -229,4 +230,10 @@ export const linkedinProvider: Provider = {
   // Was a `providerId === 'linkedin'` branch in the publish service. Same
   // check, asked of the provider instead of hardcoded against it.
   canPublish,
+  // Present, but gated on the connection's own scopes rather than on this
+  // being here. `r_member_postAnalytics` is behind App Review and is only
+  // requested where a deployment declares the app approved — so a connection
+  // that never granted it reports `missing_scopes` and is asked to reconnect,
+  // which is the honest answer and not a row of zeros.
+  analytics: linkedinAnalytics,
 };

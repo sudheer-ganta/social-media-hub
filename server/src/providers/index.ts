@@ -29,6 +29,22 @@ export {
   type ProviderPermission,
   type ProviderMediaCapability,
 } from './catalog';
+export {
+  CONTENT_TYPES,
+  PROVIDER_CAPABILITIES,
+  acceptedMimeTypes,
+  capabilitiesFor,
+  capabilityFor,
+  isContentType,
+  maxItemsFor,
+  supportedContentTypes,
+  type AspectRatioRange,
+  type ContentType,
+  type ContentTypeCapability,
+  type MediaConstraints,
+  type MediaTransport,
+  type ProviderCapabilities,
+} from './capabilities';
 
 /**
  * The provider registry. Routes resolve implementations through here rather

@@ -7,13 +7,24 @@ import { ProviderError, type Provider, type ProviderId } from '../../providers';
 // every read. Instagram's cannot — see `resolvePlatformUrl`.
 import { toPostUrl } from '../../providers/linkedin/formatter';
 import { resolvePostMedia, MediaResolutionError } from './media.service';
+import { resolveContentType, type ResolverMediaItem } from './content-type';
+import { capabilitiesFor, type MediaTransport } from '../../providers/capabilities';
+// What was uploaded, mapped to a normalised format. An inference until the
+// first metrics sync hears the network's own answer — see the call site.
+import { inferMediaTypeFromUpload } from '../../analytics/normalise';
+import { analyticsSyncService } from '../../services/analytics-sync.service';
 import {
   refreshAccountTokens,
   isExpiringSoon,
   TOKEN_REFRESH_SKEW_MS,
 } from '../../services/token-refresh';
-import { PostStatus, SocialAccountStatus } from '../../generated/prisma/enums';
+import {
+  MediaType,
+  PostStatus,
+  SocialAccountStatus,
+} from '../../generated/prisma/enums';
 import type { Post } from '../../generated/prisma/client';
+import { PublishError } from './publish-error';
 
 /**
  * Publishing a draft to a social network.
@@ -36,18 +47,10 @@ import type { Post } from '../../generated/prisma/client';
  *     {@link toMemberFacingError} decides what the member reads instead.
  */
 
-/** A publish failure with a message written for a member. */
-export class PublishError extends Error {
-  constructor(
-    message: string,
-    readonly status = 400,
-    /** Set when the post should be left as-is rather than marked FAILED. */
-    readonly leavesPostUnchanged = false,
-  ) {
-    super(message);
-    this.name = 'PublishError';
-  }
-}
+// Lives in its own module because the content-type resolver and the media rules
+// both raise it and are imported *by* this file — see `publish-error.ts`.
+// Re-exported so every existing importer is untouched.
+export { PublishError } from './publish-error';
 
 /** What a successful publish reports back to the controller. */
 export interface PublishResult {
@@ -59,6 +62,22 @@ export interface PublishResult {
   /** A permalink, or null when one cannot be constructed. */
   url: string | null;
   publishedAt: string;
+
+  /**
+   * What went out, when it is not what was composed.
+   *
+   * `text_only_fallback` means the network refused the attached media and the
+   * text was published without it — see `providers/x/media-fallback.ts`.
+   * Absent on every ordinary publish.
+   */
+  publishedAs?: 'full' | 'text_only_fallback';
+  /** True when media the member attached is not on the publication. */
+  mediaDropped?: boolean;
+  /**
+   * Why, written for a member. Present whenever {@link mediaDropped} is true —
+   * the whole point is that nothing is dropped silently.
+   */
+  reason?: string;
 }
 
 /**
@@ -89,6 +108,16 @@ export interface PublishOptions {
    * flag is deliberately the only thing it may vary.
    */
   preClaimed?: boolean;
+
+  /**
+   * What the member chose to publish this as, on this network.
+   *
+   * Set by a manual publish, where the composer's current choice is newer than
+   * anything stored. Absent for the scheduler, which reads what was recorded
+   * when the schedule was armed — and absent for every post that predates the
+   * choice existing, which is the case the whole resolver is built around.
+   */
+  contentType?: string | null;
 }
 
 export async function publishPost(
@@ -187,11 +216,67 @@ export async function publishPost(
 
     const caption = resolveCaption(post);
 
+    // 5½. What this post is being published *as*, before anything is fetched.
+    //
+    // Resolved here rather than in the provider because it is the one decision
+    // that depends on both the member's intent and the network's capabilities,
+    // and because the answer decides how the media is fetched a line later — a
+    // Reel must not take the download path an image takes.
+    //
+    // A destination with no stored `content_type` resolves exactly as it did
+    // before this column existed: no media is a text post, one item an image,
+    // several a carousel. Every post already in the database and every schedule
+    // already queued takes that branch. See `content-type.ts`.
+    // What the member asked for wins over what is stored — a manual publish
+    // carries the composer's current choice, and the stored value is what a
+    // *scheduled* post recorded when it was armed. Neither invents one: absent
+    // on both sides is the null path, and the null path is today's behaviour.
+    const platformRow = await postRepository.findPlatformForPost(
+      postId,
+      providerId,
+    );
+    const requestedContentType = options.contentType ?? platformRow?.contentType;
+
+    // ── TEMPORARY DIAGNOSTIC (remove after Reel regression is resolved) ─────
+    console.log('[publish:diag] received', {
+      postId,
+      provider: providerId,
+      // What the controller read from req.body.contentType
+      optionsContentType: options.contentType ?? null,
+      // What was stored on the platform row from a previous attempt
+      platformRowContentType: platformRow?.contentType ?? null,
+      // The winner — what resolveContentType will be called with
+      requestedContentType: requestedContentType ?? null,
+      mediaKinds: readMediaKinds(post).map((m) => m.kind),
+      mediaCount: readMediaKinds(post).length,
+    });
+    // ── END TEMPORARY DIAGNOSTIC ────────────────────────────────────────────
+
+    const { contentType, capability, explicit } = resolveContentType(
+      requestedContentType,
+      readMediaKinds(post),
+      capabilitiesFor(providerId),
+      networkName,
+    );
+
+    // ── TEMPORARY DIAGNOSTIC (remove after Reel regression is resolved) ─────
+    console.log('[publish:diag] resolved', {
+      postId,
+      provider: providerId,
+      requestedContentType: requestedContentType ?? null,
+      resolvedContentType: contentType,
+      explicit,
+      capabilityLabel: capability?.label ?? null,
+      capabilityHasVideo: Boolean(capability?.video),
+      capabilityHasImage: Boolean(capability?.image),
+    });
+    // ── END TEMPORARY DIAGNOSTIC ────────────────────────────────────────────
+
     // 6. Media, if the draft has any. Resolved *here* rather than inside the
     // provider: fetching a member-supplied URL is a security-sensitive step
     // that must have one implementation across every network, and providers
     // take bytes. See `media.service.ts`.
-    const media = await resolveMedia(post, caption, provider);
+    const media = await resolveMedia(post, caption, provider, capability?.transport);
 
     // 7–8. One call whether or not there is media — the provider branches, and
     // this layer never learns which of LinkedIn's endpoints answered. Validation
@@ -202,17 +287,48 @@ export async function publishPost(
       providerAccountId: account.providerAccountId,
       caption,
       media,
+      contentType,
     });
 
     // 9–10. The two writes that make the publish real. The permalink is stored
     // alongside the id because some networks — Instagram among them — return a
     // URL that cannot be reconstructed from the id afterwards.
-    await postRepository.markPlatformPublished(
-      postId,
-      providerId,
-      result.urn,
-      result.url,
-    );
+    //
+    // The connection and the format are recorded here for the same reason: both
+    // are knowable now and neither can be recovered later. A reconnect replaces
+    // the `social_accounts` row, and nothing about a published post says what
+    // format it went out as. The media type is an *inference* from the upload
+    // — the network has not been asked — so the first analytics sync is free to
+    // correct it. See `analytics/normalise.ts`.
+    await postRepository.markPlatformPublished(postId, providerId, result.urn, {
+      permalink: result.url,
+      socialAccountId: account.id,
+      // What this publication *is*, as best we can tell without asking the
+      // network. An explicit choice is the better inference and is used when
+      // there is one: a post the member published as a Reel is a REEL, where
+      // guessing from the upload could only ever say VIDEO. Still recorded as
+      // an inference (`media_type_from_platform` stays false), so the first
+      // analytics sync is free to correct it.
+      // A publication whose media the network refused is a text post *on that
+      // network*, whatever was composed. Recording the requested format here
+      // would tell analytics this account publishes Reels that get no video
+      // engagement. The member's own request survives in `contentType` below,
+      // which is exactly the requested-vs-observed split this pair exists for.
+      mediaType: result.mediaDropped
+        ? MediaType.TEXT
+        : explicit
+          ? (contentType as MediaType)
+          : inferMediaTypeFromUpload(post.media),
+      // Only what was actually *asked for*. An inferred type is not recorded:
+      // writing "IMAGE" onto a row whose member never chose a format would turn
+      // a resolution rule into a claim about a decision nobody made, and would
+      // make "requested vs observed" meaningless for exactly the rows where the
+      // two are most likely to differ. Null stays null.
+      contentType: explicit ? contentType : null,
+      // Null on the overwhelming majority of publishes, and cleared by any
+      // later clean retry.
+      notice: result.reason ?? null,
+    });
     const publishedAt = new Date();
     await postRepository.updateStatus(postId, PostStatus.PUBLISHED, {
       publishedAt,
@@ -236,6 +352,16 @@ export async function publishPost(
       mediaCount: result.mediaUrns?.length ?? 0,
     });
 
+    // 12. A first analytics reading, so the member does not open the post and
+    // find "collecting" for an hour on a network that would have answered now.
+    //
+    // Deliberately **not awaited**, and last. The publish is complete and
+    // recorded above this line: there is no path from a failed read back to a
+    // failed publish, and none from a slow one back to a slow response. This is
+    // the whole reason it is a detached call rather than a step — the cadence
+    // does the real work, and this only fills the first hour.
+    analyticsSyncService.scheduleFirstObservation(account.id);
+
     return {
       postId,
       provider: providerId,
@@ -243,6 +369,17 @@ export async function publishPost(
       publishedId: result.urn,
       url: result.url,
       publishedAt: publishedAt.toISOString(),
+      // Carried straight through to the browser so a member pressing Publish
+      // is told immediately, rather than discovering the missing image later.
+      // The scheduler has no response to read, which is why the same sentence
+      // is also persisted as `post_platforms.notice`.
+      ...(result.mediaDropped
+        ? {
+            publishedAs: result.publishedAs ?? 'text_only_fallback',
+            mediaDropped: true,
+            ...(result.reason ? { reason: result.reason } : {}),
+          }
+        : {}),
     };
   } catch (error) {
     await recordFailure(userId, post, providerId, networkName, error);
@@ -429,6 +566,38 @@ async function markConnectionExpired(accountId: string): Promise<void> {
  * the provenance record of what was suggested. Falling back to it covers a post
  * generated and approved without ever being opened in the editor.
  */
+/**
+ * What is attached, as much of it as the content-type resolver needs.
+ *
+ * Deliberately count-and-kind only. `posts.media` is browser-written JSON that
+ * has been through more than one shape, so a malformed entry is skipped rather
+ * than trusted — the same rule `media.service.ts` reads it by, for the same
+ * reason. Anything without a `type` of `"video"` is an image, which is every
+ * row written before the uploader accepted video.
+ */
+function readMediaKinds(post: Post): ResolverMediaItem[] {
+  if (!Array.isArray(post.media)) {
+    // No media array at all: a post from before that column, which carries at
+    // most the one `image_url`. Exactly what the media service resolves it to.
+    return post.image_url?.trim() ? [{ kind: 'image' }] : [];
+  }
+
+  const items: ResolverMediaItem[] = [];
+  for (const entry of post.media) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.url !== 'string' || !record.url.trim()) continue;
+    items.push({
+      kind: record.type === 'video' ? 'video' : 'image',
+      mimeType:
+        typeof record.mimeType === 'string'
+          ? record.mimeType.toLowerCase()
+          : undefined,
+    });
+  }
+  return items;
+}
+
 function resolveCaption(post: Post): string {
   const edited = post.caption?.trim();
   if (edited) return edited;
@@ -448,7 +617,12 @@ function resolveCaption(post: Post): string {
  * called, so LinkedIn has seen nothing and the claim is handed back for a retry
  * rather than the post being marked FAILED.
  */
-async function resolveMedia(post: Post, caption: string, provider: Provider) {
+async function resolveMedia(
+  post: Post,
+  caption: string,
+  provider: Provider,
+  transport?: MediaTransport,
+) {
   try {
     // The format and size rules are the *network's*, taken from the provider —
     // LinkedIn accepts JPEG, PNG and GIF, Instagram JPEG only.
@@ -458,6 +632,9 @@ async function resolveMedia(post: Post, caption: string, provider: Provider) {
       // Which network is being published to, so this network's stored framing
       // is the one delivered. A post with no framing is unaffected.
       providerId: provider.id,
+      // Video only — see the parameter's own note. Images are unaffected by
+      // this on every network.
+      transport,
     });
   } catch (error) {
     if (error instanceof MediaResolutionError) {
@@ -554,6 +731,22 @@ function toMemberFacingError(error: unknown, networkName: string): PublishError 
           `${networkName} rejected the connection. Reconnect your account and try again.`,
           400,
         );
+      // The network is up, the token is fine, and the API plan has run out.
+      // X answers `402 credits depleted` on `POST /2/tweets` once a pay-per-use
+      // balance is spent — reads and media uploads keep working, so the first
+      // thing that fails is publishing.
+      //
+      // Without this case it fell to `default`, which says "couldn't be
+      // reached — try again in a moment". Every word of that is wrong here:
+      // the network *was* reached, waiting changes nothing, and a member who
+      // retries spends another upload against a balance that is already empty.
+      // A billing problem has to name itself or it gets debugged as an outage.
+      case 402:
+        return new PublishError(
+          `${networkName} declined the post because the API plan has no credit left. ` +
+            `Top up the ${networkName} developer account, then publish again.`,
+          402,
+        );
       case 422:
         return new PublishError(
           `${networkName} wouldn't accept this post. Try editing the caption and publishing again.`,
@@ -599,6 +792,15 @@ export async function getPublishState(
     publishedId: string | null;
     url: string | null;
     errorMessage: string | null;
+    /**
+     * A notice about a publication that *succeeded* — today, only that the
+     * network refused the attached media and the text went out alone.
+     *
+     * Separate from `errorMessage` because the row is PUBLISHED and the post is
+     * live; rendering this where failures are rendered would report a broken
+     * publish that is not broken.
+     */
+    notice: string | null;
   }>;
 }> {
   const post = await postRepository.findByIdForUser(postId, userId);
@@ -619,6 +821,9 @@ export async function getPublishState(
       url: resolvePlatformUrl(platform),
       // Already member-facing: only translated messages are ever stored here.
       errorMessage: platform.errorMessage,
+      // Likewise composed for a member by the provider, and never carrying a
+      // status code or a response body.
+      notice: platform.notice,
     })),
   };
 }
@@ -650,3 +855,9 @@ function resolvePlatformUrl(platform: {
 }
 
 export const publishService = { publishPost, getPublishState };
+
+// Exported for the unit tests. `toMemberFacingError` is the one function here
+// that is pure — a provider failure in, a member's sentence out — and it is
+// where the mapping bugs live, so it is worth testing without standing up a
+// post, a connection and a network.
+export const __testables = { toMemberFacingError };

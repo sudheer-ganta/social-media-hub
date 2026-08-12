@@ -112,14 +112,26 @@ function measuredLines(measured: MeasuredStyle): string[] {
  * know yet" than by a personality confidently inferred from four posts, which
  * they would recognise as wrong immediately.
  */
-export function renderStyleSection(profile: StyleProfile | null): string | null {
+export function renderStyleSection(
+  profile: StyleProfile | null,
+  /**
+   * The heading, so a brand's learned voice is not introduced as a person's.
+   *
+   * Only the heading changes between the two. Every line below is a statement
+   * about observed writing behaviour — how long, how punctuated, how often an
+   * emoji — and reads correctly whether the writer is a person or an account.
+   * Forking the sentences as well would be two renderers to keep in step for no
+   * gain, which is the mistake this file's header warns about.
+   */
+  heading = '## How this person posts',
+): string | null {
   if (!profile || profile.confidence === 'none') return null;
 
   const behaviour = profile.global.behaviour;
   const situational = profile.situational[0];
 
   const lines = [
-    '## How this person posts',
+    heading,
     ...measuredLines(profile.global.measured),
 
     behaviour && `- Brevity: ${behaviour.brevity}`,

@@ -8,6 +8,13 @@ import {
   refreshStyleProfileInBackground,
 } from '../style/profile.service';
 import { situationForRequest } from '../style/retrieve';
+// A service import from a generator, which is the layering this module otherwise
+// avoids. It is the same exception `style/profile.service.ts` already makes for
+// its repositories: the evidence lives in the database, the generator is the only
+// place that knows a generation is happening, and the alternative — threading a
+// pre-loaded profile down through the route and the service — would put analytics
+// plumbing in three files to keep one import out of this one.
+import { loadBrandIntelligence } from '../../services/brand-intelligence.service';
 import type {
   BrandProfile,
   CaptionRequest,
@@ -282,8 +289,43 @@ export async function generateCaption(
   // ── Brand Intelligence: reconcile what the brand said with what was seen ──
   const brand = resolveBrandProfile({ brand: request.brandVoice, imageAnalysis: analysis });
 
+  // ── Brand memory ──────────────────────────────────────────────────────────
+  //
+  // The same style pipeline Personal uses, scoped to this brand instead of to
+  // the member. That scoping is what keeps the two apart: `style_profiles` is
+  // keyed on (user, context, brand) and `findHistory` filters on the same three,
+  // so a brand learns only from its own captions — never from the member's
+  // personal posts, and never from another brand of theirs.
+  //
+  // Reusing the pipeline rather than building a second one is deliberate. What a
+  // profile records is *writing behaviour* — length, casing, punctuation, emoji
+  // habit, how much context is assumed — and those are the same measurements
+  // whether the writer is a person or an account. Only the heading differs.
+  const brandScope = {
+    userId: request.userId,
+    contextType: 'brand' as const,
+    brandId: request.brandId ?? null,
+  };
+
+  const situation = situationForRequest(analysis, request.title ?? request.topic);
+
+  // Both reads are cheap and neither can fail the generation: style memory
+  // swallows its own errors, and so does the performance loader. A brand with no
+  // history gets nulls and the prompt renders without those sections, exactly as
+  // it did before either existed.
+  const [style, intelligence] = await Promise.all([
+    loadStyleContext(brandScope, situation, '## How this account actually writes'),
+    loadBrandIntelligence(brandScope),
+  ]);
+
   // ── Stage two: write from what it saw ─────────────────────────────────────
-  const built = buildCaptionPrompt(request, { imageAnalysis: analysis, brand });
+  const built = buildCaptionPrompt(request, {
+    imageAnalysis: analysis,
+    brand,
+    styleSection: style.section,
+    evidenceSection: style.evidence,
+    performanceSection: intelligence.performanceSection,
+  });
 
   const payload = (await provider.generateJson({
     systemInstruction: built.systemInstruction,
@@ -322,6 +364,11 @@ export async function generateCaption(
   const caption = variations[0].caption;
   const angles = normaliseAngles(payload, request);
   const songSuggestions = normaliseSongSuggestions(payload, request);
+
+  // After the response is composed, never before it — the same rule the personal
+  // branch keeps. Rebuilding a brand's profile reads its posts and makes a model
+  // call, and nobody should wait for that to get a caption. Nothing awaits this.
+  refreshStyleProfileInBackground(brandScope, lightProvider ?? provider, style.signals);
 
   return {
     caption,

@@ -103,6 +103,38 @@ export const env = {
 
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY || '',
 
+  // ── Analytics permissions ──────────────────────────────────────────────────
+  //
+  // Which networks may ask for their read-insights scope, comma-delimited —
+  // e.g. `instagram,linkedin`. Empty, the default, means none of them do and
+  // FlowPost reads analytics from X only.
+  //
+  // In the environment rather than hardcoded because requesting a scope the app
+  // is **not approved for** does not degrade, it fails the whole authorization:
+  // LinkedIn answers `unauthorized_scope_error` and Meta rejects the login
+  // outright. So an unapproved deployment that hardcoded these would lose
+  // *publishing* too — every connect button broken, to enable a read.
+  //
+  // The flag therefore tracks App Review, not intent. Turn a network on here
+  // once its permission is granted on the app; existing connections then pick
+  // the scope up when a member reconnects, and `hasRequiredScopes` reports the
+  // ones that have not as "reconnect to enable analytics" rather than as zero.
+  ANALYTICS_SCOPES: process.env.ANALYTICS_SCOPES || '',
+
+  // ── Best-time engine ───────────────────────────────────────────────────────
+  //
+  // How many measured publications a personalised posting time needs before it
+  // is offered at all, and before it may be called a strong signal.
+  //
+  // In the environment because they are a *product* judgement about how much
+  // evidence is enough, not a fact about the data — and because the honest
+  // number is only learnable by watching real accounts. Lowering them makes the
+  // engine talk sooner and less reliably; raising them makes it stay quiet
+  // longer. Nothing in the codebase hardcodes either value: both flow into
+  // `analytics/timing.ts` as `TimingGates`, whose defaults these override.
+  BEST_TIME_MIN_EARLY: process.env.BEST_TIME_MIN_EARLY || '',
+  BEST_TIME_MIN_STRONG: process.env.BEST_TIME_MIN_STRONG || '',
+
   // AI generation. The Gemini key is read here and used only by
   // `src/ai/providers/gemini.provider.ts` — it is never returned by an
   // endpoint and never reaches the browser.

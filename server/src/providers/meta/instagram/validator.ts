@@ -1,6 +1,18 @@
 import { ProviderError } from '../../provider.interface';
 import { INSTAGRAM_PUBLISH_SCOPE } from './config';
+import { validateAgainstCapability } from '../../media-rules';
+import type { ContentTypeCapability } from '../../capabilities';
+import type { ProviderMediaAsset } from '../../provider.interface';
 import type { InstagramMediaAsset } from './types';
+
+/*
+ * ─── One import rule ─────────────────────────────────────────────────────────
+ *
+ * This file exports the numbers `providers/capabilities.ts` builds Instagram's
+ * capability set from, so it must never import that module back. The capability
+ * a check needs is passed in by the publisher. See the same note in
+ * `providers/x/validator.ts` for what a cycle here would actually do.
+ */
 
 /**
  * What Instagram will and will not accept, checked before we spend a request on
@@ -58,6 +70,35 @@ export const INSTAGRAM_MAX_MEDIA_ITEMS = 10;
 
 /** Below this a post is a single image, not a carousel. Meta's minimum is 2. */
 export const INSTAGRAM_MIN_CAROUSEL_ITEMS = 2;
+
+/**
+ * What a REELS or STORIES container will accept as video.
+ *
+ * The same two formats for both, because it is the same edge: `/{ig-id}/media`
+ * with a `video_url` and a `media_type`. Meta fetches the file itself, so these
+ * are checked against what Cloudinary reports rather than against bytes we
+ * downloaded — see the `url` transport in `providers/capabilities.ts`.
+ */
+export const INSTAGRAM_VIDEO_MIME_TYPES = [
+  'video/mp4',
+  'video/quicktime',
+] as const;
+
+/** Meta's documented ceiling for a Reel or Story video. */
+export const INSTAGRAM_MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
+
+/** Meta's documented Reel duration window. */
+export const INSTAGRAM_MIN_REEL_DURATION_MS = 3_000;
+export const INSTAGRAM_MAX_REEL_DURATION_MS = 15 * 60 * 1000;
+
+/**
+ * Meta's documented ceiling for a Story video.
+ *
+ * A minute, against a Reel's fifteen. The two are genuinely different products
+ * on one endpoint, which is exactly why they are two capability entries rather
+ * than one with a flag.
+ */
+export const INSTAGRAM_MAX_STORY_DURATION_MS = 60_000;
 
 /** Meta's ceiling for the `alt_text` field on a container. */
 export const INSTAGRAM_MAX_ALT_TEXT_LENGTH = 1000;
@@ -123,6 +164,7 @@ export function validateCaption(caption: string | null | undefined): string {
  */
 export function validateMedia(
   media: InstagramMediaAsset[] | undefined,
+  capability?: ContentTypeCapability,
 ): InstagramMediaAsset[] {
   if (!media || media.length === 0) return [];
 
@@ -135,51 +177,69 @@ export function validateMedia(
     );
   }
 
+  // Format, size, duration and aspect ratio, read from the capability rather
+  // than restated here. This is what makes a Reel accept an MP4 and a feed post
+  // refuse one *without* either rule being written twice — see
+  // `providers/media-rules.ts`.
+  //
+  // Absent means a caller that predates content types. Those get the
+  // image-only checks below, which is exactly what they got before.
+  if (capability) {
+    validateAgainstCapability(
+      capability,
+      media as unknown as ProviderMediaAsset[],
+      'instagram',
+      'Instagram',
+    );
+  } else {
+    for (const asset of media) {
+      if (asset.kind !== 'image') {
+        throw new ProviderError(
+          'Choose Reel or Story before publishing video to Instagram.',
+          400,
+          'instagram',
+        );
+      }
+      if (!INSTAGRAM_IMAGE_MIME_TYPES.has(asset.mimeType)) {
+        throw new ProviderError(
+          `Instagram only accepts JPEG images. This one is ${
+            asset.mimeType || 'an unrecognised format'
+          } — convert it to JPEG and try again.`,
+          400,
+          'instagram',
+        );
+      }
+      if (asset.byteLength === 0) {
+        throw new ProviderError(
+          'That image file is empty. Re-upload it and try again.',
+          400,
+          'instagram',
+        );
+      }
+      if (asset.byteLength > INSTAGRAM_MAX_IMAGE_BYTES) {
+        throw new ProviderError(
+          `That image is ${formatMegabytes(asset.byteLength)}, over Instagram's ` +
+            `${formatMegabytes(INSTAGRAM_MAX_IMAGE_BYTES)} limit. Compress it and try again.`,
+          400,
+          'instagram',
+        );
+      }
+    }
+  }
+
   return media.map((asset) => {
-    if (asset.kind !== 'image') {
-      throw new ProviderError(
-        `${asset.kind === 'video' ? 'Videos' : 'That media'} can't be published to Instagram from ` +
-          'FlowPost yet. Publish this post with an image instead.',
-        400,
-        'instagram',
-      );
-    }
-
-    if (!INSTAGRAM_IMAGE_MIME_TYPES.has(asset.mimeType)) {
-      throw new ProviderError(
-        `Instagram only accepts JPEG images. This one is ${
-          asset.mimeType || 'an unrecognised format'
-        } — convert it to JPEG and try again.`,
-        400,
-        'instagram',
-      );
-    }
-
-    if (asset.byteLength === 0) {
-      throw new ProviderError(
-        'That image file is empty. Re-upload it and try again.',
-        400,
-        'instagram',
-      );
-    }
-
-    if (asset.byteLength > INSTAGRAM_MAX_IMAGE_BYTES) {
-      throw new ProviderError(
-        `That image is ${formatMegabytes(asset.byteLength)}, over Instagram's ` +
-          `${formatMegabytes(INSTAGRAM_MAX_IMAGE_BYTES)} limit. Compress it and try again.`,
-        400,
-        'instagram',
-      );
-    }
-
     // Meta fetches this URL from its own servers, so it has to be reachable
     // from the public internet. A URL we could download from usually is — but
     // a signed or short-lived one may not be by the time Meta gets to it, and
     // a non-HTTPS one is rejected outright.
+    //
+    // Truer of video than of images, not less: a Reel is never downloaded here
+    // at all, so this check is the *only* thing standing between an unreachable
+    // address and a container that fails minutes later on Meta's side.
     if (!/^https:\/\//i.test(asset.sourceUrl)) {
       throw new ProviderError(
-        "Instagram needs the image at a public HTTPS address and this post's " +
-          'image is not on one. Re-upload the image and try again.',
+        `Instagram needs the ${asset.kind === 'video' ? 'video' : 'image'} at a ` +
+          "public HTTPS address and this post's is not on one. Re-upload it and try again.",
         400,
         'instagram',
       );
@@ -206,9 +266,19 @@ export function validateMedia(
 export function validatePost(input: {
   caption: string | null | undefined;
   media?: InstagramMediaAsset[];
+  /** Instagram's rules for the format being published. Resolved by the publisher. */
+  capability?: ContentTypeCapability;
 }): { caption: string; media: InstagramMediaAsset[] } {
-  const caption = validateCaption(input.caption);
-  const media = validateMedia(input.media);
+  // A Story container ignores `caption` entirely, so a member who typed one has
+  // not written something too long — they have written something Instagram will
+  // not carry. Refusing it for length would be the wrong complaint; the
+  // composer is what tells them a Story takes no caption, and the publisher
+  // simply does not send it.
+  const caption =
+    input.capability?.maxCaptionLength === 0
+      ? ''
+      : validateCaption(input.caption);
+  const media = validateMedia(input.media, input.capability);
 
   if (media.length === 0) {
     throw new ProviderError(

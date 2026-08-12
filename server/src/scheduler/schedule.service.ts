@@ -1,6 +1,8 @@
 import { scheduleRepository, type ScheduledPostRow } from '../repositories/schedule.repository';
 import { socialAccountRepository } from '../repositories/social-account.repository';
 import { getProvider, getCatalogEntry, isKnownProvider } from '../providers';
+import { capabilityFor, isContentType } from '../providers/capabilities';
+import type { MediaType } from '../generated/prisma/enums';
 import { activityService, ActivityAction } from '../services/activity.service';
 import { PostStatus, PublishStatus, SocialAccountStatus } from '../generated/prisma/enums';
 import { ScheduleError } from './errors';
@@ -46,6 +48,15 @@ export interface CreateScheduleInput {
   timezone: string;
   /** Networks to publish to. Defaults to the post's own `platforms` column. */
   providers?: string[];
+  /**
+   * What to publish as, per network — `{ "instagram": "REEL" }`.
+   *
+   * Recorded on the destination rows so the worker, running hours later with no
+   * composer to ask, publishes what the member actually chose. Omitting it, or
+   * omitting one network, is the null path: that destination resolves its
+   * format from the media count exactly as every post did before this existed.
+   */
+  contentTypes?: Record<string, string>;
 }
 
 // ─── shapes the API returns ──────────────────────────────────────────────────
@@ -117,6 +128,7 @@ export async function createSchedule(
     providers,
     scheduledAt,
     input.timezone,
+    resolveContentTypes(providers, input.contentTypes),
   );
 
   // Audit. Never allowed to fail a schedule that is already armed.
@@ -146,7 +158,12 @@ export async function createSchedule(
 export async function updateSchedule(
   userId: string,
   postId: string,
-  input: Partial<Pick<CreateScheduleInput, 'scheduledAt' | 'timezone' | 'providers'>>,
+  input: Partial<
+    Pick<
+      CreateScheduleInput,
+      'scheduledAt' | 'timezone' | 'providers' | 'contentTypes'
+    >
+  >,
 ): Promise<ScheduledPostView> {
   const post = await loadOwnedPost(postId, userId);
   assertSchedulable(post);
@@ -169,7 +186,13 @@ export async function updateSchedule(
   if (input.providers || post.status !== PostStatus.SCHEDULED) {
     assertPublishableContent(post);
     const providers = await resolveDestinations(userId, post, input.providers);
-    await scheduleRepository.armSchedule(post.id, providers, scheduledAt, timezone);
+    await scheduleRepository.armSchedule(
+      post.id,
+      providers,
+      scheduledAt,
+      timezone,
+      resolveContentTypes(providers, input.contentTypes),
+    );
     return getSchedule(userId, post.id);
   }
 
@@ -576,6 +599,40 @@ function toView(row: ScheduledPostRow): ScheduledPostView {
       publishedAt: destination.publishedAt?.toISOString() ?? null,
     })),
   };
+}
+
+/**
+ * The per-network formats to record, keeping only what this network can carry.
+ *
+ * Two filters, and both are refusals rather than corrections. A value that is
+ * not one of the six is dropped, and so is one this network does not publish —
+ * a `REEL` aimed at Facebook, say. Dropping means the destination falls back to
+ * the count-based resolution, which is a format that will publish, rather than
+ * being armed with one guaranteed to fail hours later when nobody is watching.
+ *
+ * The composer should never send either, because it is built from these same
+ * capabilities. This is the server not trusting that.
+ */
+function resolveContentTypes(
+  providers: string[],
+  requested: Record<string, string> | undefined,
+): Record<string, MediaType> {
+  if (!requested) return {};
+
+  const resolved: Record<string, MediaType> = {};
+  for (const provider of providers) {
+    const value = requested[provider];
+    if (!isContentType(value)) continue;
+    if (!capabilityFor(provider, value)) {
+      console.warn('[schedule] ignoring a format this network cannot publish', {
+        provider,
+        contentType: value,
+      });
+      continue;
+    }
+    resolved[provider] = value as MediaType;
+  }
+  return resolved;
 }
 
 export const scheduleService = {

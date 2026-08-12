@@ -94,4 +94,12 @@ import scheduledPostsRoutes from './scheduler/scheduled-posts.routes';
 
 app.use('/api/scheduled-posts', scheduledPostsRoutes);
 
+// Real analytics. The browser never calls Instagram, Facebook, X or LinkedIn
+// for metrics — it reads what the sync service already collected and stored,
+// scoped to one publishing context that this router proves the caller owns.
+// See routes/analytics.routes.ts.
+import analyticsRoutes from './routes/analytics.routes';
+
+app.use('/api/analytics', analyticsRoutes);
+
 export default app;

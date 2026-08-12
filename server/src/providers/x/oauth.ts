@@ -8,6 +8,7 @@ import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode, refreshAccessToken } from './token';
 import { verify } from './verify';
 import { publish } from './publisher';
+import { xAnalytics } from './analytics';
 import {
   canPublish,
   X_IMAGE_MIME_TYPES,
@@ -221,4 +222,10 @@ export const xProvider: Provider = {
     maxItems: X_MAX_MEDIA_ITEMS,
   },
   canPublish,
+  // The one network whose analytics work without a reconnect: `tweet.read` and
+  // `users.read` have been asked for since before analytics existed and are
+  // exactly what X's metrics endpoints need. The other three providers now have
+  // adapters too, each gated on a permission behind App Review — see
+  // `providers/analytics-scopes.ts`.
+  analytics: xAnalytics,
 };

@@ -8,6 +8,7 @@ import { aiService, AiError, AiProviderError } from '../services/ai.service';
  *   GET  /api/ai/status    is generation available on this server?
  *   POST /api/ai/caption   write captions for one post brief
  *   POST /api/ai/analyse   score a caption before it is published
+ *   POST /api/ai/hashtags  choose hashtags for the caption as it stands
  *
  * This router replaces the Make.com scenario that used to sit between the
  * browser and Gemini. The browser no longer writes a row and waits for a
@@ -103,6 +104,25 @@ router.post(
   handle(async (req, res) => {
     const improvement = await aiService.improveCaption(req.user.id, req.body);
     res.json(improvement);
+  }),
+);
+
+// POST /api/ai/hashtags → hashtags chosen for the caption that will publish.
+//
+// Separate from /caption because it answers a different question about a
+// different text. /caption writes copy and returns a set of tags with it; this
+// chooses tags for whatever is in the editor now — which after two minutes of
+// editing is not what /caption returned — and can be re-run without rewriting
+// the post.
+//
+// An empty result is a success. Some posts read worse with hashtags, and the
+// response says so in `note` rather than returning a filler set.
+router.post(
+  '/hashtags',
+  requireAuth,
+  handle(async (req, res) => {
+    const result = await aiService.generateHashtags(req.user.id, req.body);
+    res.json(result);
   }),
 );
 

@@ -20,10 +20,14 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PLATFORMS } from "@/utils/constants";
+import type { PlatformBreakdownEntry } from "@/services/analytics.service";
 import type { Post } from "@/types";
 
 interface AnalyticsChartsProps {
+  /** Content velocity is a workspace question and stays post-shaped. */
   posts: Post[] | undefined;
+  /** Platform mix is a publishing question and comes from the API. */
+  platforms: PlatformBreakdownEntry[] | undefined;
   loading: boolean;
 }
 
@@ -48,17 +52,49 @@ function buildWeeklySeries(posts: Post[]) {
   });
 }
 
-function buildPlatformSeries(posts: Post[]) {
-  return PLATFORMS.map((platform) => ({
-    name: platform.name,
-    value: posts.filter((p) => p.platforms.includes(platform.id)).length,
-    color: platform.color,
-  })).filter((entry) => entry.value > 0);
+/**
+ * The platform mix, from successful publications only.
+ *
+ * ─── The bug this replaced ───────────────────────────────────────────────────
+ *
+ * This used to be `posts.filter(p => p.platforms.includes(platform.id))`.
+ * `post.platforms` is the list of destinations a member **ticked in the
+ * composer** — it carries no status whatsoever — so every draft, every failed
+ * attempt, every post still publishing and every AI-Ready destination counted
+ * as a publication. A workspace with four posts, none of them fully published,
+ * rendered "LinkedIn 3, Instagram 3, Facebook 2, X 1" beside a "Posts
+ * Published: 0" card.
+ *
+ * The API now answers with `post_platforms` rows that actually reached a
+ * network — `status = PUBLISHED` and a non-null `published_id` — which is the
+ * same rule "Posts Published" is counted under. That is what makes the two
+ * numbers incapable of disagreeing: there is one rule, and it is server-side.
+ *
+ * `PLATFORMS` is still the source of the label and the colour. It is a display
+ * lookup, not a filter — a provider the API reports that has no entry here is
+ * rendered under its own id rather than silently dropped, because a
+ * publication we cannot draw a colour for is still a publication.
+ */
+export function buildPlatformSeries(platforms: PlatformBreakdownEntry[]) {
+  return platforms
+    .map((entry) => {
+      const meta = PLATFORMS.find((platform) => platform.id === entry.provider);
+      return {
+        name: meta?.name ?? entry.provider,
+        value: entry.publications,
+        color: meta?.color ?? "hsl(var(--muted-foreground))",
+      };
+    })
+    .filter((entry) => entry.value > 0);
 }
 
-export function AnalyticsCharts({ posts, loading }: AnalyticsChartsProps) {
+export function AnalyticsCharts({
+  posts,
+  platforms,
+  loading,
+}: AnalyticsChartsProps) {
   const weekly = buildWeeklySeries(posts ?? []);
-  const byPlatform = buildPlatformSeries(posts ?? []);
+  const byPlatform = buildPlatformSeries(platforms ?? []);
 
   return (
     <div className="grid gap-6 lg:grid-cols-5">
@@ -109,7 +145,9 @@ export function AnalyticsCharts({ posts, loading }: AnalyticsChartsProps) {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Platform mix</CardTitle>
-          <CardDescription>Where your content is going</CardDescription>
+          {/* "went", not "is going" — this counts what published, not what was
+              aimed at. The old copy described the old, wrong query. */}
+          <CardDescription>Where your content actually published</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (

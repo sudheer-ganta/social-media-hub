@@ -2,10 +2,15 @@ import {
   AiProviderError,
   analyseCaption,
   generateCaption,
+  generateHashtags,
   improveCaption,
   providerForRole,
+  resolveBrandProfile,
   type AnalysisRequest,
+  type HashtagRequest,
+  type HashtagResult,
   type AudienceRegister,
+  type BrandStyle,
   type CaptionAnalysis,
   type CaptionLength,
   type CaptionMode,
@@ -19,6 +24,7 @@ import {
   type TargetedImprovement,
 } from '../ai';
 import { activityService, ActivityAction } from './activity.service';
+import { loadBrandIntelligence } from './brand-intelligence.service';
 
 /**
  * The AI module's application layer.
@@ -89,6 +95,28 @@ const AUDIENCE_REGISTERS: AudienceRegister[] = [
 ];
 
 const MODES: CaptionMode[] = ['personal', 'brand'];
+
+/**
+ * The registers a member may force.
+ *
+ * Exported so the browser's picker is built from the same list the server
+ * accepts — an option the UI offers and the API silently drops is worse than no
+ * option at all.
+ */
+export const BRAND_STYLES: BrandStyle[] = [
+  'professional',
+  'playful',
+  'gen_z',
+  'bold',
+  'controversial',
+  'educational',
+  'premium',
+  'promotional',
+];
+
+function isBrandStyle(value: unknown): value is BrandStyle {
+  return typeof value === 'string' && (BRAND_STYLES as string[]).includes(value);
+}
 
 /**
  * The mode an unlabelled request gets.
@@ -384,6 +412,13 @@ export function parseCaptionRequest(
       readBrandVoice(input.brandVoice) && {
         brandVoice: readBrandVoice(input.brandVoice),
       }),
+    // The optional register override. Absent is the default and does not mean
+    // "professional" — it means the model decides. An unrecognised value is
+    // dropped rather than defaulted, so a client sending a style FlowPost does
+    // not offer gets the smart behaviour instead of an arbitrary register.
+    ...(!personal && isBrandStyle(input.styleOverride)
+      ? { styleOverride: input.styleOverride }
+      : {}),
     ...(!personal &&
       readCompetitor(input.competitor) && {
         competitor: readCompetitor(input.competitor),
@@ -610,6 +645,70 @@ export function parseImprovementRequest(body: unknown): ImprovementRequest {
   };
 }
 
+// ─── Hashtag request ─────────────────────────────────────────────────────────
+
+/**
+ * The body of `POST /api/ai/hashtags`, after validation.
+ *
+ * `userId` and the scope are injected from the session and never read from the
+ * body — the same rule {@link parseCaptionRequest} keeps, and for the same
+ * reason: a body that could name its own scope is a body that can read another
+ * member's hashtag history.
+ */
+export interface ParsedHashtagRequest extends HashtagRequest {
+  brandId?: string;
+}
+
+export function parseHashtagRequest(body: unknown): ParsedHashtagRequest {
+  const input = (body ?? {}) as Record<string, unknown>;
+
+  const mode = readEnum(input.mode, MODES, DEFAULT_MODE);
+  const platforms = readPlatforms(input.platforms);
+  const caption = readString(input.caption, MAX_CAPTION_LENGTH) ?? '';
+  const topic = readString(input.topic, MAX_TOPIC_LENGTH) ?? '';
+
+  // Neither a caption nor a topic leaves nothing to choose tags *about*, and a
+  // model asked anyway returns tags for the category. Refused rather than
+  // answered badly.
+  if (!caption.trim() && !topic.trim()) {
+    throw new AiError(
+      'Add a caption or a topic first — hashtags are chosen from what the post actually says.',
+      400,
+    );
+  }
+
+  const brandId = readString(input.brandId, 64);
+  const imageAnalysis = readImageAnalysis(input.imageAnalysis);
+  const brandVoice = readBrandVoice(input.brandVoice);
+
+  return {
+    mode,
+    platforms,
+    caption,
+    topic,
+    language: readString(input.language, 40) ?? 'English',
+    ...(typeof input.count === 'number'
+      ? {
+          requestedCount: readClampedInt(
+            input.count,
+            MIN_HASHTAGS,
+            MAX_HASHTAGS,
+            MAX_HASHTAGS,
+          ),
+        }
+      : {}),
+    ...(imageAnalysis && { imageAnalysis }),
+    // Resolved the same way generation resolves it, so the tags are chosen
+    // against the brand the copy was written against — including the fields
+    // Vision inferred rather than only the ones the member typed.
+    brand: resolveBrandProfile({
+      brand: brandVoice,
+      imageAnalysis: imageAnalysis ?? null,
+    }),
+    ...(mode === 'brand' && brandId ? { brandId } : {}),
+  };
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 export const aiService = {
@@ -657,6 +756,65 @@ export const aiService = {
       // logged by `analyseImage` right above this.
       imageAnalysed: Boolean(result.imageAnalysis),
       imageSent: Boolean(request.imageUrl),
+    });
+
+    return result;
+  },
+
+  /**
+   * Chooses hashtags for one post.
+   *
+   * Its own endpoint rather than a slice of generation, because the tags worth
+   * having are the ones chosen against the caption that will actually publish —
+   * usually not the one the model wrote. See the header of
+   * `ai/prompts/hashtags.prompt.ts`.
+   *
+   * The scope is built from the session and the requested mode, so hashtag
+   * history is read for this member's Personal or this one brand and nothing
+   * else. A `brandId` the member does not own simply matches no rows — every
+   * analytics read filters on `created_by` as well — so a foreign id yields an
+   * empty history rather than somebody else's.
+   */
+  async generateHashtags(userId: string, body: unknown): Promise<HashtagResult> {
+    const request = parseHashtagRequest(body);
+    const provider = providerForRole('caption');
+
+    if (!provider.isConfigured()) {
+      throw new AiError('AI generation is not set up on this server yet.', 503);
+    }
+
+    // The account's own record: which tags it uses, which sat on stronger posts,
+    // and which have made no difference. Never throws — a scope with no history
+    // returns empty and the tags are chosen from the content alone.
+    const intelligence = await loadBrandIntelligence({
+      userId,
+      contextType: request.mode,
+      brandId: request.mode === 'brand' ? (request.brandId ?? null) : null,
+    });
+
+    const result = await generateHashtags(
+      {
+        ...request,
+        historySection: intelligence.hashtagSection,
+        tagsInUse: intelligence.tagsInUse,
+      },
+      { provider },
+    );
+
+    console.info('[ai] hashtags generated', {
+      userId,
+      mode: request.mode,
+      platforms: request.platforms,
+      model: result.meta.model,
+      durationMs: result.meta.durationMs,
+      primary: result.primary.length,
+      secondary: result.secondary.length,
+      // The line that answers "why did I get two tags?" — a conflict means the
+      // selected networks disagreed and the tighter ceiling bound.
+      conflict: result.budget.conflict,
+      // Proves the spam filter ran, without logging the caption or the tags.
+      rejected: result.rejected.length,
+      historySample: intelligence.hashtags.sampleSize,
     });
 
     return result;

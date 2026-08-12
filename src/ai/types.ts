@@ -322,14 +322,39 @@ export interface CtaOptions {
   options: CtaOption[];
 }
 
+/**
+ * One suggested tag.
+ *
+ * Deliberately just the tag. It used to carry `difficultyScore` and
+ * `popularityScore`, and those numbers were **fabricated** — derived in
+ * `caption.ts` from the tag's character length and a hash of its characters,
+ * then rendered as progress bars beside the words "Difficulty" and "Popularity".
+ * Nothing in FlowPost reads a hashtag volume API, so there was no measurement
+ * behind them at any point.
+ *
+ * They are gone rather than zeroed or made optional: a field for a number nobody
+ * can supply is a field somebody will eventually populate with an estimate
+ * again. If a real hashtag-volume source is ever integrated, add them back
+ * alongside the provider that answers for them.
+ */
 export interface Hashtag {
   tag: string;                     // without #
-  difficultyScore: number;         // 0–100 (higher = more competitive)
-  popularityScore: number;         // 0–100
 }
 
 export interface HashtagGroup {
-  category: "trending" | "niche" | "location" | "branded" | "competitor";
+  /**
+   * `suggested` is what a caption generation produces — the honest label for
+   * "these are the tags the model chose", carrying no claim about reach or
+   * competition. The others are only valid when something actually establishes
+   * them.
+   */
+  category:
+    | "suggested"
+    | "trending"
+    | "niche"
+    | "location"
+    | "branded"
+    | "competitor";
   hashtags: Hashtag[];
   suggestedQuantity: number;
 }

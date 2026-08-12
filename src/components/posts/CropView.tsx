@@ -16,12 +16,27 @@ import { cn } from "@/lib/utils";
  */
 export function CropView({
   imageUrl,
+  videoUrl,
   crop,
   imageAspect,
   onFocus,
   className,
 }: {
+  /**
+   * What to draw. For a video this is the poster frame — never the `.mp4`,
+   * which an `<img>` renders as a broken image.
+   */
   imageUrl: string;
+  /**
+   * The video itself, when there is one and it should play.
+   *
+   * Passed by the *preview*, which is showing the member what they are about to
+   * publish, and deliberately not by the crop editor: framing is chosen against
+   * a still, because a rectangle you drag over moving footage is a rectangle you
+   * cannot place. Either way the geometry below is identical — one crop model,
+   * one set of four fractions, one implementation.
+   */
+  videoUrl?: string;
   /** Null delivers the image whole — see {@link imageAspect}. */
   crop: PlatformCrop | null;
   /**
@@ -68,18 +83,42 @@ export function CropView({
       )}
       style={{ aspectRatio: String(aspect || 1) }}
     >
-      <img
-        src={imageUrl}
-        alt=""
-        draggable={false}
-        className="absolute max-w-none"
-        style={{
-          width: `${100 / w}%`,
-          height: `${100 / h}%`,
-          left: `${(-x / w) * 100}%`,
-          top: `${(-y / h) * 100}%`,
-        }}
-      />
+      {/* One element or the other, positioned by the same four numbers. A
+          shared `style` rather than two copies, so a change to the crop maths
+          cannot apply to images and miss video. */}
+      {videoUrl ? (
+        <video
+          src={videoUrl}
+          poster={imageUrl || undefined}
+          // Autoplaying with sound is the thing every social composer gets
+          // shouted at for. Muted, looping and inline is what a feed does, and
+          // it is the only combination browsers will start on their own.
+          muted
+          loop
+          playsInline
+          autoPlay
+          className="absolute max-w-none object-cover"
+          style={{
+            width: `${100 / w}%`,
+            height: `${100 / h}%`,
+            left: `${(-x / w) * 100}%`,
+            top: `${(-y / h) * 100}%`,
+          }}
+        />
+      ) : (
+        <img
+          src={imageUrl}
+          alt=""
+          draggable={false}
+          className="absolute max-w-none"
+          style={{
+            width: `${100 / w}%`,
+            height: `${100 / h}%`,
+            left: `${(-x / w) * 100}%`,
+            top: `${(-y / h) * 100}%`,
+          }}
+        />
+      )}
     </div>
   );
 }

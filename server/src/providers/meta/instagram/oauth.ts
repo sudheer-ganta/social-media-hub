@@ -7,6 +7,7 @@ import {
 import { firstQueryValue } from '../../oauth-state';
 import { createInstagramState, consumeInstagramState } from './instagram-state';
 import { assertInstagramConfigured, instagramConfig } from './config';
+import { instagramAnalytics } from './analytics';
 import { fetchProfile } from './profile';
 import { exchangeAuthorizationCode } from './token';
 import { verify } from './verify';
@@ -258,4 +259,7 @@ export const instagramProvider: Provider = {
     maxItems: INSTAGRAM_MAX_MEDIA_ITEMS,
   },
   canPublish,
+  // Gated on the connection's granted scopes, not on this being here — see
+  // `analytics.ts`. `instagram_business_manage_insights` is behind App Review.
+  analytics: instagramAnalytics,
 };

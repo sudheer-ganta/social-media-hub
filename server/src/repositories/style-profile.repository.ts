@@ -59,6 +59,29 @@ export async function find(scope: StyleProfileScope): Promise<StoredStyleProfile
  * followed by a create when nothing matched — the same shape
  * `social-account.repository` uses against its own COALESCE index.
  */
+/**
+ * Forgets the learned profile for one scope.
+ *
+ * What "Reset learning" does, and it deliberately deletes only the *derived*
+ * row. The posts it was built from are untouched, so the next generation
+ * rebuilds a profile from the same history — which is the honest behaviour for a
+ * reset: it clears a reading somebody thinks is wrong, it does not pretend their
+ * back catalogue never happened.
+ *
+ * Returns how many rows went, so a caller can tell "forgotten" from "there was
+ * nothing to forget" without a prior read.
+ */
+export async function remove(scope: StyleProfileScope): Promise<number> {
+  const { count } = await prisma.styleProfile.deleteMany({
+    where: {
+      userId: scope.userId,
+      contextType: scope.contextType,
+      brandId: scope.contextType === 'brand' ? (scope.brandId ?? null) : null,
+    },
+  });
+  return count;
+}
+
 export async function save(
   scope: StyleProfileScope,
   data: { profile: StyleProfile; sampleCount: number; sourcePostIds: string[] },

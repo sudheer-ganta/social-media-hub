@@ -30,8 +30,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlatformIcon } from "@/components/shared/PlatformIcon";
 import { PLATFORM_MAP } from "@/constants";
+import { BRAND_STYLE_OPTIONS } from "@/ai/caption";
 import type {
   AudienceRegister,
+  BrandStyle,
   CaptionMode,
   CaptionResult,
 } from "@/ai/caption";
@@ -67,6 +69,16 @@ interface AiCaptionPanelProps {
   mode: CaptionMode;
   audience: AudienceRegister;
   onAudienceChange: (audience: AudienceRegister) => void;
+  /**
+   * The forced register, or null for Smart.
+   *
+   * Null is the default and the recommended state: the backend then reads the
+   * register off the content, the account's learned voice, the platform and what
+   * has performed. This exists for the member who knows they want a specific
+   * voice for a specific post, not as a setting to be configured before use.
+   */
+  styleOverride: BrandStyle | null;
+  onStyleOverrideChange: (style: BrandStyle | null) => void;
   /** Whether the form currently has an image, so the panel can say what it will do. */
   hasImage: boolean;
   /** Current caption text in the main form editor */
@@ -189,6 +201,8 @@ export function AiCaptionPanel({
   mode,
   audience,
   onAudienceChange,
+  styleOverride,
+  onStyleOverrideChange,
   hasImage,
   currentCaption,
   onGenerate,
@@ -265,6 +279,37 @@ export function AiCaptionPanel({
               </SelectTrigger>
               <SelectContent>
                 {AUDIENCE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/*
+            The register override. Defaults to Smart and is meant to stay there —
+            it is offered for the post where somebody knows they want a particular
+            voice, not as a decision to make before the tool works. "Smart" sends
+            nothing and the backend infers the register; every other value is an
+            instruction that overrides that inference.
+          */}
+          {mode === "brand" && (
+            <Select
+              value={styleOverride ?? "smart"}
+              onValueChange={(next) =>
+                onStyleOverrideChange(next === "smart" ? null : (next as BrandStyle))
+              }
+              disabled={isGenerating}
+            >
+              <SelectTrigger
+                className="w-full sm:w-36"
+                aria-label="Voice for this post"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BRAND_STYLE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

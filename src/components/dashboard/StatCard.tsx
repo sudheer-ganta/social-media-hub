@@ -6,7 +6,15 @@ import { cn } from "@/lib/utils";
 
 interface StatCardProps {
   label: string;
-  value: number;
+  /**
+   * Null means *not measured*, and renders as an em dash.
+   *
+   * Distinct from `loading`, which means "we are fetching it". A card that has
+   * finished loading and has nothing to show must not display 0 — every stat on
+   * this card is a count or a platform metric, and a fabricated zero is
+   * indistinguishable on screen from a real one.
+   */
+  value: number | null;
   icon: LucideIcon;
   hint: string;
   accentClassName?: string;
@@ -36,8 +44,13 @@ export function StatCard({
             {loading ? (
               <Skeleton className="mt-2 h-7 w-16" />
             ) : (
-              <p className="mt-0.5 sm:mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
-                {value.toLocaleString()}
+              <p
+                className={cn(
+                  "mt-0.5 sm:mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight",
+                  value === null && "text-muted-foreground",
+                )}
+              >
+                {value === null ? "—" : value.toLocaleString()}
               </p>
             )}
             <p className="mt-0.5 truncate text-[11px] sm:text-xs text-muted-foreground">{hint}</p>

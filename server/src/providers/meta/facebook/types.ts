@@ -5,12 +5,15 @@
  * neutral shapes we turn it into. Nothing here refers to Prisma, Express or our
  * tables — the same line the rest of the provider layer keeps.
  *
+ * @see ../../capabilities.ts for what this network may publish.
+ *
  * Deliberately separate from `../instagram/types.ts`. The two surfaces share a
  * company and an error envelope and nothing else: different hosts, different
  * credentials, different token model, different publishing endpoints. Merging
  * them would mean one type describing two wires, which is how a field that only
  * exists on one of them ends up silently optional on both.
  */
+import type { ContentType } from '../../capabilities';
 
 /**
  * The permissions FlowPost asks Facebook for.
@@ -32,7 +35,12 @@
 export type FacebookScope =
   | 'pages_show_list'
   | 'pages_read_engagement'
-  | 'pages_manage_posts';
+  | 'pages_manage_posts'
+  /**
+   * Page Insights. Requested only when the deployment declares the app approved
+   * for it — see `providers/analytics-scopes.ts`.
+   */
+  | 'read_insights';
 
 /**
  * The query string `https://www.facebook.com/{version}/dialog/oauth` expects.
@@ -200,6 +208,17 @@ export interface FacebookPublishInput {
   providerAccountId: string;
   caption: string;
   media?: FacebookMediaAsset[];
+  /**
+   * What the member is publishing this as — `TEXT`, `IMAGE` or `CAROUSEL`.
+   *
+   * `REEL` never reaches here: Facebook declares no REEL capability, so the
+   * content-type resolver refuses it before a token is decrypted. That is the
+   * whole mechanism by which "Facebook Reels are not supported" is enforced —
+   * an absent capability, not a branch in this file.
+   *
+   * Optional here, required on `ProviderPublishInput` — see LinkedIn's note.
+   */
+  contentType?: ContentType;
 }
 
 /**
@@ -230,4 +249,62 @@ export interface FacebookPublishResult {
   endpoint: 'feed' | 'photos';
   /** The photo id, when the post carried one. */
   mediaUrns: string[];
+}
+
+// ─── Insights ────────────────────────────────────────────────────────────────
+
+/**
+ * One metric from `GET /{page-post-id}/insights` or `GET /{page-id}/insights`.
+ *
+ * Page Insights has always used the time-series envelope — `values` is an array
+ * of periods, and for a post's lifetime metrics it holds exactly one entry.
+ * `value` is a number for most metrics and an *object* for the breakdown ones
+ * (`post_reactions_by_type_total` is `{ like: 12, love: 3, … }`), which is why
+ * it is typed as unknown and read through a narrowing helper rather than cast.
+ */
+export interface FacebookInsightNode {
+  name?: string;
+  period?: string;
+  values?: Array<{ value?: unknown; end_time?: string }>;
+}
+
+export interface FacebookInsightsResponse {
+  data?: FacebookInsightNode[];
+  error?: { message?: string; code?: number };
+}
+
+/**
+ * `GET /{page-post-id}?fields=id,created_time,status_type,attachments{media_type},
+ * comments.summary(true),shares`
+ *
+ * The engagement counts here are *not* insights — they come off the post node
+ * itself under `pages_read_engagement`, which every connection already holds.
+ * That is deliberate: it means a Page whose insights permission was declined
+ * still yields real comment and share counts rather than a row of nulls.
+ */
+export interface FacebookPostInsightNode {
+  id?: string;
+  created_time?: string;
+  /** `mobile_status_update`, `added_photos`, `shared_story`, … */
+  status_type?: string;
+  attachments?: {
+    data?: Array<{
+      media_type?: string;
+      subattachments?: { data?: unknown[] };
+    }>;
+  };
+  comments?: { summary?: { total_count?: number } };
+  /** Absent when the post has never been shared — which is zero, not unknown. */
+  shares?: { count?: number };
+  reactions?: { summary?: { total_count?: number } };
+}
+
+/** `GET /?ids=a,b,c&fields=…` — the batched node read. */
+export type FacebookPostNodesResponse = Record<string, FacebookPostInsightNode>;
+
+/** `GET /{page-id}?fields=followers_count,fan_count` */
+export interface FacebookPageMetricsNode {
+  id?: string;
+  followers_count?: number;
+  fan_count?: number;
 }

@@ -81,6 +81,16 @@ const EMPTY: StyleContext = {
 export async function loadStyleContext(
   scope: StyleScope,
   situation: string,
+  /**
+   * The heading the rendered block carries.
+   *
+   * A parameter because the same pipeline now serves both a member and a brand,
+   * and "How this person posts" above a brand's learned voice is wrong in a way
+   * a model will follow. Rendering stays here rather than being done by the
+   * caller — a caller holding the raw profile would eventually render it a
+   * second, slightly different way.
+   */
+  heading?: string,
 ): Promise<StyleContext & { signals: CaptionSignal[] }> {
   try {
     const [stored, posts, events] = await Promise.all([
@@ -96,7 +106,7 @@ export async function loadStyleContext(
     return {
       // Only the situational block matching this post is rendered — the other
       // three would be six lines about holidays in front of a gym photo.
-      section: renderStyleSection(focusSituation(profile, situation)),
+      section: renderStyleSection(focusSituation(profile, situation), heading),
       evidence: examples.section,
       history: examples.captions,
       measured: profile && profile.confidence !== 'none' ? profile.global.measured : null,

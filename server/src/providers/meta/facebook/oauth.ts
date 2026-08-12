@@ -7,6 +7,7 @@ import {
 import { firstQueryValue } from '../../oauth-state';
 import { createCookieStateStore } from '../../oauth-state-cookie';
 import { assertFacebookConfigured, facebookConfig } from './config';
+import { facebookAnalytics } from './analytics';
 import { exchangeAuthorizationCode, logGranularScopes } from './token';
 import {
   fetchPublishablePages,
@@ -515,4 +516,7 @@ export const facebookProvider: Provider = {
     maxItems: FACEBOOK_MAX_MEDIA_ITEMS,
   },
   canPublish,
+  // Gated on the connection's granted scopes, not on this being here — see
+  // `analytics.ts`. `read_insights` is behind App Review.
+  analytics: facebookAnalytics,
 };

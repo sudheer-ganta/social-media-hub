@@ -21,6 +21,7 @@
     "verify:models": "ts-node-dev --transpile-only --quiet src/scripts/verify-model-routing.ts",
     "verify:contexts": "ts-node-dev --transpile-only --quiet src/scripts/verify-context-isolation.ts",
     "verify:platform-media": "ts-node-dev --transpile-only --quiet src/scripts/verify-platform-media.ts",
+    "verify:analytics": "ts-node --transpileOnly src/scripts/verify-analytics-live.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

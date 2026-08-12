@@ -24,11 +24,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MediaUploader } from "./MediaUploader";
+import { ContentTypePicker } from "./ContentTypePicker";
 import { CaptionEditor } from "./CaptionEditor";
 import { PlatformSelector } from "./PlatformSelector";
 import { SchedulePicker } from "./SchedulePicker";
 import { AiStrategyPanel } from "./AiStrategyPanel";
 import { AiCaptionPanel } from "./AiCaptionPanel";
+import { BestTimePanel } from "./BestTimePanel";
+import { HashtagPanel } from "./HashtagPanel";
 import { ReachPanel } from "./ReachPanel";
 import { PublishedSummary } from "./PublishedSummary";
 import { PublishStatus } from "./PublishStatus";
@@ -40,6 +43,8 @@ import {
   useDuplicatePost,
 } from "@/hooks/usePosts";
 import { useAiCaption } from "@/hooks/useAiCaption";
+import { useBestTime } from "@/hooks/useBestTime";
+import { useHashtags } from "@/hooks/useHashtags";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useSettings } from "@/hooks/useSettings";
 import { useAuth } from "@/app/AuthProvider";
@@ -52,13 +57,16 @@ import { aiService } from "@/services/ai.service";
 import { fromStudioOutput } from "@/ai/caption";
 import { currentTime, today } from "@/utils/date";
 import { withCrop } from "@/utils/crop";
+import { withHashtags } from "@/utils/hashtags";
 import { itemUrl, mediaFromImageUrl } from "@/utils/media";
+import { defaultContentType, optionsFor } from "@/utils/content-type";
+import type { ContentType, ProviderCapabilities } from "@/types/capabilities";
 import {
   DEFAULT_MEDIA_CAPABILITY,
 } from "@/constants/integrations";
 import { MediaFormatPanel } from "./MediaFormatPanel";
 import { PlatformPreview } from "./PlatformPreview";
-import type { AudienceRegister, CaptionResult } from "@/ai/caption";
+import type { AudienceRegister, BrandStyle, CaptionResult } from "@/ai/caption";
 // `validateFutureSchedule` is deliberately no longer used here: whether a time
 // is in the future depends on the timezone the member picked, not the
 // browser's, and the server is the only place that knows both.
@@ -78,19 +86,12 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs font-medium text-destructive">{message}</p>;
 }
 
-/**
- * General per-network guidance for the "Suggested time" chip. Static on
- * purpose and labeled as a general recommendation in the UI — there are no
- * per-user analytics to derive a personal best time from yet, and the
- * assistant must not pretend otherwise.
- */
-const SUGGESTED_TIMES: Partial<Record<Platform, string>> = {
-  linkedin: "09:00",
-  instagram: "19:30",
-  facebook: "13:00",
-  x: "12:00",
-  threads: "20:00",
-};
+// The static SUGGESTED_TIMES table that used to live here is gone. It offered
+// every member the same fixed slot per network — Instagram 19:30, LinkedIn 09:00
+// — with a comment conceding there were no per-user analytics to derive a real
+// one from. There are now: `useBestTime` reads this account's own measured
+// publications, and when they are too few it says so rather than falling back to
+// a general number dressed as a recommendation.
 
 interface CreatePostFormProps {
   post?: Post;
@@ -124,6 +125,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   const aiResult = ai.result ?? initialAiResult;
 
   const studio = useMarketingStudio();
+  const hashtags = useHashtags();
   const generateStrategy = useGenerateWithSettings();
   const publish = usePublishPostToProvider();
   const schedule = useSchedulePost();
@@ -282,11 +284,109 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   );
 
   /**
+   * Every format each connected network publishes, as the server declares them.
+   *
+   * The composer's whole source of truth for what may be offered. Not a table
+   * of literals here and not a `contentTypes.ts` beside this file: these arrive
+   * from `GET /api/integrations`, which serves the same declaration the publish
+   * path validates against. A format that is absent is one the network cannot
+   * publish, on both sides, from one place.
+   */
+  const contentCapabilities = useMemo(
+    () =>
+      Object.fromEntries(
+        integrations.map((integration) => [
+          integration.provider,
+          integration.contentTypes ?? {},
+        ]),
+      ) as Partial<Record<Platform, ProviderCapabilities>>,
+    [integrations],
+  );
+
+  /** Display names, so the picker holds no network strings of its own. */
+  const providerNames = useMemo(
+    () =>
+      Object.fromEntries(
+        integrations.map((integration) => [
+          integration.provider,
+          integration.displayName,
+        ]),
+      ) as Partial<Record<Platform, string>>,
+    [integrations],
+  );
+
+  /**
+   * What the member chose to publish as, per network.
+   *
+   * Empty until they pick, and empty is a real state rather than a gap — it is
+   * what every post written before this existed carries, and what a network
+   * with only one format never needs to fill. The server resolves an unset
+   * destination from the media count exactly as it always did.
+   */
+  const [contentTypes, setContentTypes] = useState<
+    Partial<Record<Platform, ContentType>>
+  >(() => ({}));
+
+  /**
+   * Keeps a choice honest as the media changes.
+   *
+   * Removing the video from a post selected as a Reel leaves a choice that
+   * cannot publish. Rather than let the member reach a refusal, the selection
+   * falls back to whatever the network *can* do with what is now attached —
+   * and an unusable one is dropped rather than corrected to a guess.
+   */
+  useEffect(() => {
+    setContentTypes((current) => {
+      let changed = false;
+      const next: Partial<Record<Platform, ContentType>> = { ...current };
+
+      const platformsToCheck = new Set([
+        ...Object.keys(current),
+        ...platforms,
+      ]) as Set<Platform>;
+
+      for (const platform of platformsToCheck) {
+        const chosen = current[platform];
+        const capabilities = contentCapabilities[platform] ?? {};
+
+        if (chosen) {
+          const option = optionsFor(capabilities, media).find(
+            (entry) => entry.contentType === chosen,
+          );
+          if (option?.available) continue;
+        }
+
+        const hasVideo = media.some((m) => m.type === "video");
+        if (hasVideo || chosen) {
+          const fallback = defaultContentType(capabilities, media);
+          if (fallback !== chosen) {
+            changed = true;
+            if (fallback) next[platform] = fallback;
+            else delete next[platform];
+          }
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [media, platforms.join(","), contentCapabilities]);
+
+  /**
    * The register the AI writes in. Form state rather than a saved setting: it
    * changes per post far more often than a brand voice does — the same brand
    * writes one way for a launch reel and another for a hiring post.
    */
   const [audience, setAudience] = useState<AudienceRegister>("gen_z_millennial");
+
+  /**
+   * The forced register, or null for Smart.
+   *
+   * Null by default and expected to stay null. A brand does not have one voice —
+   * the same account is playful announcing a drop and plain answering a complaint
+   * — so the register is inferred per post unless somebody deliberately overrides
+   * it for this one.
+   */
+  const [styleOverride, setStyleOverride] = useState<BrandStyle | null>(null);
 
   /**
    * Which network a publish is currently in flight for, or null.
@@ -461,6 +561,10 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
       // pitched at; Personal infers how to write from the member's own history
       // instead of asking them to pick a voice for their own account.
       ...(isBrand && { audience }),
+      // Only sent when the member actually chose a register. Absent is not a
+      // missing value — it is the instruction to work the register out from the
+      // content, the learned voice, the platform and what has performed.
+      ...(isBrand && styleOverride ? { styleOverride } : {}),
       brand: brandIdentity,
     });
 
@@ -476,12 +580,11 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
     // and route to /posts/:id/edit so refreshing preserves all generated state.
     if (!post && generated) {
       try {
-        const saved = await persist(
+        await persist(
           { ...values, caption: getValues("caption") },
           "draft",
           generated,
         );
-        navigate(`/posts/${saved.id}/edit`, { replace: true });
       } catch (cause) {
         console.error("[ai] auto-save on generation failed", cause);
       }
@@ -511,13 +614,24 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
    * for, and it is still there — see `handleAppendHashtags` below.
    */
 
-  /** Appends the generated hashtags to whatever is in the editor. */
+  /**
+   * Appends hashtags to whatever is in the editor.
+   *
+   * Goes through `withHashtags` rather than joining the array itself, which is
+   * what this used to do. Hand-rolling it skipped both guarantees that helper
+   * exists for: it re-appended tags the caption already carried (so pressing the
+   * button twice doubled them) and it ignored the per-network ceiling, pushing
+   * three tags onto a LinkedIn post that reads as spam past one or two.
+   *
+   * `withHashtags` is append-only and idempotent — it cannot reorder or delete a
+   * character the member typed, and a caption already carrying every tag comes
+   * back unchanged.
+   */
   const handleAppendHashtags = (hashtags: string[]) => {
-    const current = getValues("caption").trimEnd();
-    const tags = hashtags.map((tag) => `#${tag}`).join(" ");
-    setValue("caption", current ? `${current}\n\n${tags}` : tags, {
-      shouldValidate: true,
-    });
+    const current = getValues("caption");
+    const next = withHashtags(current, hashtags, getValues("platforms"));
+    if (next === current) return;
+    setValue("caption", next, { shouldValidate: true });
   };
 
   const scheduleValue = {
@@ -584,13 +698,93 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
       Math.min(current, Math.max(next.length - 1, 0)),
     );
   };
-  const suggestedFor = selectedPlatforms.find((p) => SUGGESTED_TIMES[p]);
-  const suggestion = suggestedFor
-    ? {
-        name: PLATFORM_MAP[suggestedFor]?.name ?? suggestedFor,
-        time: SUGGESTED_TIMES[suggestedFor]!,
-      }
-    : null;
+  /**
+   * When this account's own posts have actually performed best.
+   *
+   * Asked for the platforms currently ticked and the content type currently
+   * chosen, because both change the answer — the same post has a different best
+   * time on Instagram and LinkedIn, and a Reel's history is not an image's.
+   *
+   * The browser's zone goes along as a hint. It is not authoritative: the server
+   * prefers the zone this member's own posts recorded, since that is the clock
+   * they actually schedule on, and a laptop in a different timezone should not
+   * silently move every recommendation.
+   *
+   * Nothing waits for this. It resolves after the composer has rendered, and if
+   * it fails the panel is simply absent — the scheduler below is unaffected.
+   */
+  const bestTime = useBestTime(context, {
+    platforms: selectedPlatforms,
+    format: selectedPlatforms.length > 0
+      ? (contentTypes[selectedPlatforms[0]] ?? null)
+      : null,
+    timezone: watch("timezone"),
+    enabled: !isPublished,
+  });
+
+  /**
+   * Applies a recommended time to the schedule fields.
+   *
+   * Splits the backend's `YYYY-MM-DDTHH:mm` into the two inputs the picker
+   * already owns and sets the zone the recommendation was expressed in. It
+   * deliberately stops there: the member reviews the picker and presses Schedule,
+   * and the existing schedule API resolves the instant. There is no second
+   * scheduling path — see the header of `BestTimePanel`.
+   */
+  /**
+   * The Reach panel's one-line timing suggestion.
+   *
+   * Only ever built from a real recommendation — the first selected network that
+   * has one. When no network has enough measured history the prop is absent and
+   * the panel shows no timing row at all, which is the behaviour that replaced a
+   * fixed per-network time shown to everybody.
+   */
+  const reachSuggestedTime = (() => {
+    const entry = bestTime.result?.platforms.find(
+      (platform) => platform.recommendedTime !== null,
+    );
+    if (!entry?.recommendedTime) return null;
+
+    const time = entry.recommendedTime;
+    return {
+      name: entry.label,
+      time,
+      label: dayjs(`2000-01-01T${time}`).format("h:mm A"),
+      use: () => setValue("publish_time", time, { shouldValidate: true }),
+    };
+  })();
+
+  /**
+   * Hashtags for whatever is in the editor right now.
+   *
+   * Sends the caption as it stands rather than the one the model wrote, which is
+   * the entire reason this is a separate call from generation — after two minutes
+   * of editing they are not the same text. The image read is passed back when
+   * generation produced one so tags can come from what is actually in the
+   * picture, and the brand voice so a brand's tags can draw on its positioning.
+   */
+  const runHashtags = () =>
+    hashtags.run({
+      mode: isBrand ? "brand" : "personal",
+      ...(context.brandId && { brandId: context.brandId }),
+      platforms: selectedPlatforms,
+      caption: getValues("caption"),
+      topic: getValues("title"),
+      ...(aiResult?.imageAnalysis && { imageAnalysis: aiResult.imageAnalysis }),
+      ...(isBrand && studio.brandVoice ? { brandVoice: studio.brandVoice } : {}),
+      language: studio.language,
+    });
+
+  const applyRecommendedTime = (localDateTime: string, timezone: string) => {
+    const [date, time] = localDateTime.split("T");
+    if (!date || !time) return;
+    setValue("publish_date", date, { shouldValidate: true });
+    setValue("publish_time", time, { shouldValidate: true });
+    if (timezone) setValue("timezone", timezone, { shouldValidate: true });
+    toast.success(`Scheduled time set to ${dayjs(`2000-01-01T${time}`).format("h:mm A")}`, {
+      description: "Review it below, then press Schedule.",
+    });
+  };
 
   /**
    * Saves the form's current values and resolves with the stored post.
@@ -737,6 +931,13 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
         scheduledAt: `${values.publish_date}T${values.publish_time}`,
         timezone: values.timezone,
         providers: targets,
+        // Recorded now, because now is when the member chose. The worker runs
+        // hours later with no composer to ask.
+        contentTypes: Object.fromEntries(
+          targets
+            .filter((provider) => contentTypes[provider])
+            .map((provider) => [provider, contentTypes[provider]!]),
+        ),
       });
 
       toast.success("Scheduled", {
@@ -787,7 +988,6 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
           id: saved.id,
           settings: buildContextSettings(),
         });
-        if (!post) navigate(`/posts/${saved.id}/edit`, { replace: true });
       } catch {
         // Both mutations toast their own failures; the draft is saved either
         // way, so the retry costs nothing but the click.
@@ -829,9 +1029,26 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
 
     for (const provider of providers) {
       setPublishingProvider(provider);
+
+      const effectiveContentType =
+        contentTypes[provider] ??
+        (media.some((m) => m.type === "video")
+          ? defaultContentType(contentCapabilities[provider] ?? {}, media) ?? undefined
+          : undefined);
+
+      console.log("[publish] CreatePostForm mutate input", {
+        postId,
+        provider,
+        contentType: effectiveContentType ?? null,
+      });
+
       outcomes.push(
         await publish
-          .mutateAsync({ postId, provider })
+          .mutateAsync({
+            postId,
+            provider,
+            ...(effectiveContentType && { contentType: effectiveContentType }),
+          })
           .then<PostPlatformState>((result) => ({
             provider,
             providerName: PLATFORM_MAP[provider]?.name ?? provider,
@@ -839,6 +1056,9 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
             publishedId: result.publishedId,
             url: result.url,
             errorMessage: null,
+            // A publish that lost its media still succeeded, and says so here
+            // as well as in the toast — the panel outlives the toast.
+            notice: result.reason ?? null,
           }))
           .catch<PostPlatformState>((cause) => ({
             provider,
@@ -850,6 +1070,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
             // own toast renders the same string.
             errorMessage:
               cause instanceof Error ? cause.message : "Publishing failed.",
+            notice: null,
           })),
       );
     }
@@ -960,12 +1181,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
   if (published) {
     return (
       <PublishedSummary
-        // The first image as it was delivered — its own crop applied, derived
-        // from the untouched original. A carousel has no single "published
-        // image", and the first one is what a feed shows as the post.
-        //
-        // Falls back to the per-network framing of `image_url` for a post that
-        // predates the media list, which is exactly what those posts published.
+        mediaItem={media[0]}
         imageUrl={
           media[0]
             ? itemUrl(media[0])
@@ -1024,6 +1240,38 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
                   />
                   <FieldError message={errors.image_url?.message} />
 
+                  {/* What to publish it as. Renders only for destinations with
+                      more than one format — a network with a single answer is
+                      not a question worth asking. Every option, and every
+                      reason an option is unavailable, comes from the server's
+                      capability declaration. */}
+                  <ContentTypePicker
+                    platforms={selectedPlatforms.filter((platform) =>
+                      publishableProviders.has(platform),
+                    )}
+                    capabilities={contentCapabilities}
+                    displayNames={providerNames}
+                    value={contentTypes}
+                    onChange={(platform, contentType) =>
+                      setContentTypes((current) => ({
+                        ...current,
+                        [platform]: contentType,
+                      }))
+                    }
+                    media={media}
+                    onKeepOnly={(keepIds) =>
+                      setMedia(media.filter((item) => keepIds.includes(item.id)))
+                    }
+                    onCrop={(itemId) => {
+                      // Opens the *existing* crop UI on that item rather than a
+                      // second crop implementation. The format panel below owns
+                      // framing; this only points at what needs it.
+                      const at = media.findIndex((item) => item.id === itemId);
+                      if (at !== -1) setSelectedMedia(at);
+                    }}
+                    disabled={isPublished}
+                  />
+
                   {media.length > 0 && !isPublished && (
                     <MediaFormatPanel
                       items={media}
@@ -1057,6 +1305,25 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
                   />
                   <FieldError message={errors.caption?.message} />
                 </div>
+
+                {/*
+                  Hashtags, chosen against the caption above rather than as a
+                  by-product of generation — so they fit the text that will
+                  actually publish, edits included, and can be re-rolled without
+                  rewriting the post.
+                */}
+                {!isPublished && (
+                  <HashtagPanel
+                    result={hashtags.result}
+                    isGenerating={hashtags.isGenerating}
+                    canGenerate={Boolean(
+                      watch("caption").trim() || watch("title").trim(),
+                    )}
+                    onGenerate={runHashtags}
+                    onApply={handleAppendHashtags}
+                    disabled={isPublished}
+                  />
+                )}
 
                 {/* Music & Campaign options */}
                 <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
@@ -1132,30 +1399,23 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
                 {/* Schedule */}
                 <div className="space-y-2 border-t pt-4">
                   <Label className="text-sm font-semibold">Schedule Time</Label>
-                  {suggestion && (
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2 px-3 mb-2 bg-muted/20">
-                      <p className="text-xs text-muted-foreground">
-                        Suggested:{" "}
-                        <span className="font-semibold text-foreground">
-                          {dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A")}
-                        </span>{" "}
-                        for {suggestion.name}
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-[11px] px-2.5"
-                        onClick={() =>
-                          setValue("publish_time", suggestion.time, {
-                            shouldValidate: true,
-                          })
-                        }
-                      >
-                        Use
-                      </Button>
-                    </div>
-                  )}
+
+                  {/*
+                    Replaces the old static chip, which offered a fixed 7:30 PM
+                    for Instagram to every member regardless of their own results.
+                    This shows a time only when this account's own measured posts
+                    support one, and says so; when they do not, it says that
+                    instead of falling back to a general number.
+                  */}
+                  <div className="mb-2">
+                    <BestTimePanel
+                      result={bestTime.result}
+                      isLoading={bestTime.isLoading}
+                      onUse={applyRecommendedTime}
+                      disabled={isPublished}
+                    />
+                  </div>
+
                   <SchedulePicker
                     value={scheduleValue}
                     onChange={(next) => {
@@ -1187,6 +1447,8 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
               mode={isBrand ? "brand" : "personal"}
               audience={audience}
               onAudienceChange={setAudience}
+              styleOverride={styleOverride}
+              onStyleOverrideChange={setStyleOverride}
               hasImage={Boolean(imageUrl?.trim())}
               currentCaption={watch("caption")}
               onGenerate={handleGenerate}
@@ -1225,17 +1487,7 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
               {...(aiResult?.imageAnalysis && {
                 imageAnalysis: aiResult.imageAnalysis,
               })}
-              {...(suggestion && {
-                suggestedTime: {
-                  name: suggestion.name,
-                  time: suggestion.time,
-                  label: dayjs(`2000-01-01T${suggestion.time}`).format("h:mm A"),
-                  use: () =>
-                    setValue("publish_time", suggestion.time, {
-                      shouldValidate: true,
-                    }),
-                },
-              })}
+              {...(reachSuggestedTime && { suggestedTime: reachSuggestedTime })}
             />
           )}
 

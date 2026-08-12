@@ -172,7 +172,10 @@ function PreviewMedia({
   return (
     <div className="relative border-y bg-black/20">
       <CropView
-        imageUrl={item.url}
+        // A video's poster, never its `.mp4`. The still is what shows while the
+        // clip loads and what a browser that refuses to autoplay falls back to.
+        imageUrl={item.type === "video" ? (item.posterUrl ?? "") : item.url}
+        {...(item.type === "video" && { videoUrl: item.url })}
         crop={item.crop}
         imageAspect={itemAspect(item)}
       />

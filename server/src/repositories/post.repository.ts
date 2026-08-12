@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma';
 import type { Post, PostPlatform } from '../generated/prisma/client';
-import { PostStatus, PublishStatus } from '../generated/prisma/enums';
+import { MediaType, PostStatus, PublishStatus } from '../generated/prisma/enums';
 
 /**
  * The only module that reads or writes `posts` and `post_platforms` from the
@@ -202,26 +202,95 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+/**
+ * Everything about a publication that is only knowable once it has succeeded.
+ *
+ * Grouped into one object rather than four positional parameters: the call site
+ * already passes a permalink that may be null, and a third and fourth
+ * same-typed optional argument after it is how a `socialAccountId` ends up in
+ * the `mediaType` slot.
+ */
+export interface PlatformPublishRecord {
+  /**
+   * The network's own URL for the post, where it gave us one.
+   *
+   * Null-safe because a failed permalink lookup must not undo a publish that
+   * succeeded — see `publish.service.ts`.
+   */
+  permalink?: string | null;
+  /**
+   * Which connection this went out through.
+   *
+   * Recorded at publish time because it cannot be recovered afterwards: a
+   * member who disconnects and reconnects gets a new `social_accounts` row, and
+   * re-deriving the connection from the post's context later would attribute
+   * the publication to whichever row happens to exist then. Analytics needs the
+   * token that owns the post in order to read its metrics.
+   */
+  socialAccountId?: string | null;
+  /**
+   * What this publication is, as best we can tell from what was uploaded.
+   *
+   * Always an *inference* at this point — the network has not been asked yet —
+   * so `mediaTypeFromPlatform` stays false and the first metrics sync is free
+   * to correct it. See `analytics/normalise.ts`.
+   */
+  mediaType?: MediaType | null;
+
+  /**
+   * What the member asked to publish, when they asked for anything.
+   *
+   * Null is written through as null rather than skipped, unlike `mediaType`
+   * above — a post published with no stated format has genuinely made no
+   * request, and leaving a stale value from an earlier failed attempt would
+   * misreport it. The column stays null forever for every row that predates the
+   * composer offering a choice.
+   */
+  contentType?: MediaType | null;
+
+  /**
+   * Something worth telling the member about a publication that succeeded.
+   *
+   * Written through as null when absent, deliberately: a retry that publishes
+   * cleanly must clear the notice its previous attempt left, exactly as it
+   * clears `errorMessage`. A sticky "X couldn't attach the image" on a post
+   * whose image is now attached would be worse than never having said it.
+   */
+  notice?: string | null;
+}
+
 export async function markPlatformPublished(
   postId: string,
   provider: string,
   publishedId: string,
-  /**
-   * The network's own URL for the post, where it gave us one.
-   *
-   * Optional because not every network does, and null-safe because a failed
-   * permalink lookup must not undo a publish that succeeded — see
-   * `publish.service.ts`.
-   */
-  permalink: string | null = null,
+  record: PlatformPublishRecord = {},
 ): Promise<PostPlatform> {
   return prisma.postPlatform.update({
     where: { postId_provider: { postId, provider } },
     data: {
       status: PublishStatus.PUBLISHED,
       publishedId,
-      permalink,
+      permalink: record.permalink ?? null,
       errorMessage: null,
+      // Cleared on a clean publish for the same reason `errorMessage` is — see
+      // the note on `PlatformPublishRecord.notice`.
+      notice: record.notice ?? null,
+      /**
+       * When this destination actually went out.
+       *
+       * Set here, in the one write every publish path routes through, rather
+       * than at the two call sites. The column has existed since the scheduler
+       * shipped and nothing had ever populated it — which left every
+       * per-destination timestamp null, and is why it is written here now: it
+       * is the column the analytics window orders on, and "the last 20 posts"
+       * is unanswerable without it.
+       */
+      publishedAt: new Date(),
+      ...(record.socialAccountId ? { socialAccountId: record.socialAccountId } : {}),
+      ...(record.mediaType ? { mediaType: record.mediaType } : {}),
+      ...(record.contentType !== undefined
+        ? { contentType: record.contentType }
+        : {}),
     },
   });
 }

@@ -5,6 +5,7 @@ import { DEFAULT_FEATURE_FLAGS, EMPTY_BRAND_VOICE } from "@/ai/types";
 import {
   toStudioOutput,
   type AudienceRegister,
+  type BrandStyle,
   type CaptionBrief,
   type CaptionMode,
   type CaptionResult,
@@ -282,6 +283,8 @@ export const postsService = {
     suggestSongs?: boolean;
     /** Omitted means "let the backend pick" — see AudienceRegister. */
     audience?: AudienceRegister;
+    /** Omitted means "let FlowPost decide the register" — see BrandStyle. */
+    styleOverride?: BrandStyle;
     /** Brand-context identity, layered over the default voice profile. */
     brand?: { name: string; description?: string } | null;
   }): Promise<CaptionBrief> {
@@ -327,6 +330,10 @@ export const postsService = {
       ...(draft.music?.trim() && { music: draft.music.trim() }),
       ...(draft.suggestSongs && { suggestSongs: true }),
       ...(draft.audience && { audience: draft.audience }),
+      // Absent unless the member overrode it. Sending a register by default would
+      // be the difference between a tool that decides and one that has a house
+      // style — see BrandStyle.
+      ...(draft.styleOverride && { styleOverride: draft.styleOverride }),
       platforms: draft.platforms ?? [],
       goal: settings.goal,
       funnelStage: settings.funnelStage,

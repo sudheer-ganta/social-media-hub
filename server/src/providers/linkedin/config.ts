@@ -1,4 +1,5 @@
 import { env } from '../../config/env';
+import { analyticsScopeEnabled } from '../analytics-scopes';
 import type { LinkedInScope } from './types';
 
 /**
@@ -128,7 +129,16 @@ export const LINKEDIN_SCOPES: LinkedInScope[] = [
   'openid',
   'profile',
   'w_member_social',
+  // Analytics, and only where the app is approved for it. Unconditional here
+  // would make `unauthorized_scope_error` the answer to every connect attempt
+  // on a deployment without the product — losing publishing to enable a read.
+  ...(analyticsScopeEnabled('linkedin')
+    ? (['r_member_postAnalytics'] as const)
+    : []),
 ];
+
+/** The scope member post analytics requires. */
+export const LINKEDIN_ANALYTICS_SCOPE = 'r_member_postAnalytics';
 
 /** LinkedIn wants scopes space-delimited in the query string. */
 export const LINKEDIN_SCOPE_STRING = LINKEDIN_SCOPES.join(' ');

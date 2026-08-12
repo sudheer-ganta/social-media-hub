@@ -36,6 +36,10 @@ const repo = vi.hoisted(() => ({
 
 const posts = vi.hoisted(() => ({
   findByIdForUser: vi.fn(),
+  // Null: no stored content type, which is the backward-compatible path these
+  // tests have always exercised without knowing it. The resolver falls back to
+  // the media count, exactly as publishing did before content types existed.
+  findPlatformForPost: vi.fn(async () => null),
   claimPlatformPublish: vi.fn(async () => ({ claimed: true })),
   releasePlatformClaim: vi.fn(async () => undefined),
   markPlatformPublished: vi.fn(async () => undefined),
@@ -71,9 +75,17 @@ vi.mock('../providers', async () => {
   const iface = await vi.importActual<
     typeof import('../providers/provider.interface')
   >('../providers/provider.interface');
+  // The capability declaration stays real too, for the same reason the
+  // catalogue does: what X can publish is part of what these tests assert, and
+  // a stubbed capability set would let a publish pass here that the real one
+  // would refuse.
+  const capabilities = await vi.importActual<
+    typeof import('../providers/capabilities')
+  >('../providers/capabilities');
   return {
     ...catalog,
     ...iface,
+    ...capabilities,
     getProvider: (id: string) => (id === 'x' ? registry.current : undefined),
   };
 });

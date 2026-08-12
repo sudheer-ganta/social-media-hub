@@ -382,6 +382,24 @@ describe('publishing a due post', () => {
     expect(post().status).toBe(PostStatus.PUBLISHED);
   });
 
+  it('publishes with the analytics sweep switched off', async () => {
+    // The two switches are independent, and this is the direction that
+    // matters: an operator who kills analytics during a provider outage or an
+    // unexpected API bill must not lose scheduled posts as a side effect.
+    process.env.ANALYTICS_SYNC_ENABLED = 'false';
+    try {
+      seed();
+      publish.mockImplementation(async () => publishSucceeds('linkedin'));
+
+      await tick(NOW);
+
+      expect(publish).toHaveBeenCalledTimes(1);
+      expect(post().status).toBe(PostStatus.PUBLISHED);
+    } finally {
+      delete process.env.ANALYTICS_SYNC_ENABLED;
+    }
+  });
+
   it('publishes each destination of a multi-network post exactly once', async () => {
     seed({}, [{ provider: 'linkedin' }, { provider: 'instagram' }, { provider: 'x' }]);
     db.destinations[1].provider = 'instagram';

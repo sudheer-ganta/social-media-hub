@@ -1,5 +1,6 @@
 import { env } from '../../../config/env';
 import { META_API_VERSION } from '../config';
+import { analyticsScopeEnabled } from '../../analytics-scopes';
 import type { FacebookScope } from './types';
 
 /**
@@ -54,9 +55,29 @@ export const FACEBOOK_DEFAULT_SCOPES: FacebookScope[] = [
   'pages_show_list',
   'pages_read_engagement',
   'pages_manage_posts',
+  // Page Insights, and only where the app is approved for it — see
+  // `providers/analytics-scopes.ts`.
+  ...(analyticsScopeEnabled('facebook') ? (['read_insights'] as const) : []),
 ];
 
-const KNOWN_SCOPES = new Set<string>(FACEBOOK_DEFAULT_SCOPES);
+/** The scope Page Insights requires. */
+export const FACEBOOK_ANALYTICS_SCOPE = 'read_insights';
+
+/**
+ * Every scope the override may name.
+ *
+ * `read_insights` is listed here unconditionally, unlike in the defaults above.
+ * The two answer different questions: the defaults are what FlowPost *asks for*
+ * on its own, where this is what a deployment is *allowed to ask for* — and a
+ * deployment that has been approved for insights and states so explicitly in
+ * `FACEBOOK_SCOPES` should not have its own configuration silently dropped.
+ */
+const KNOWN_SCOPES = new Set<string>([
+  'pages_show_list',
+  'pages_read_engagement',
+  'pages_manage_posts',
+  'read_insights',
+]);
 
 export function resolveScopes(override: string): FacebookScope[] {
   const requested = override

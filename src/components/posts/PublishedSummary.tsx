@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PublishStatus } from "./PublishStatus";
-import type { Platform, PostPlatformState } from "@/types";
+import type { Platform, PostPlatformState, PostMediaItem } from "@/types";
 
 /**
  * What a Personal creator sees the moment a post goes out.
@@ -29,6 +29,7 @@ import type { Platform, PostPlatformState } from "@/types";
 
 interface PublishedSummaryProps {
   imageUrl?: string;
+  mediaItem?: PostMediaItem;
   caption: string;
   music?: string;
   platforms: PostPlatformState[];
@@ -42,6 +43,7 @@ interface PublishedSummaryProps {
 
 export function PublishedSummary({
   imageUrl,
+  mediaItem,
   caption,
   music,
   platforms,
@@ -51,6 +53,7 @@ export function PublishedSummary({
 }: PublishedSummaryProps) {
   const published = platforms.filter((p) => p.status === "PUBLISHED");
   const failed = platforms.filter((p) => p.status === "FAILED");
+  const isVideo = mediaItem?.type === "video";
 
   return (
     <div className="space-y-6">
@@ -84,12 +87,21 @@ export function PublishedSummary({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-[minmax(0,220px)_1fr]">
-            {imageUrl && (
-              <img
-                src={imageUrl}
-                alt=""
-                className="w-full rounded-lg border object-cover"
+            {isVideo ? (
+              <video
+                src={mediaItem?.url || imageUrl}
+                poster={mediaItem?.posterUrl ?? undefined}
+                controls
+                className="w-full max-h-60 rounded-lg border object-cover bg-black"
               />
+            ) : (
+              imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="w-full rounded-lg border object-cover"
+                />
+              )
             )}
             <div className="space-y-3">
               <div>

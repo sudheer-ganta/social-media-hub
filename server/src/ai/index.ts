@@ -76,6 +76,60 @@ export {
   IMPROVE_PROMPT_VERSION,
   TARGET_KIND,
 } from './prompts/improve.prompt';
+export {
+  buildHashtagPrompt,
+  buildHashtagResponseSchema,
+  HASHTAG_PROMPT_VERSION,
+} from './prompts/hashtags.prompt';
+
+// ─── Hashtags ────────────────────────────────────────────────────────────────
+//
+// Its own generator rather than a field on the caption result — see the header
+// of `prompts/hashtags.prompt.ts`. The deterministic half (cleaning, the spam
+// filter, the platform ceiling) is `hashtags/rules.ts`, and it runs after the
+// model rather than instead of it.
+export {
+  generateHashtags,
+  type HashtagRequest,
+} from './generators/hashtag.generator';
+export {
+  budgetFor,
+  cleanTag,
+  filterTags,
+  splitTags,
+  SPAM_TAGS,
+  type HashtagBudget,
+} from './hashtags/rules';
+
+// ─── Learning from this account's own results ────────────────────────────────
+//
+// What worked, learned from real analytics and hedged by its own sample size.
+// Pure — the reads live in `services/brand-intelligence.service.ts`.
+export {
+  evidenceFor,
+  isStatable,
+  renderSignal,
+  EVIDENCE_GATES,
+  EVIDENCE_LABEL,
+  type EvidenceStrength,
+  type LearnedSignal,
+} from './learning/evidence';
+export {
+  extractTags,
+  learnHashtags,
+  renderHashtagHistory,
+  tagsInUse,
+  type CaptionedPublication,
+  type HashtagHistory,
+  type HashtagObservation,
+} from './learning/hashtag-history';
+export {
+  learnPerformance,
+  lengthBandOf,
+  renderPerformanceSection,
+  type PerformanceProfile,
+  type PlatformPerformance,
+} from './learning/performance';
 
 // ─── Brand Intelligence ──────────────────────────────────────────────────────
 export {

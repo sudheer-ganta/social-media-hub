@@ -4,6 +4,7 @@ import { postsService } from "@/services";
 import { aiService } from "@/services/ai.service";
 import type {
   AudienceRegister,
+  BrandStyle,
   CaptionMode,
   CaptionResult,
 } from "@/ai/caption";
@@ -40,6 +41,16 @@ export interface UseAiCaptionDraft {
   suggestSongs?: boolean;
   /** Which register to write in. Omitted lets the backend choose. */
   audience?: AudienceRegister;
+  /**
+   * The brand's forced voice for this post. Omitted — the normal case — means
+   * FlowPost infers the register from the content, the account's learned voice,
+   * the platform and what has performed.
+   *
+   * Declared rather than left to ride along on the spread below: it does reach
+   * the brief either way, and a field nothing declares is a field the next
+   * refactor drops without noticing.
+   */
+  styleOverride?: BrandStyle;
   /** Brand-context identity: the AI writes as this brand, not the default voice. */
   brand?: { name: string; description?: string } | null;
 }

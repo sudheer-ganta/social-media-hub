@@ -124,7 +124,44 @@ export const ACCEPTED_IMAGE_TYPES: Record<string, string[]> = {
   "image/png": [".png"],
   "image/jpeg": [".jpg", ".jpeg"],
   "image/webp": [".webp"],
+  "image/gif": [".gif"],
 };
+
+/**
+ * Video the uploader will accept.
+ *
+ * Deliberately wider than any one network's list: this is what the *browser*
+ * hands to Cloudinary, and the member should not be stopped at the file picker
+ * because the network they have not chosen yet would refuse it. What each
+ * network takes is a capability, checked once the destination and format are
+ * known — see `src/utils/content-type.ts`.
+ */
+export const ACCEPTED_VIDEO_TYPES: Record<string, string[]> = {
+  "video/mp4": [".mp4"],
+  "video/quicktime": [".mov"],
+};
+
+/**
+ * Everything one "Add media" accepts.
+ *
+ * One list, because there is one button. Making a member choose "Upload Image"
+ * or "Upload Video" before they have picked a file is a developer's question
+ * wearing a product's clothes — the file already knows which it is.
+ */
+export const ACCEPTED_MEDIA_TYPES: Record<string, string[]> = {
+  ...ACCEPTED_IMAGE_TYPES,
+  ...ACCEPTED_VIDEO_TYPES,
+};
+
+/**
+ * The uploader's own byte ceiling for video.
+ *
+ * Far above {@link MAX_IMAGE_SIZE_BYTES} and deliberately generous — the
+ * network's real limit is a capability, and rejecting here would be a second
+ * place that has an opinion about it. This exists only to stop an obvious
+ * mistake (a 4GB export) before it spends ten minutes uploading.
+ */
+export const MAX_VIDEO_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB
 
 export const TIMEZONES = [
   "UTC",

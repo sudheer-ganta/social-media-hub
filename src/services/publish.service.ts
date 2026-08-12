@@ -1,6 +1,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { API_BASE_URL } from "@/constants/api";
 import type { PublishResult, PublishState } from "@/types";
+import type { ContentType } from "@/types/capabilities";
 
 /**
  * The browser's side of the publish API.
@@ -105,14 +106,28 @@ async function request<T>(
  *
  * The post must already exist — publishing is something you do *to* a draft,
  * not a way of creating one. The form saves first and then calls this.
+ *
+ * `contentType` is the format the member explicitly selected in the composer.
+ * When absent the backend resolves it from the media count — the pre-content-
+ * type behaviour that every existing post relies on. Passing it explicitly is
+ * what makes a video publish as a Reel rather than as an IMAGE.
  */
 export async function publishPost(
   postId: string,
   provider = "linkedin",
+  contentType?: ContentType,
 ): Promise<PublishResult> {
+  const body = {
+    provider,
+    ...(contentType !== undefined && { contentType }),
+  };
+  console.log("[publish] publish.service request body", body);
   return request<PublishResult>(
     `/${postId}/publish`,
-    { method: "POST", body: JSON.stringify({ provider }) },
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
     "Could not publish this post. Please try again.",
   );
 }

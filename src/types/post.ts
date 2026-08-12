@@ -4,37 +4,69 @@ import type { PlatformCrop, PlatformMedia } from "@/utils/crop";
 export type { PlatformCrop, PlatformMedia } from "@/utils/crop";
 
 /**
- * One image attached to a post.
+ * One piece of media attached to a post — an image, a GIF or a video.
  *
  * Position in `Post.media` is publish order — an Instagram carousel, a Facebook
  * multi-photo story and a LinkedIn multi-image post all render in it — so
  * reordering in the composer is a reordering of that array and nothing else.
  *
- * `type` exists so video can be added later without reshaping the record.
- * Today the uploader and every provider accept `"image"` only, and nothing in
- * the app writes anything else.
+ * ─── Uploaded kind is not publishing intent ──────────────────────────────────
+ *
+ * `type` says what the *file* is. It does not say what the post is: a video is
+ * a Reel, a Story or a plain video post depending on nothing but what the
+ * member chose, and that choice lives in the composer's content type, not here.
+ * Deriving one from the other is the guess the whole capability model exists to
+ * stop making on someone's behalf.
+ *
+ * Everything below `type` is measurement, and every field of it is optional
+ * because every field of it can genuinely be unknown. An item saved before the
+ * uploader recorded it has nulls, and a null is never rounded to zero — a video
+ * of unknown length must not validate as one of length nought.
  */
 export interface PostMediaItem {
   /** Stable across reorders, crops and reloads. Identifies the item, not its place. */
   id: string;
   /** The stored Cloudinary asset. Never rewritten — crops are delivery settings. */
   url: string;
-  type: "image";
   /**
-   * The original's own pixel dimensions, read from the browser's decode at
-   * upload time. Kept so a crop can be computed, and its softness judged,
-   * without re-downloading the image on every render.
+   * What the file is. `"image"` covers GIFs — a GIF differs from a photo in
+   * what a network will do with it, not in what it is, and that difference is
+   * expressed by {@link mimeType} against the provider capabilities.
+   */
+  type: "image" | "video";
+  /**
+   * The original's own pixel dimensions, read at upload time. Kept so a crop
+   * can be computed, and its softness judged, without re-downloading the asset
+   * on every render.
    */
   width: number;
   height: number;
   /**
-   * How this image is framed, or null to deliver it whole.
+   * How this item is framed, or null to deliver it whole.
    *
    * Per item, where {@link Post.platform_media} is per network. A post composed
    * with several images frames each one here; a single-image post written
    * before this existed still frames per network, and both still publish.
+   *
+   * A crop is a *delivery* setting on both: the uploaded master is never
+   * rewritten, and the crop becomes a Cloudinary transformation at publish
+   * time — for video exactly as for images.
    */
   crop: PlatformCrop | null;
+
+  /** Cloudinary's own answer for the stored file, e.g. `video/mp4`. */
+  mimeType?: string;
+  /** The master's size in bytes, as Cloudinary measured it. */
+  bytes?: number;
+  /** How long the video runs. Absent for images, and absent when unmeasured. */
+  durationMs?: number;
+  /**
+   * A still frame for a video, as a delivery URL.
+   *
+   * Derived by Cloudinary on request, not uploaded — so it costs no storage and
+   * leaves the master untouched.
+   */
+  posterUrl?: string;
 }
 
 /**
@@ -135,6 +167,15 @@ export interface PostPlatformState {
    * before storing them, so this is safe to render as-is.
    */
   errorMessage: string | null;
+  /**
+   * A notice about a publication that *succeeded* — today, only that the
+   * network refused the attached media and the text went out alone.
+   *
+   * Separate from {@link errorMessage} because the post is live: rendering it
+   * where failures are rendered would report a broken publish that is not
+   * broken. Null on almost every publication.
+   */
+  notice: string | null;
 }
 
 /** Where a post stands across every network. */
@@ -153,6 +194,21 @@ export interface PublishResult {
   publishedId: string;
   url: string | null;
   publishedAt: string;
+
+  /**
+   * What went out, when it is not what was composed.
+   *
+   * `text_only_fallback` means the network refused the attached media and the
+   * text was published without it. Absent on every ordinary publish.
+   */
+  publishedAs?: "full" | "text_only_fallback";
+  /** True when media the member attached is not on the publication. */
+  mediaDropped?: boolean;
+  /**
+   * Why, already written for a member. Present whenever {@link mediaDropped}
+   * is true — media is never dropped without a sentence explaining it.
+   */
+  reason?: string;
 }
 
 /**

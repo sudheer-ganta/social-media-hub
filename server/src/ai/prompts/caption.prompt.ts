@@ -1,5 +1,10 @@
 import { renderBrandSection } from '../brand/brand-profile';
-import type { BrandProfile, CaptionRequest, ImageAnalysis } from '../types';
+import type {
+  BrandProfile,
+  BrandStyle,
+  CaptionRequest,
+  ImageAnalysis,
+} from '../types';
 
 /**
  * Creative Intelligence: write the copy.
@@ -528,11 +533,93 @@ export interface BuildCaptionPromptOptions {
    * nothing) and an optional here would put a null check in the prompt body.
    */
   brand: BrandProfile;
+  /**
+   * The brand's *learned* voice — how this account has actually been writing,
+   * measured from its own published captions by `ai/style/`.
+   *
+   * Distinct from `brand` above, which is what the member *said* the brand is.
+   * The two disagree constantly and both belong in the prompt: the stated
+   * profile is the intent, and this is the evidence. Null before the account has
+   * enough history, in which case the stated profile is all there is.
+   */
+  styleSection?: string | null;
+  /** Real past captions as proof of that voice. See `ai/style/retrieve.ts`. */
+  evidenceSection?: string | null;
+  /**
+   * What has actually performed, from `ai/learning/performance.ts`.
+   *
+   * Null whenever no pattern cleared its evidence floor, which is most young
+   * accounts — and the reason there is no fallback branch for it. An absent
+   * section leaves the prompt exactly as it was before performance learning
+   * existed.
+   */
+  performanceSection?: string | null;
+}
+
+/**
+ * What each named register actually asks for.
+ *
+ * Written as behaviour rather than adjectives. "Be bold" is a word a model will
+ * agree with and not act on; "state the opinion in the first line and do not
+ * qualify it" changes the sentence that comes out.
+ */
+const STYLE_BRIEF: Record<BrandStyle, string> = {
+  professional:
+    'Professional. Plain, competent, no performance. Short sentences, concrete nouns, no exclamation marks. Confidence comes from specifics, not adjectives.',
+  playful:
+    'Playful. Light on its feet, happy to be funny, never zany. One joke that lands beats three that try. Still says the thing.',
+  gen_z:
+    'Gen Z. Lowercase is fine, fragments are fine, punctuation is optional. Dry rather than enthusiastic. No slang you would have to look up, and nothing that reads as an adult performing youth — that is the failure mode here.',
+  bold: 'Bold. Take a position and open with it. No hedging, no "we think", no closing question softening the claim.',
+  controversial:
+    'Controversial. Say the thing the category avoids saying, and be able to defend it. Argue with a practice or an assumption — never with a group of people, a competitor by name, or anything protected. If the only available provocation would be cruel or defamatory, be direct instead.',
+  educational:
+    'Educational. Teach one thing properly. Lead with the useful fact, not with the promise of it. Assume intelligence and no prior knowledge.',
+  premium:
+    'Premium. Restraint is the whole register. Fewer words, more space, no urgency, no discount language, no emoji. What is left unsaid does the work.',
+  promotional:
+    'Promotional. Clear offer, clear reason to act now, one call to action. Honest about what it is — an ad that pretends otherwise reads worse than one that does not.',
+};
+
+/**
+ * The register block, or the instruction to work it out.
+ *
+ * The absent branch is the product's actual position: the member should not have
+ * to choose, so the model is told what to choose *from* — the content, the
+ * learned voice, the platform and the record. Listing those explicitly is what
+ * stops "decide for yourself" collapsing into the model's own house style.
+ */
+function styleSection(
+  request: CaptionRequest,
+  hasLearnedVoice: boolean,
+): string | null {
+  if (request.styleOverride) {
+    return section('## Voice for this post', [
+      `- ${STYLE_BRIEF[request.styleOverride]}`,
+      '- The member chose this register deliberately. It overrides whatever the brand usually sounds like.',
+    ]);
+  }
+
+  return section('## Voice for this post', [
+    '- Nobody has chosen a register, which is deliberate — decide it yourself from the post in front of you.',
+    hasLearnedVoice
+      ? '- Start from how this account has actually been writing (below). That is the default, not a suggestion.'
+      : '- There is no writing history to learn from yet, so take the register from the brand profile and the subject.',
+    '- Let the content move it: a launch, a complaint, a milestone and a price explanation do not want the same voice from the same brand.',
+    '- Let the platform move it: the same idea is not written the same way on LinkedIn and on Instagram.',
+    '- Do not default to upbeat marketing enthusiasm. It is the register this model reaches for unprompted and it is rarely the right one.',
+  ]);
 }
 
 export function buildCaptionPrompt(
   request: CaptionRequest,
-  { imageAnalysis, brand }: BuildCaptionPromptOptions,
+  {
+    imageAnalysis,
+    brand,
+    styleSection: learnedVoice = null,
+    evidenceSection = null,
+    performanceSection = null,
+  }: BuildCaptionPromptOptions,
 ): BuiltPrompt {
   const tones = VARIATION_TONES.slice(0, request.variationCount);
   const count = request.variationCount;
@@ -563,7 +650,20 @@ export function buildCaptionPrompt(
 
     `## How to write\n${AUDIENCE_BRIEF[request.audience] ?? AUDIENCE_BRIEF.gen_z_millennial}`,
 
+    styleSection(request, Boolean(learnedVoice)),
+
     renderBrandSection(brand),
+
+    // The learned voice sits *after* the stated brand profile on purpose. Where
+    // the two disagree, what the account actually publishes is the better guide
+    // to what its audience recognises — and being second is what makes it read
+    // as the correction rather than as the thing being corrected.
+    learnedVoice,
+    evidenceSection,
+
+    // What worked. Absent on a young account, and nothing downstream notices.
+    performanceSection,
+
     competitorSection(request),
     platformSection(request),
     regenerateSection(request),

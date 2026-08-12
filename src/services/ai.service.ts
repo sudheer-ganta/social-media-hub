@@ -3,6 +3,7 @@ import { API_BASE_URL } from "@/constants/api";
 import type { CaptionBrief, CaptionResult } from "@/ai/caption";
 import type { AnalysisBrief, CaptionAnalysis } from "@/ai/analysis";
 import type { ImprovementBrief, TargetedImprovement } from "@/ai/improve";
+import type { HashtagBrief, HashtagResult } from "@/ai/hashtags";
 
 /**
  * The browser's side of the AI API.
@@ -151,6 +152,28 @@ export async function improveCaption(
 }
 
 /**
+ * Chooses hashtags for the caption as it stands.
+ *
+ * A separate call from `/caption` for the reason that makes it useful: the tags
+ * worth having are chosen against the text that will actually publish, which
+ * after any editing is not the text `/caption` returned. It also means tags can
+ * be re-rolled without rewriting the post.
+ *
+ * An empty `primary` is a **success**, not a failure to retry — some posts read
+ * worse with hashtags, and `note` says why. Callers must render the note rather
+ * than treating the empty list as an error.
+ */
+export async function generateHashtags(
+  brief: HashtagBrief,
+): Promise<HashtagResult> {
+  return request<HashtagResult>(
+    "/hashtags",
+    { method: "POST", body: JSON.stringify(brief) },
+    "Could not choose hashtags. Please try again.",
+  );
+}
+
+/**
  * Tells the backend what the member did with a set of suggestions.
  *
  * ─── Fire and forget, deliberately ───────────────────────────────────────────
@@ -198,6 +221,7 @@ export const aiService = {
   generateCaption,
   analyzeCaption,
   improveCaption,
+  generateHashtags,
   recordCaptionFeedback,
   fetchAiStatus,
 };

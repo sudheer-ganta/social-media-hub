@@ -1,0 +1,15 @@
+-- Something worth telling the member about a publication that SUCCEEDED.
+--
+-- Distinct from `error_message`, and the distinction is the reason this column
+-- exists rather than reusing that one: an error means nothing was published and
+-- the row is FAILED, where a notice means the post is live and something about
+-- it differs from what was composed. Sharing the column would render that
+-- sentence everywhere failures are shown and make a successful post look broken.
+--
+-- Today it carries exactly one thing: X refused the attached media and the text
+-- was published without it.
+--
+-- Nullable with no default and no backfill. Null means "nothing to say", which
+-- is the correct and unchanged answer for every publication that already
+-- exists — so this migration cannot alter how any historical row reads.
+ALTER TABLE "post_platforms" ADD COLUMN "notice" TEXT;

@@ -64,6 +64,36 @@ export type AudienceRegister =
   | 'broad';
 
 /**
+ * The register the brand speaks in, when the member insists on one.
+ *
+ * ─── Why this is optional, and must stay optional ────────────────────────────
+ * The default is **absent**, and absent does not mean "professional" — it means
+ * *work it out*. A brand does not have one voice: the same account is playful
+ * announcing a drop, plain answering a complaint, and precise explaining a
+ * price. Making the member choose per post moves that judgement onto the person
+ * who wanted the tool to make it, and they will pick the same value every time
+ * and then wonder why every caption sounds identical.
+ *
+ * So when this is absent the prompt is told to infer the register from the
+ * content in front of it, the brand's own learned voice, the platform and what
+ * has performed. Present, it is an instruction and overrides the inference —
+ * which is the whole point of offering it.
+ *
+ * Distinct from {@link AudienceRegister}, which is *who the copy is aimed at*.
+ * A premium brand writing for Gen Z is a real and common combination, and
+ * collapsing the two axes would make it unsayable.
+ */
+export type BrandStyle =
+  | 'professional'
+  | 'playful'
+  | 'gen_z'
+  | 'bold'
+  | 'controversial'
+  | 'educational'
+  | 'premium'
+  | 'promotional';
+
+/**
  * The brand's voice as the caller chose to describe it. Every field is
  * optional — a user who has never opened the Brand Voice panel still gets a
  * usable caption, just a less distinctive one.
@@ -308,6 +338,14 @@ export interface CaptionRequest {
   imageUrl?: string;
   /** Register the copy is written in. Defaults to `gen_z_millennial`. */
   audience: AudienceRegister;
+  /**
+   * The brand's voice for this post, when the member overrode the default.
+   *
+   * Absent is the normal case and means FlowPost decides — see
+   * {@link BrandStyle}. Ignored in personal mode, where the member's own learned
+   * voice is the only register there is and a style knob would fight it.
+   */
+  styleOverride?: BrandStyle;
   /** Networks this will be published to, e.g. ['linkedin']. */
   platforms: string[];
   goal: MarketingGoal;
@@ -520,6 +558,50 @@ export interface RawPersonalPayload {
     whatFits?: unknown;
   };
   captions?: Array<{ text?: unknown; behaviour?: unknown }>;
+}
+
+// ─── Hashtags ────────────────────────────────────────────────────────────────
+//
+// A generator of its own rather than a field on {@link CaptionResult}, and the
+// split earns itself twice: tags are chosen against the *finished* caption
+// (including one the member typed), and they can be regenerated without
+// regenerating the copy. The caption call still returns `hashtags` so no existing
+// client breaks — this is the surface that knows what it is doing.
+
+/**
+ * The two-tier answer.
+ *
+ * `primary` is what publishes and already fits the tightest selected network's
+ * ceiling. `secondary` is offered, never applied — the overflow plus the model's
+ * own extras, so a member cross-posting to Instagram and X can see the tags
+ * Instagram would have taken without X being pushed over its limit.
+ *
+ * Both may be empty, and that is a success rather than a failure: some posts read
+ * worse with tags, and `note` says so.
+ */
+export interface HashtagResult {
+  /** Tags to publish, without the leading `#`. May be empty. */
+  primary: string[];
+  /** Relevant extras for the member to add by hand. May be empty. */
+  secondary: string[];
+  /** One line on why these, or why none. Never a reach claim. */
+  note: string;
+  /** The networks this set was chosen for. */
+  platforms: string[];
+  /**
+   * The count the selected networks jointly allow. `conflict` is true when they
+   * do not agree — Instagram wants at least three, X tolerates at most two — in
+   * which case `max` is the tighter ceiling and the UI can explain why.
+   */
+  budget: { min: number; max: number; conflict: boolean };
+  /** What was dropped and why. For the log and for tests; never shown. */
+  rejected: Array<{ tag: string; reason: string }>;
+  meta: {
+    provider: string;
+    model: string;
+    durationMs: number;
+    promptVersion: number;
+  };
 }
 
 // ─── Marketing Intelligence ──────────────────────────────────────────────────

@@ -29,13 +29,29 @@ export async function publish(req: Request, res: Response): Promise<void> {
   }
 
   const provider = readProvider(req);
-  const result = await publishService.publishPost(
-    req.user.id,
-    postId,
-    provider,
-  );
+  const result = await publishService.publishPost(req.user.id, postId, provider, {
+    // What the composer currently shows, which is newer than anything stored.
+    // Absent — an older client, or a request that never named one — takes the
+    // count-based resolution, which is what this endpoint has always done.
+    ...(readContentType(req) && { contentType: readContentType(req) }),
+  });
 
   res.json(result);
+}
+
+/**
+ * The content type the member chose, if the request named one.
+ *
+ * Returns null for anything that is not a plain non-empty string. It is *not*
+ * validated against the vocabulary here — the resolver does that, and it is the
+ * one place that knows which formats this network publishes. Doing it twice
+ * would mean two lists of six words.
+ */
+function readContentType(req: Request): string | null {
+  const fromBody = (req.body as { contentType?: unknown } | undefined)
+    ?.contentType;
+  if (typeof fromBody === 'string' && fromBody.trim()) return fromBody.trim();
+  return null;
 }
 
 /** `GET /api/posts/:postId/publish` — where this post stands on each network. */

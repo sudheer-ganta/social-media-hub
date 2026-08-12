@@ -1,6 +1,24 @@
 import { ProviderError } from '../provider.interface';
 import { X_PUBLISH_SCOPE } from './config';
+import { validateAgainstCapability } from '../media-rules';
+import type { ContentTypeCapability } from '../capabilities';
 import type { ProviderMediaAsset } from '../provider.interface';
+
+/*
+ * ─── One import rule, and it is load-bearing ─────────────────────────────────
+ *
+ * This file exports the numbers `providers/capabilities.ts` builds X's
+ * capability set from, so it must never import that module back. The capability
+ * a check needs is *passed in* by the publisher, which is free to look it up
+ * because nothing imports a publisher.
+ *
+ *     capabilities.ts ──▶ validator.ts ──▶ media-rules.ts
+ *            └──────────────────────────▶ publisher.ts ──▶ validator.ts
+ *
+ * A cycle here would not fail loudly. It would leave `X_MAX_TEXT_LENGTH`
+ * undefined for whichever module happened to load second, and a caption ceiling
+ * of `undefined` compares false against everything.
+ */
 
 /**
  * What X will and will not accept, checked before we spend a request on finding
@@ -53,6 +71,36 @@ export const X_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
 export const X_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
+ * An animated GIF, which X treats as its own thing rather than as a photo.
+ *
+ * Not a separate media *kind* — it arrives as `kind: 'image'` with this MIME
+ * type, exactly as it always has. What makes it different is stated where it
+ * matters and nowhere else: a bigger ceiling ({@link X_MAX_GIF_BYTES}), an
+ * upload category of its own, and a rule that it cannot share a post with
+ * anything.
+ */
+export const X_GIF_MIME_TYPES = ['image/gif'] as const;
+
+/** X's documented ceiling for an animated GIF. Three times the photo ceiling. */
+export const X_MAX_GIF_BYTES = 15 * 1024 * 1024;
+
+/** What X's chunked upload accepts for video. */
+export const X_VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime'] as const;
+
+/**
+ * X's documented ceiling for a video upload.
+ *
+ * Never held in memory — video takes the chunked transport, which streams the
+ * asset from Cloudinary through APPEND one chunk at a time. See
+ * `capabilities.ts` and `x/media-upload.ts`.
+ */
+export const X_MAX_VIDEO_BYTES = 512 * 1024 * 1024;
+
+/** X's documented video duration window for a standard post. */
+export const X_MIN_VIDEO_DURATION_MS = 500;
+export const X_MAX_VIDEO_DURATION_MS = 140_000;
+
+/**
  * True when a connection's *granted* scopes allow publishing.
  *
  * A member can decline a permission on the consent screen and still complete the
@@ -77,9 +125,11 @@ export function countCharacters(text: string): number {
 export function validatePost(input: {
   caption: string;
   media?: ProviderMediaAsset[];
+  /** X's rules for the format being published. Resolved by the publisher. */
+  capability?: ContentTypeCapability;
 }): { text: string; media: ProviderMediaAsset[] } {
   const text = input.caption.trim();
-  const media = validateMedia(input.media);
+  const media = validateMedia(input.media, input.capability);
 
   if (!text && media.length === 0) {
     throw new ProviderError(
@@ -116,9 +166,12 @@ export function validatePost(input: {
  */
 export function validateMedia(
   media: ProviderMediaAsset[] | undefined,
+  capability?: ContentTypeCapability,
 ): ProviderMediaAsset[] {
   if (!media || media.length === 0) return [];
 
+  // The count rule that is true of *every* X format, checked first so an
+  // oversized post fails the same way whether or not a content type was named.
   if (media.length > X_MAX_MEDIA_ITEMS) {
     throw new ProviderError(
       `An X post holds ${X_MAX_MEDIA_ITEMS} images. ` +
@@ -128,16 +181,25 @@ export function validateMedia(
     );
   }
 
+  // Format, size, duration and the GIF-cannot-share rule, all read from the
+  // capability rather than restated here — see `providers/media-rules.ts`.
+  //
+  // Absent means a caller that predates content types. It gets the checks that
+  // do not depend on which format was chosen, which is the same set the
+  // hand-written version of this function enforced.
+  if (capability) {
+    validateAgainstCapability(capability, media, 'x', 'X');
+    return media;
+  }
+
   for (const asset of media) {
     if (asset.kind !== 'image') {
       throw new ProviderError(
-        `${asset.kind === 'video' ? 'Videos' : 'That media'} can't be published to X from ` +
-          'FlowPost yet. Publish this post with images instead.',
+        'Choose a format before publishing video to X.',
         400,
         'x',
       );
     }
-
     if (!X_IMAGE_MIME_TYPES.has(asset.mimeType)) {
       throw new ProviderError(
         `X does not accept ${asset.mimeType || 'that image format'}. ` +
@@ -146,7 +208,6 @@ export function validateMedia(
         'x',
       );
     }
-
     if (asset.byteLength === 0) {
       throw new ProviderError(
         'That image file is empty. Re-upload it and try again.',
@@ -154,7 +215,6 @@ export function validateMedia(
         'x',
       );
     }
-
     if (asset.byteLength > X_MAX_IMAGE_BYTES) {
       throw new ProviderError(
         `That image is ${formatMegabytes(asset.byteLength)}, over X's ` +

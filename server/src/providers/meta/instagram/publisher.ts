@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { ProviderError } from '../../provider.interface';
+import { capabilityFor, type ContentType } from '../../capabilities';
 import type { MetaErrorBody } from '../config';
 import { instagramConfig } from './config';
 import { REQUEST_TIMEOUT_MS, toProviderError } from './http';
@@ -8,6 +9,7 @@ import type {
   InstagramCarouselContainerRequest,
   InstagramContainerStatusNode,
   InstagramCreatedNode,
+  InstagramMediaAsset,
   InstagramMediaContainerRequest,
   InstagramMediaNode,
   InstagramPublishInput,
@@ -85,6 +87,21 @@ import type {
  */
 const CONTAINER_POLL_DELAYS_MS = [1000, 2000, 3000, 4000, 5000, 5000, 5000, 5000];
 
+/**
+ * The same, for a container Meta has to *transcode* rather than just fetch.
+ *
+ * ~5 minutes. A Reel is re-encoded on Meta's side and a minute-long clip
+ * routinely takes more than the thirty seconds an image gets — giving up on
+ * that schedule would fail publishes that were about to succeed, and would fail
+ * them *after* the member had waited. The tail is coarse because past the first
+ * half-minute the answer is "still working", and asking twice as often does not
+ * make it finish sooner.
+ */
+const VIDEO_POLL_DELAYS_MS = [
+  2000, 3000, 5000, 5000, 10_000, 10_000, 15_000, 15_000, 20_000, 20_000,
+  30_000, 30_000, 30_000, 30_000, 30_000, 30_000,
+];
+
 /** Extra `media_publish` attempts when Meta answers "media not ready" (9007). */
 const PUBLISH_NOT_READY_RETRIES = 2;
 const PUBLISH_NOT_READY_DELAY_MS = 2000;
@@ -111,15 +128,52 @@ export const timing = {
 export async function publish(
   input: InstagramPublishInput,
 ): Promise<InstagramPublishResult> {
+  // What the member is publishing this as. Resolved here rather than inside the
+  // validator, because the validator is what `capabilities.ts` is built from
+  // and must not import it back — see the import note in `validator.ts`.
+  //
+  // A caller that named no content type falls back to the count-based
+  // resolution, which is what publishing did before the field existed and which
+  // can never produce REEL or STORY. That is deliberate: a Story is only ever
+  // published because someone asked for one.
+  const contentType: ContentType =
+    input.contentType ??
+    (media_count(input) >= INSTAGRAM_MIN_CAROUSEL_ITEMS ? 'CAROUSEL' : 'IMAGE');
+  const capability = capabilityFor('instagram', contentType);
+
   // Everything knowable without a network call, checked before we spend one.
   // Includes the "Instagram has no text-only post" rule — see the validator.
   const { caption, media } = validatePost({
     caption: input.caption,
     media: input.media,
+    capability,
   });
 
   const accessToken = input.accessToken;
   const igUserId = input.providerAccountId;
+
+  // ─── Reels and Stories ─────────────────────────────────────────────────────
+  //
+  // The *same* edge as a feed image — `POST /{ig-id}/media` — with a
+  // `media_type` and, for video, `video_url` instead of `image_url`. Meta
+  // fetches the file from Cloudinary exactly as it fetches an image, which is
+  // why nothing is downloaded for either: see the `url` transport in
+  // `providers/capabilities.ts`.
+  //
+  // Not a separate publisher, not a second container flow. The only real
+  // differences are the parameter names and how long Meta takes to transcode.
+  if (contentType === 'REEL' || contentType === 'STORY') {
+    return publishSingleContainer({
+      accessToken,
+      igUserId,
+      asset: media[0],
+      // Stories carry no caption. Meta ignores the parameter on a STORIES
+      // container — text on a Story is burned into the media or added in the
+      // app — so sending one would be a promise the API does not keep.
+      caption: contentType === 'STORY' ? '' : caption,
+      mediaType: contentType === 'REEL' ? 'REELS' : 'STORIES',
+    });
+  }
 
   // Every image gets a container. For one image that container *is* the post;
   // for several they are children and a parent is built over them below.
@@ -172,6 +226,69 @@ export async function publish(
     // Children first, then the container that was actually published — which
     // for a single image is the one and only entry, exactly as before.
     mediaUrns: isCarousel ? [...childIds, publishableId] : childIds,
+  };
+}
+
+/** How many items the caller attached, without trusting the array's shape. */
+function media_count(input: InstagramPublishInput): number {
+  return input.media?.length ?? 0;
+}
+
+/**
+ * A Reel or a Story: one container, one publish.
+ *
+ * Structurally the single-image path with different parameter names, and
+ * deliberately written as its own function rather than as three ternaries
+ * inside the loop above — the image path is what every existing post takes, and
+ * it should stay readable as the thing it is.
+ *
+ * The video is never downloaded. `video_url` is the Cloudinary delivery URL,
+ * which Meta fetches onto its own servers exactly as it fetches `image_url`.
+ */
+async function publishSingleContainer(args: {
+  accessToken: string;
+  igUserId: string;
+  asset: InstagramMediaAsset;
+  caption: string;
+  mediaType: 'REELS' | 'STORIES';
+}): Promise<InstagramPublishResult> {
+  const isVideo = args.asset.kind === 'video';
+
+  const containerId = await createMediaContainer({
+    accessToken: args.accessToken,
+    igUserId: args.igUserId,
+    body: {
+      media_type: args.mediaType,
+      ...(isVideo
+        ? { video_url: args.asset.sourceUrl }
+        : { image_url: args.asset.sourceUrl }),
+      ...(args.caption ? { caption: args.caption } : {}),
+      // Meta accepts alt text on an image Story. A Reel's accessibility text is
+      // a different field it does not expose here, so it is simply omitted.
+      ...(!isVideo && args.asset.altText ? { alt_text: args.asset.altText } : {}),
+    },
+  });
+
+  // Video containers get the long schedule: Meta transcodes a Reel, which takes
+  // materially longer than fetching a JPEG, and giving up at 30 seconds would
+  // fail publishes that were going to succeed.
+  await waitForContainerReady({
+    accessToken: args.accessToken,
+    containerId,
+    schedule: isVideo ? VIDEO_POLL_DELAYS_MS : CONTAINER_POLL_DELAYS_MS,
+  });
+
+  const mediaId = await publishContainer({
+    accessToken: args.accessToken,
+    igUserId: args.igUserId,
+    containerId,
+  });
+
+  return {
+    urn: mediaId,
+    url: await fetchPermalink(args.accessToken, mediaId),
+    endpoint: 'media_publish',
+    mediaUrns: [containerId],
   };
 }
 
@@ -273,11 +390,14 @@ async function createMediaContainer(args: {
 async function waitForContainerReady(args: {
   accessToken: string;
   containerId: string;
+  /** Defaults to the image schedule. Video passes its own — see above. */
+  schedule?: readonly number[];
 }): Promise<void> {
   const startedAt = Date.now();
+  const schedule = args.schedule ?? CONTAINER_POLL_DELAYS_MS;
 
-  for (let attempt = 1; attempt <= CONTAINER_POLL_DELAYS_MS.length; attempt++) {
-    await timing.wait(CONTAINER_POLL_DELAYS_MS[attempt - 1]);
+  for (let attempt = 1; attempt <= schedule.length; attempt++) {
+    await timing.wait(schedule[attempt - 1]);
 
     let response;
     try {
@@ -305,7 +425,7 @@ async function waitForContainerReady(args: {
     if (statusCode === 'ERROR' || statusCode === 'EXPIRED') {
       const detail = response.data?.status?.trim();
       throw new ProviderError(
-        `Instagram could not process the image (container ${statusCode}${detail ? `: ${detail}` : ''})`,
+        `Instagram could not process the media (container ${statusCode}${detail ? `: ${detail}` : ''})`,
         502,
         'instagram',
         response.status,
@@ -314,8 +434,8 @@ async function waitForContainerReady(args: {
   }
 
   throw new ProviderError(
-    `Instagram did not finish processing the image within ${Math.round(
-      CONTAINER_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0) / 1000,
+    `Instagram did not finish processing the media within ${Math.round(
+      schedule.reduce((sum, ms) => sum + ms, 0) / 1000,
     )}s (container ${args.containerId})`,
     502,
     'instagram',

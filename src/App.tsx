@@ -15,6 +15,7 @@ import Analytics from "@/pages/Analytics";
 import Integrations from "@/pages/Integrations";
 import Settings from "@/pages/Settings";
 import StudioPreview from "@/pages/dev/StudioPreview";
+import AnalyticsPreview from "@/pages/dev/AnalyticsPreview";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
 import DataDeletion from "@/pages/DataDeletion";
@@ -64,6 +65,9 @@ export default function App() {
               Stripped from production builds by the DEV guard. */}
           {import.meta.env.DEV && (
             <Route path="/dev/studio-preview" element={<StudioPreview />} />
+          )}
+          {import.meta.env.DEV && (
+            <Route path="/dev/analytics-preview" element={<AnalyticsPreview />} />
           )}
 
           <Route path="*" element={<Navigate to="/" replace />} />
