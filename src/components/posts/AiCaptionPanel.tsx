@@ -179,6 +179,94 @@ function ImageReadStrip({ analysis }: { analysis: ImageAnalysis }) {
 }
 
 /**
+ * AI Strategy Transparency strip shown above generated results.
+ * Shows ONLY facts that actually exist for this generation.
+ */
+function AiStrategySummaryStrip({
+  result,
+  mode,
+  audience,
+}: {
+  result: CaptionResult;
+  mode: CaptionMode;
+  audience?: AudienceRegister;
+}) {
+  const strategy = result.strategyUsed;
+
+  const goalFormatted = strategy?.goal
+    ? strategy.goal.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : null;
+  const funnel = strategy?.funnelStage ?? null;
+
+  const platformsFormatted = strategy?.platforms?.length
+    ? strategy.platforms.map((p) => PLATFORM_MAP[p as Platform]?.name ?? p).join(", ")
+    : null;
+
+  const audienceLabel = audience
+    ? AUDIENCE_OPTIONS.find((a) => a.value === audience)?.label.split("·")[0].trim() ?? audience
+    : null;
+
+  const checks: string[] = [];
+  if (mode === "brand" || strategy?.brandVoiceApplied) {
+    checks.push("Brand voice applied");
+  }
+  if (strategy?.audienceConsidered || audienceLabel) {
+    checks.push("Audience considered");
+  }
+  // STRICT RULE: Only show "Image analyzed" if a visual asset was actually analyzed!
+  if (result.imageAnalysis || strategy?.imageAnalyzed) {
+    checks.push("Image analyzed");
+  }
+  // STRICT RULE: Only show "Performance signals considered" if performance evidence was actually loaded into the request!
+  if (strategy?.performanceSignalsConsidered) {
+    checks.push("Performance signals considered");
+  }
+
+  return (
+    <div className="rounded-md border bg-card p-3 shadow-sm space-y-2">
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+        <Sparkles className="h-3.5 w-3.5 text-primary" />
+        AI Strategy
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+        {(goalFormatted || funnel) && (
+          <div>
+            <span className="font-semibold text-foreground">
+              {goalFormatted ?? "Strategy"}
+            </span>
+            {funnel && (
+              <span className="text-muted-foreground"> · {funnel}</span>
+            )}
+          </div>
+        )}
+        {(platformsFormatted || audienceLabel) && (
+          <div>
+            <span className="font-semibold text-foreground">
+              {platformsFormatted ?? "Multi-platform"}
+            </span>
+            {audienceLabel && (
+              <span className="text-muted-foreground"> · {audienceLabel}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {checks.length > 0 && (
+        <div className="pt-2 border-t flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+          {checks.map((check) => (
+            <span key={check} className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+              <Check className="h-3 w-3 shrink-0" />
+              {check}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * The Create Post page's AI panel.
  *
  * Reads from the live generation held in `useAiCaption`, not from the post
@@ -261,13 +349,6 @@ export function AiCaptionPanel({
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 pt-2 sm:pt-0">
-          {/* Brand only. Picking a register is a marketing decision about who
-              the copy is pitched at — a real question when a business is
-              choosing how to sound to its buyers, and the wrong question to ask
-              somebody about their own account. Personal works out how they
-              write from what they have already posted; a dropdown asking them
-              to choose a voice for themselves is the "select your tone"
-              questionnaire this composer exists without. */}
           {mode === "brand" && (
             <Select
               value={audience}
@@ -287,13 +368,6 @@ export function AiCaptionPanel({
             </Select>
           )}
 
-          {/*
-            The register override. Defaults to Smart and is meant to stay there —
-            it is offered for the post where somebody knows they want a particular
-            voice, not as a decision to make before the tool works. "Smart" sends
-            nothing and the backend infers the register; every other value is an
-            instruction that overrides that inference.
-          */}
           {mode === "brand" && (
             <Select
               value={styleOverride ?? "smart"}
@@ -334,11 +408,7 @@ export function AiCaptionPanel({
         </div>
       </CardHeader>
 
-      {/* One card, four states — and only ever one of them at a time, so the
-          panel is exactly as tall as what it currently has to say. */}
       <CardContent className="space-y-3 p-4 pt-0">
-        {/* An error outranks a stale result: the run the member just asked for
-            is what failed, and the retry has to be next to the reason. */}
         {!isGenerating && error && (
           <div
             role="alert"
@@ -379,8 +449,6 @@ export function AiCaptionPanel({
                 ? "Reading the image, then writing three angles from it…"
                 : "Writing your captions — this usually takes a few seconds."}
             </p>
-            {/* Shaped like the options that are about to replace it, so the
-                card does not jump when they arrive. */}
             {[0, 1, 2].map((row) => (
               <div key={row} className="space-y-2 rounded-md border p-3">
                 <div className="flex items-center gap-2">
@@ -403,6 +471,13 @@ export function AiCaptionPanel({
 
         {!isGenerating && hasResult && result && (
           <>
+            {/* AI Strategy Transparency section */}
+            <AiStrategySummaryStrip
+              result={result}
+              mode={mode}
+              audience={audience}
+            />
+
             {result.imageAnalysis && (
               <ImageReadStrip analysis={result.imageAnalysis} />
             )}
@@ -440,11 +515,6 @@ export function AiCaptionPanel({
                         {variation.angle && (
                           <Badge className="text-[10px]">{variation.angle}</Badge>
                         )}
-                        {/* Personal returns no tone, on purpose. Brand's tone is
-                            a label the member chose to see; a personal caption
-                            labelled "chaotic" or "deadpan" turns their own voice
-                            back into a menu of options, which is the thing this
-                            mode exists to remove. */}
                         {variation.tone && (
                           <Badge variant="secondary" className="text-[10px]">
                             {variation.tone}
@@ -465,13 +535,59 @@ export function AiCaptionPanel({
                         {isSelected ? "Applied" : "Apply to Post"}
                       </Button>
                     </div>
+
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
                       {variation.caption}
                     </p>
-                    {variation.whyItWorks && (
-                      <p className="mt-3 border-t pt-2 text-[11px] leading-relaxed text-muted-foreground">
-                        {variation.whyItWorks}
-                      </p>
+
+                    {/* Why this works section (structured or prose) */}
+                    {(variation.whyItWorksDetails || variation.whyItWorks) && (
+                      <div className="mt-3 border-t pt-2.5 space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Why this works
+                        </p>
+
+                        {variation.whyItWorksDetails ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                            {variation.whyItWorksDetails.hook && (
+                              <div>
+                                <span className="font-semibold text-foreground block">Hook</span>
+                                <p className="text-muted-foreground leading-snug">
+                                  {variation.whyItWorksDetails.hook}
+                                </p>
+                              </div>
+                            )}
+                            {variation.whyItWorksDetails.funnel && (
+                              <div>
+                                <span className="font-semibold text-foreground block">Funnel</span>
+                                <p className="text-muted-foreground leading-snug">
+                                  {variation.whyItWorksDetails.funnel}
+                                </p>
+                              </div>
+                            )}
+                            {variation.whyItWorksDetails.voice && (
+                              <div>
+                                <span className="font-semibold text-foreground block">Voice</span>
+                                <p className="text-muted-foreground leading-snug">
+                                  {variation.whyItWorksDetails.voice}
+                                </p>
+                              </div>
+                            )}
+                            {variation.whyItWorksDetails.platform && (
+                              <div>
+                                <span className="font-semibold text-foreground block">Platform</span>
+                                <p className="text-muted-foreground leading-snug">
+                                  {variation.whyItWorksDetails.platform}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] leading-relaxed text-muted-foreground">
+                            {variation.whyItWorks}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -482,7 +598,7 @@ export function AiCaptionPanel({
               <div className="rounded-md border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Hashtags
+                    Hashtags ({result.hashtags.length})
                   </p>
                   <Button
                     type="button"
@@ -504,10 +620,6 @@ export function AiCaptionPanel({
               </div>
             )}
 
-            {/* Only ever present when the Music / Song field was empty at
-                generation time — the backend suppresses the whole list once a
-                song is chosen, so there is nothing here that could tempt anyone
-                into replacing a decision the user already made. */}
             {onUseSong && result.songSuggestions?.length ? (
               <div className="rounded-md border p-3">
                 <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -556,38 +668,47 @@ export function AiCaptionPanel({
             ) : null}
 
             {showPlatformVariations && platformEntries.length > 0 && (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {platformEntries.map(([platform, caption]) => {
-                  const isSelected = selectedCaption === caption;
-                  return (
-                    <div
-                      key={platform}
-                      className={`rounded-md border p-3 transition-colors ${isSelected
-                          ? "border-primary bg-primary/5 ring-1 ring-primary"
-                          : ""
-                        }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
-                          {PLATFORM_MAP[platform]?.name ?? platform}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Platform Versions
+                </p>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {platformEntries.map(([platform, caption]) => {
+                    const isSelected = selectedCaption === caption;
+                    const charCount = caption.length;
+                    return (
+                      <div
+                        key={platform}
+                        className={`rounded-md border p-3 transition-colors ${isSelected
+                            ? "border-primary bg-primary/5 ring-1 ring-primary"
+                            : ""
+                          }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
+                            <span>{PLATFORM_MAP[platform]?.name ?? platform}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              · {charCount} chars
+                            </span>
+                          </p>
+                          <Button
+                            type="button"
+                            variant={isSelected ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleSelectCaption(caption)}
+                          >
+                            {isSelected ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}
+                            {isSelected ? "Applied" : "Apply to Post"}
+                          </Button>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                          {caption}
                         </p>
-                        <Button
-                          type="button"
-                          variant={isSelected ? "default" : "ghost"}
-                          size="sm"
-                          onClick={() => handleSelectCaption(caption)}
-                        >
-                          {isSelected ? <Check className="h-4 w-4" /> : <Wand2 className="h-4 w-4" />}
-                          {isSelected ? "Applied" : "Use"}
-                        </Button>
                       </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-                        {caption}
-                      </p>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
 

@@ -151,6 +151,13 @@ export interface CaptionBrief {
 
 // ─── Response ────────────────────────────────────────────────────────────────
 
+export interface WhyThisWorksDetails {
+  hook?: string;
+  funnel?: string;
+  voice?: string;
+  platform?: string;
+}
+
 export interface CaptionVariation {
   tone: string;
   caption: string;
@@ -160,6 +167,8 @@ export interface CaptionVariation {
   angle?: string;
   /** One line on why it should land. Shown next to the option. */
   whyItWorks?: string;
+  /** Evidence-based breakdown of why this option works. */
+  whyItWorksDetails?: WhyThisWorksDetails;
 }
 
 /** A creative direction the model committed to before writing. */
@@ -191,6 +200,18 @@ export interface CaptionMeta {
   promptVersion: number;
 }
 
+export interface StrategyUsedInfo {
+  goal: string;
+  funnelStage: string;
+  platforms: string[];
+  audience: string;
+  styleOverride?: string | null;
+  brandVoiceApplied: boolean;
+  audienceConsidered: boolean;
+  imageAnalyzed: boolean;
+  performanceSignalsConsidered: boolean;
+}
+
 export interface CaptionResult {
   caption: string;
   variations: CaptionVariation[];
@@ -210,6 +231,8 @@ export interface CaptionResult {
   angles?: CreativeAngle[];
   /** Audio ideas. Absent when the composer already has a song. */
   songSuggestions?: SongSuggestion[];
+  /** Strategy parameters actually used for this generation (transparency) */
+  strategyUsed?: StrategyUsedInfo;
   meta: CaptionMeta;
 }
 

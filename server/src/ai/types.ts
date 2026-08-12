@@ -373,6 +373,13 @@ export interface CaptionRequest {
 
 // ─── Result ──────────────────────────────────────────────────────────────────
 
+export interface WhyThisWorksDetails {
+  hook?: string;
+  funnel?: string;
+  voice?: string;
+  platform?: string;
+}
+
 export interface CaptionVariation {
   tone: string;
   caption: string;
@@ -383,6 +390,8 @@ export interface CaptionVariation {
   angle?: string;
   /** One line on why it should land. Shown to whoever is choosing. */
   whyItWorks?: string;
+  /** Evidence-based breakdown of why this option works. */
+  whyItWorksDetails?: WhyThisWorksDetails;
 }
 
 /** Provenance for one generation. Stored alongside the caption on the post. */
@@ -394,6 +403,18 @@ export interface CaptionMeta {
   generatedAt: string;
   /** Bumped when the prompt changes shape — lets you compare output quality. */
   promptVersion: number;
+}
+
+export interface StrategyUsedInfo {
+  goal: MarketingGoal;
+  funnelStage: FunnelStage;
+  platforms: string[];
+  audience: AudienceRegister;
+  styleOverride?: BrandStyle | null;
+  brandVoiceApplied: boolean;
+  audienceConsidered: boolean;
+  imageAnalyzed: boolean;
+  performanceSignalsConsidered: boolean;
 }
 
 export interface SeoKeyword {
@@ -483,6 +504,8 @@ export interface CaptionResult {
   angles?: CreativeAngle[];
   /** Audio ideas. Absent when the user already chose a song. */
   songSuggestions?: SongSuggestion[];
+  /** Exact strategy details actually used during generation (for transparency UI) */
+  strategyUsed?: StrategyUsedInfo;
   meta: CaptionMeta;
 }
 
@@ -499,6 +522,7 @@ export interface RawCaptionPayload {
     hook?: unknown;
     angle?: unknown;
     whyItWorks?: unknown;
+    whyItWorksDetails?: Record<string, unknown>;
   }>;
   hashtags?: unknown;
   songSuggestions?: Array<{

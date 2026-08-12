@@ -52,7 +52,7 @@ export function PlatformVariationsPanel({
       <div>
         <p className="text-sm font-semibold">Platform Versions</p>
         <p className="text-xs text-muted-foreground">
-          Each caption rewritten for its platform's format and limits.
+          One composer. Different platforms. No format headaches.
         </p>
       </div>
 

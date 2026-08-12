@@ -129,6 +129,18 @@ function normaliseVariations(
       const angle = asString(item?.angle).slice(0, 80);
       const whyItWorks = asString(item?.whyItWorks).slice(0, 300);
 
+      const rawDetails = item?.whyItWorksDetails;
+      const whyItWorksDetails =
+        rawDetails && typeof rawDetails === 'object'
+          ? {
+              ...(asString(rawDetails.hook) && { hook: asString(rawDetails.hook).slice(0, 250) }),
+              ...(asString(rawDetails.funnel) && { funnel: asString(rawDetails.funnel).slice(0, 250) }),
+              ...(asString(rawDetails.voice) && { voice: asString(rawDetails.voice).slice(0, 250) }),
+              ...(asString(rawDetails.platform) && { platform: asString(rawDetails.platform).slice(0, 250) }),
+            }
+          : undefined;
+      const hasDetails = whyItWorksDetails && Object.keys(whyItWorksDetails).length > 0;
+
       return {
         tone: asString(item?.tone) || `Option ${index + 1}`,
         caption,
@@ -139,6 +151,7 @@ function normaliseVariations(
         // an empty string in the UI is a worse answer than no label at all.
         ...(angle && { angle }),
         ...(whyItWorks && { whyItWorks }),
+        ...(hasDetails && { whyItWorksDetails }),
       };
     })
     .filter((item): item is CaptionVariation => item !== null);
@@ -178,18 +191,17 @@ function normaliseSongSuggestions(
 function normalisePlatformCaptions(
   payload: RawCaptionPayload,
   request: CaptionRequest,
-  fallback: string,
+  primaryCaption: string,
 ): Record<string, string> {
-  const raw = payload.platformCaptions ?? {};
+  const raw = payload.platformCaptions;
+  if (!raw || typeof raw !== 'object') return {};
 
-  // Keyed by the platforms *we* asked for, never by the keys the model chose:
-  // a hallucinated "twitter" key would otherwise reach the post record.
-  return Object.fromEntries(
-    request.platforms.map((platform) => [
-      platform,
-      asString(raw[platform]) || fallback,
-    ]),
-  );
+  const entries = request.platforms.map((platform) => {
+    const text = asString(raw[platform]);
+    return [platform, text.length >= MIN_CAPTION_LENGTH ? text : primaryCaption];
+  });
+
+  return Object.fromEntries(entries);
 }
 
 export interface CaptionGeneratorDeps {
@@ -359,7 +371,7 @@ export async function generateCaption(
         .map(normaliseHashtag)
         .filter((tag): tag is string => tag !== null),
     ),
-  ].slice(0, request.hashtagCount);
+  ].slice(0, Math.min(Math.max(request.hashtagCount, 0), 5));
 
   const caption = variations[0].caption;
   const angles = normaliseAngles(payload, request);
@@ -380,6 +392,17 @@ export async function generateCaption(
     // including the fields Brand Intelligence inferred, which the user never
     // typed and would otherwise have no way of seeing.
     brand,
+    strategyUsed: {
+      goal: request.goal,
+      funnelStage: request.funnelStage,
+      platforms: request.platforms,
+      audience: request.audience,
+      styleOverride: request.styleOverride ?? null,
+      brandVoiceApplied: Boolean(request.brandVoice || brand),
+      audienceConsidered: Boolean(request.audience),
+      imageAnalyzed: Boolean(analysis),
+      performanceSignalsConsidered: Boolean(intelligence.performanceSection?.trim()),
+    },
     ...(angles.length > 0 && { angles }),
     ...(songSuggestions.length > 0 && { songSuggestions }),
     ...(payload.seo && { seo: payload.seo }),

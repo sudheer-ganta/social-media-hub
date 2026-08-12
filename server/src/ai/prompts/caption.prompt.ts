@@ -86,15 +86,46 @@ export function wantsSongSuggestions(request: CaptionRequest): boolean {
 
 // ─── Persona ─────────────────────────────────────────────────────────────────
 
-const SYSTEM_INSTRUCTION = `You are a senior social media copywriter, marketing strategist, and brand consultant. You write punchy, human copy that lands.
+const BASE_BANNED_CLICHES = [
+  'revolutionary',
+  'game-changing',
+  'unlock',
+  'elevate',
+  'unleash',
+  'seamless',
+  'dive in',
+  'in a world where',
+  'introducing',
+  'level up',
+  'look no further',
+  'say goodbye to',
+  'picture this',
+  'every epic journey',
+  'look of unwavering resolve',
+];
+
+function buildSystemInstruction(brandVoice?: CaptionRequest['brandVoice']): string {
+  const brandWords = [
+    ...(brandVoice?.wordsToUse ?? []),
+    ...(brandVoice?.name ? [brandVoice.name] : []),
+  ].map((w) => w.toLowerCase());
+
+  // Respect brand-defined rules: if a brand explicitly requires or lists a word, do not ban it.
+  const activeBanned = BASE_BANNED_CLICHES.filter(
+    (word) => !brandWords.includes(word.toLowerCase()),
+  );
+
+  return `You are a senior social media copywriter, marketing strategist, and brand consultant. You write punchy, human copy that lands.
 
 Rules you never break:
 - Write copy a human would actually post. No filler, no AI clichés (e.g. "embracing the journey", "every step", "unwavering resolve", "vibes", "in today's fast-paced world").
-- Banned openings and phrases: "Elevate", "Unlock", "Dive in", "In a world where", "Introducing", "Level up", "game-changer", "Look no further", "Say goodbye to", "Picture this", "Every epic journey", "look of unwavering resolve". If your first line could open any brand's post, it is the wrong first line.
+- Banned openings and generic phrases: ${activeBanned.map((w) => `"${w}"`).join(', ')}. If your first line could open any brand's post, it is the wrong first line.
 - Content MUST be about THIS SPECIFIC IMAGE and post subject — incorporate visible details, setting, mood, characters, or pop-culture references from the image into the copy.
 - Open with a hook that earns the second line.
+- Preserve the user's Brand Voice. Use the funnel stage to adjust marketing objective and structure, NOT brand identity.
 - Match the requested language exactly, including hashtags.
 - Return only the JSON object described in the request. No commentary, no markdown fences.`;
+}
 
 // ─── Marketing framing ───────────────────────────────────────────────────────
 
@@ -117,11 +148,25 @@ const GOAL_BRIEF: Record<string, string> = {
 };
 
 const FUNNEL_BRIEF: Record<string, string> = {
-  TOFU: 'Cold audience who do not know this brand. Educate or entertain first; sell nothing.',
-  MOFU: 'Warm audience comparing options. Build trust and lead with benefits.',
-  BOFU: 'Ready to decide. Be direct, remove friction, close.',
-  Retention:
-    'Existing customers. Be relational and appreciative, not promotional.',
+  TOFU: `TOFU (Top of Funnel - Awareness & Problem Framing):
+- Cold audience who does NOT know this brand or product yet.
+- Focus heavily on problem framing, pain-point hooks, education, or relatable insight.
+- Explain the problem, tension, or context first BEFORE introducing any product concept.
+- Sell NOTHING. Use a low-friction or soft CTA (e.g. asking for thoughts or inviting discussion).
+- Do NOT include direct sales pitches, product spec lists, or aggressive conversion CTAs.`,
+
+  MOFU: `MOFU (Middle of Funnel - Consideration & Comparison):
+- Warm audience evaluating options.
+- Focus on practical benefits, trust building, and solution differentiation.`,
+
+  BOFU: `BOFU (Bottom of Funnel - Conversion & Direct Value):
+- Audience is ready to decide.
+- Lead directly with concrete product value proposition and why this product solves their problem.
+- Remove objections, address friction, and explain specific product capabilities.
+- Use a clear, direct conversion CTA (e.g., try it now, start building, sign up).`,
+
+  Retention: `Retention (Existing Customers):
+- Existing users/customers. Be relational and appreciative, focusing on maximum value from their current account.`,
 };
 
 const LENGTH_BRIEF: Record<string, string> = {
@@ -195,18 +240,18 @@ const AUDIENCE_BRIEF: Record<string, string> = {
  */
 const PLATFORM_BRIEF: Record<string, string> = {
   linkedin:
-    'LinkedIn: professional but human. Short paragraphs with line breaks. 1–3 hashtags at the end. No hashtag walls. The first two lines show before "…see more", so front-load the hook.',
+    'LinkedIn: professional, conversational, and structured. Use short paragraphs with line breaks. Front-load the hook in the first two lines (before "...see more"). End with a discussion-friendly question.',
   instagram:
-    'Instagram: warm and visual-first. Emoji are welcome if the brand allows them. Hashtags belong in a block at the end. The first 125 characters show before "more".',
+    'Instagram: visual-first, concise, strong rhythm. Open with a punchy hook that connects to the visual. Use line breaks and clean hashtag formatting.',
   facebook:
-    'Facebook: conversational and accessible. Keep it short and ask something that invites a reply. 0–2 hashtags.',
-  x: 'X: under 280 characters including hashtags. One sharp idea, no preamble. At most 2 hashtags.',
+    'Facebook: conversational, accessible, and community-focused. Keep it clear and invite a comment or reply.',
+  x: 'X: short, punchy, compressed under 280 characters. Single sharp idea without fluff or preamble.',
   youtube:
-    'YouTube: a description, not a caption. Lead with what the viewer gets, then context. Hashtags on their own final line.',
+    'YouTube: description format. Lead with what the viewer learns/gets in the video, then context and timestamps.',
   tiktok:
-    'TikTok: casual, fast and native to the platform. Very short. 3–5 trend-aware hashtags.',
+    'TikTok: casual, fast, native tone. Very short caption that complements the short video.',
   threads:
-    'Threads: conversational and informal, like talking to peers. Under 500 characters. Hashtags are rare — use at most one.',
+    'Threads: conversational and informal, like a quick text to peers. Under 500 characters.',
 };
 
 const DEFAULT_PLATFORM_BRIEF =
@@ -249,16 +294,13 @@ export function buildCaptionResponseSchema(
   const platformProperties = Object.fromEntries(
     request.platforms.map((platform) => [
       platform,
-      { type: 'string', description: `The caption rewritten for ${platform}.` },
+      { type: 'string', description: `The caption rewritten specially for ${platform}.` },
     ]),
   );
 
   return {
     type: 'object',
     properties: {
-      // Asked for first, and used by the captions that follow. Making the model
-      // commit to distinct directions *before* it writes is what stops three
-      // options that are one option in three outfits.
       angles: {
         type: 'array',
         minItems: request.variationCount,
@@ -305,14 +347,38 @@ export function buildCaptionResponseSchema(
               description:
                 'One sentence on why this option should land with this audience.',
             },
+            whyItWorksDetails: {
+              type: 'object',
+              description: 'Structured evidence breakdown of why this option works.',
+              properties: {
+                hook: {
+                  type: 'string',
+                  description: 'Concrete hook angle (e.g. Calls out a concrete pain point).',
+                },
+                funnel: {
+                  type: 'string',
+                  description:
+                    'Funnel alignment (e.g. TOFU -> awareness and problem framing rather than hard selling).',
+                },
+                voice: {
+                  type: 'string',
+                  description: 'Brand voice alignment (e.g. Matches the saved Brand Voice).',
+                },
+                platform: {
+                  type: 'string',
+                  description:
+                    'Platform optimization note (e.g. Written for LinkedIn\'s conversational/professional format).',
+                },
+              },
+            },
           },
           required: ['tone', 'caption', 'hook'],
         },
       },
       hashtags: {
         type: 'array',
-        maxItems: Math.max(request.hashtagCount, 1),
-        items: { type: 'string', description: 'A hashtag without the # sign.' },
+        maxItems: Math.min(Math.max(request.hashtagCount, 0), 5),
+        items: { type: 'string', description: 'A relevant hashtag without the # sign.' },
       },
       // Only asked for when the field is empty. A model given the key while the
       // user has already chosen a song will fill it, and a filled list in the
@@ -708,7 +774,7 @@ export function buildCaptionPrompt(
     .join('\n\n');
 
   return {
-    systemInstruction: SYSTEM_INSTRUCTION,
+    systemInstruction: buildSystemInstruction(request.brandVoice),
     prompt,
     responseSchema: buildCaptionResponseSchema(request),
     temperature: request.previousCaption?.trim() ? 1.0 : 0.85,

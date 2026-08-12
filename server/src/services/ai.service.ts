@@ -67,8 +67,8 @@ const MAX_VARIATIONS = 5;
 const DEFAULT_VARIATIONS = 3;
 
 const MIN_HASHTAGS = 0;
-const MAX_HASHTAGS = 30;
-const DEFAULT_HASHTAGS = 8;
+const MAX_HASHTAGS = 5;
+const DEFAULT_HASHTAGS = 4;
 
 const GOALS: MarketingGoal[] = [
   'brand_awareness',
