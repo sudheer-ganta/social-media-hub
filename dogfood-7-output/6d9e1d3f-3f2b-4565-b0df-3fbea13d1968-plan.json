@@ -1,0 +1,146 @@
+{
+  "structure": "full-bleed/asymmetric/solid-band-footer/logo:none/type:sans-modern",
+  "designRecipe": {
+    "photographyStyle": "",
+    "illustrationStyle": "",
+    "headlineCharacter": "bold, uppercase sans-serif with tight tracking and alternating color fills",
+    "supportingTypography": "spaced uppercase sans-serif inside small solid callout boxes",
+    "compositionBehaviour": "large stacked headline typography with off-center accent shapes and solid color-blocking",
+    "textHierarchy": "dominant stacked headline leads, supported by small block-highlighted secondary copy",
+    "typographyFamily": "sans-modern",
+    "colorPalette": [
+      "#e52b20",
+      "#ffd100",
+      "#1a1a1a",
+      "#ffffff"
+    ],
+    "layoutBehaviour": "asymmetric",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "tight",
+    "texture": "none",
+    "graphicElements": [
+      "halftone dot pattern",
+      "solid color block highlights",
+      "diagonal accent bar",
+      "geometric shapes"
+    ],
+    "footerStyle": "solid-band",
+    "borderStyle": "none",
+    "shapeLanguage": "geometric",
+    "visualDensity": "minimal",
+    "imperfectionLevel": "none",
+    "imageTreatment": "full-bleed"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#ffffff",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.89
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.631,
+          "width": 1,
+          "height": 0.239
+        },
+        "direction": "up",
+        "maxOpacity": 0.58,
+        "color": "#000000"
+      },
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.87,
+          "width": 1,
+          "height": 0.13
+        },
+        "style": "solid-band",
+        "fill": "#ffffff"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.05,
+          "y": 0.892,
+          "width": 0.9,
+          "height": 0.025
+        },
+        "spec": {
+          "lines": [
+            "Precision-crafted flavor."
+          ],
+          "x": 64,
+          "y": 1454.4,
+          "fontSize": 32,
+          "lineHeight": 40,
+          "fontFamily": "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#1a1a1a",
+          "italic": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.05,
+          "y": 0.679,
+          "width": 0.7,
+          "height": 0.135
+        },
+        "spec": {
+          "lines": [
+            "ENGINEERED FOR",
+            "THE WEEKEND."
+          ],
+          "x": 64,
+          "y": 1174.7897855999997,
+          "fontSize": 99.86048000000001,
+          "lineHeight": 107.84931840000002,
+          "fontFamily": "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "fontWeight": 700,
+          "align": "left",
+          "shadow": true,
+          "letterSpacing": 1.5
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.05,
+          "y": 0.832,
+          "width": 0.7,
+          "height": 0.024
+        },
+        "spec": {
+          "lines": [
+            "THE BLUEPRINT TO BETTER TASTE."
+          ],
+          "x": 64,
+          "y": 1355.4559999999997,
+          "fontSize": 28.288,
+          "lineHeight": 38.1888,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "left",
+          "letterSpacing": 1.5,
+          "shadow": true,
+          "opacity": 0.95
+        }
+      }
+    ],
+    "structure": "full-bleed/asymmetric/solid-band-footer/logo:none/type:sans-modern"
+  }
+}

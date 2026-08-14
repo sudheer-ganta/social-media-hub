@@ -80,6 +80,12 @@ import aiRoutes from './routes/ai.routes';
 
 app.use('/api/ai', aiRoutes);
 
+// FlowPost's brand-native creative engine — natural language + brand identity
+// + user assets in, an on-brand generated image out. See routes/creative.routes.ts.
+import creativeRoutes from './routes/creative.routes';
+
+app.use('/api/ai/creative', creativeRoutes);
+
 // Publishing. The browser never talks to LinkedIn — it asks this router to
 // send a post it already owns, and the provider layer does the rest.
 // See publish/routes/publish.routes.ts.

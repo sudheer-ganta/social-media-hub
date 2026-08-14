@@ -157,8 +157,37 @@ export const env = {
   GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL || 'gemini-3.6-flash',
   GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || 'gemini-3.1-pro-preview',
   GEMINI_LIGHT_MODEL: process.env.GEMINI_LIGHT_MODEL || 'gemini-3.1-flash-lite',
-  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'imagen-3.0-generate-002',
-  
+  // Flash Image ("nano banana"), not Imagen: it's the only Gemini image model
+  // that accepts reference images (a product photo, a logo) alongside the
+  // prompt and preserves what it's shown — see ai/providers/gemini-image.provider.ts.
+  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
+
+  // ── Creative research (Gemini + Google Search grounding) ───────────────────
+  //
+  // Uses the same GEMINI_API_KEY as everything else — no separate research
+  // vendor or key. A dedicated model rather than inheriting GEMINI_MODEL for
+  // the same reason every other role has its own: grounding is priced and
+  // rate-limited differently from a plain JSON call, and a deployment must be
+  // able to tune it independently. See ai/research/gemini-grounded-search.ts.
+  //
+  // Optional in the sense that it degrades, not that it needs its own flag:
+  // unset GEMINI_API_KEY (already required for every other AI feature) simply
+  // means research skips grounding and the creative-direction model reasons
+  // from its own trained knowledge instead — the same tolerance Vision has for
+  // a fetch that fails.
+  GEMINI_RESEARCH_MODEL: process.env.GEMINI_RESEARCH_MODEL || 'gemini-3.6-flash',
+
+  // ── Cloudinary (server-side, signed uploads) ───────────────────────────────
+  //
+  // Separate from the frontend's VITE_CLOUDINARY_* pair, which is an unsigned
+  // upload preset meant to be public. These are the account's real API
+  // credentials, used only to push a Gemini-generated image (bytes the
+  // backend holds, not a file a browser posted) into the same Cloudinary
+  // account — see services/cloudinary.service.ts. Never sent to the browser.
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+
   // Thinking depth for Gemini 3.x models, which cannot disable thinking and
   // reject thinkingBudget 0. "low" is their fastest level — right for caption
   // writing. Ignored by other models.

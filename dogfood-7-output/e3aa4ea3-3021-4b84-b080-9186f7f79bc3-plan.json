@@ -1,0 +1,174 @@
+{
+  "structure": "full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial",
+  "designRecipe": {
+    "photographyStyle": "",
+    "illustrationStyle": "",
+    "headlineCharacter": "refined classic serif, generous character spacing, elegant proportion",
+    "supportingTypography": "micro-sized sans-serif, all-caps, ultra-wide letter spacing",
+    "compositionBehaviour": "vast negative space with tiny centered or top-left anchored typographic elements",
+    "textHierarchy": "quiet serif headline as focal point, separated by thin rule from widely spaced micro sans-serif taglines",
+    "typographyFamily": "serif-editorial",
+    "colorPalette": [
+      "#f6f5f2",
+      "#222222",
+      "#888888",
+      "#e0dfdb"
+    ],
+    "layoutBehaviour": "asymmetric",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "airy",
+    "texture": "none",
+    "graphicElements": [
+      "thin horizontal rule dividers",
+      "hairline border frames",
+      "simple thin-outline geometric shapes"
+    ],
+    "footerStyle": "none",
+    "borderStyle": "hairline",
+    "shapeLanguage": "editorial-rules",
+    "visualDensity": "minimal",
+    "imperfectionLevel": "none",
+    "imageTreatment": "full-bleed"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f6f5f2",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.543,
+          "width": 1,
+          "height": 0.457
+        },
+        "direction": "up",
+        "maxOpacity": 0.78,
+        "color": "#ffffff"
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.085,
+          "y": 0.625,
+          "width": 0.7,
+          "height": 0.117
+        },
+        "spec": {
+          "lines": [
+            "The Anatomy of",
+            "Comfort."
+          ],
+          "x": 108.80000000000001,
+          "y": 1075.942144,
+          "fontSize": 86.8352,
+          "lineHeight": 93.78201600000001,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#222222",
+          "fontWeight": 700,
+          "align": "left"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.085,
+          "y": 0.773,
+          "width": 0.7,
+          "height": 0.024
+        },
+        "spec": {
+          "lines": [
+            "COMPLEXITY WITHIN. COMFORT THROUGHOUT."
+          ],
+          "x": 108.80000000000001,
+          "y": 1260.096,
+          "fontSize": 28.288,
+          "lineHeight": 38.1888,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#222222",
+          "align": "left",
+          "letterSpacing": 1.5,
+          "opacity": 0.95
+        }
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.085,
+          "y": 0.827,
+          "width": 0.7,
+          "height": 0.052
+        },
+        "spec": {
+          "lines": [
+            "Elevating traditional craftsmanship into a modern",
+            "culinary artifact."
+          ],
+          "x": 108.80000000000001,
+          "y": 1350.4,
+          "fontSize": 32,
+          "lineHeight": 41.6,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#222222",
+          "italic": true,
+          "align": "left",
+          "opacity": 0.9
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.085,
+          "y": 0.91,
+          "width": 0.7,
+          "height": 0.022
+        },
+        "spec": {
+          "lines": [
+            "Seven Sisters"
+          ],
+          "x": 108.80000000000001,
+          "y": 1480.96,
+          "fontSize": 25.6,
+          "lineHeight": 33.28,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#222222",
+          "align": "left",
+          "opacity": 0.75,
+          "letterSpacing": 1
+        }
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.085,
+          "y": 0.576,
+          "width": 0.28,
+          "height": 0.002
+        },
+        "stroke": "#222222",
+        "opacity": 0.7
+      },
+      {
+        "kind": "border",
+        "style": "hairline",
+        "stroke": "#222222"
+      }
+    ],
+    "structure": "full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial"
+  }
+}

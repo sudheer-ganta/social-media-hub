@@ -1,0 +1,138 @@
+{
+  "structure": "inset/centered/torn-paper-footer/logo:none/type:serif-editorial/texture:paper-grain",
+  "designRecipe": {
+    "photographyStyle": "intimate overhead, warm soft light, natural tactile ceramics",
+    "illustrationStyle": "",
+    "headlineCharacter": "bold high-contrast display serif, sentence case, warm brown color",
+    "supportingTypography": "clean uppercase sans-serif with wide letter-spacing mixed with elegant italic serif secondary lines",
+    "compositionBehaviour": "centered stacked text over geometric or photographic inset placeholders",
+    "textHierarchy": "large bold serif headline top, thin accent rule, small tracked sans caption, image container middle, dark torn footer with inverted small text",
+    "typographyFamily": "serif-editorial",
+    "colorPalette": [
+      "#f3ebe1",
+      "#e3cfb4",
+      "#4a3222",
+      "#b37c38",
+      "#1f1d1d"
+    ],
+    "layoutBehaviour": "centered",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "generous",
+    "texture": "paper-grain",
+    "graphicElements": [
+      "hand-drawn wavy line",
+      "hairline border frame",
+      "torn paper edge divider"
+    ],
+    "footerStyle": "torn-paper",
+    "borderStyle": "hairline",
+    "shapeLanguage": "editorial-rules",
+    "visualDensity": "minimal",
+    "imperfectionLevel": "subtle",
+    "imageTreatment": "inset"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f3ebe1",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.685
+    },
+    "blocks": [
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.87,
+          "width": 1,
+          "height": 0.13
+        },
+        "style": "torn-paper",
+        "fill": "#f3ebe1"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.899,
+          "width": 0.87,
+          "height": 0.025
+        },
+        "spec": {
+          "lines": [
+            "Let the weekend unfold."
+          ],
+          "x": 83.2,
+          "y": 1464.96,
+          "fontSize": 32,
+          "lineHeight": 40,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1f1d1d",
+          "italic": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.722,
+          "width": 0.87,
+          "height": 0.061
+        },
+        "spec": {
+          "lines": [
+            "Unwind"
+          ],
+          "x": 640,
+          "y": 1234.0804608,
+          "fontSize": 90.49856000000001,
+          "lineHeight": 97.73844480000002,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1f1d1d",
+          "fontWeight": 700,
+          "align": "center",
+          "rotationDeg": -0.6
+        }
+      },
+      {
+        "kind": "underline",
+        "rect": {
+          "x": 0.437,
+          "y": 0.791,
+          "width": 0.126,
+          "height": 0.005
+        },
+        "stroke": "#b37c38",
+        "strokeWidth": 5.12
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.065,
+          "y": 0.703,
+          "width": 0.87,
+          "height": 0.002
+        },
+        "stroke": "#1f1d1d",
+        "opacity": 0.7
+      },
+      {
+        "kind": "border",
+        "style": "hairline",
+        "stroke": "#1f1d1d"
+      },
+      {
+        "kind": "texture",
+        "texture": "paper-grain"
+      }
+    ],
+    "structure": "inset/centered/torn-paper-footer/logo:none/type:serif-editorial/texture:paper-grain"
+  }
+}

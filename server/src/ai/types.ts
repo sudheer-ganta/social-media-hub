@@ -988,3 +988,541 @@ export interface RawAnalysisPayload {
     suggestedLine?: unknown;
   }>;
 }
+
+// ─── Creative DNA / brand-native image generation ────────────────────────────
+//
+// The visual sibling of BrandVoiceInput/BrandProfile above. Same shape,
+// different axis: BrandVoiceInput describes how a brand *writes*; this
+// describes how it *looks*. Resolved the same deterministic way — see
+// `ai/brand/creative-dna.ts` — and rendered into the same kind of brief a
+// generator reads before calling a model.
+
+/** The brand's visual identity as the caller chose to describe it. */
+export interface CreativeDnaInput {
+  visualStyle?: string;
+  photographyStyle?: string;
+  composition?: string;
+  lighting?: string;
+  mood?: string;
+  typographyCharacter?: string;
+  spacing?: string;
+  productTreatment?: string;
+  logoTreatment?: string;
+  preferredElements?: string[];
+  avoidedElements?: string[];
+  brandColors?: string[];
+  logoAssetUrl?: string;
+  referenceAssetUrls?: string[];
+}
+
+/** Resolved Creative DNA: user-set fields plus whatever Vision filled in. */
+export interface ResolvedCreativeDna {
+  visualStyle: string;
+  photographyStyle: string;
+  composition: string;
+  lighting: string;
+  mood: string;
+  typographyCharacter: string;
+  spacing: string;
+  productTreatment: string;
+  logoTreatment: string;
+  preferredElements: string[];
+  avoidedElements: string[];
+  brandColors: string[];
+  logoAssetUrl: string;
+  referenceAssetUrls: string[];
+  /** 0–100. How much of the profile is actually filled in. */
+  completeness: number;
+  provenance: Record<string, BrandFactSource>;
+}
+
+/**
+ * The internal creative brief a generator assembles before calling the image
+ * model — never shown raw to the user, who sees the friendly "FlowPost
+ * understood" summary built from it instead.
+ */
+/**
+ * The medium/technique a creative is executed in — a SEPARATE axis from
+ * `CreativeMode` (tone/register). Two SURREAL-mode concepts can still look
+ * nothing alike: one shot as SURREAL_EDITORIAL photography, the other as
+ * ILLUSTRATIVE collage. Chosen by the Creative Director from the concept's
+ * mechanism, never defaulted — the fix for FlowPost's outputs collapsing
+ * into one repeated "AI SaaS" visual language regardless of the idea.
+ */
+export type ArtDirectionFamily =
+  | 'EDITORIAL_PHOTOGRAPHY'
+  | 'SURREAL_EDITORIAL'
+  | 'INTERACTIVE_GRAPHIC'
+  | 'TYPOGRAPHY_LED'
+  | 'PRODUCT_STUDIO'
+  | 'DOCUMENTARY'
+  | 'COLLAGE'
+  | 'HANDCRAFTED'
+  | 'CINEMATIC'
+  | 'MINIMAL_ART'
+  | 'PLAYFUL_GRAPHIC'
+  | 'CULTURAL_EDITORIAL'
+  | 'INFORMATIONAL'
+  | 'ILLUSTRATIVE';
+
+/**
+ * The register a creative is art-directed in — chosen by the Creative
+ * Director from the brief, never asked of the user (spec §14).
+ */
+export type CreativeMode =
+  | 'EDITORIAL'
+  | 'PLAYFUL'
+  | 'SURREAL'
+  | 'INTERACTIVE'
+  | 'HUMOROUS'
+  | 'MINIMAL'
+  | 'CULTURAL'
+  | 'STORYTELLING'
+  | 'VISUAL_METAPHOR'
+  | 'EDUCATIONAL';
+
+/**
+ * How much of "a complete creative" this direction actually needs — decided
+ * by the idea, not defaulted to everything (spec §8). `none` is a real,
+ * common answer: some ideas communicate entirely through the image.
+ */
+export type CopyTreatment = 'none' | 'headline' | 'headline_support' | 'interactive' | 'editorial_punchline';
+
+/**
+ * The layer that turns a visual concept into a FINISHED social creative,
+ * rather than just a nice image with a headline on it — the gap between
+ * "AI image" and "marketing creative". Every field is optional and additive:
+ * `headline`/`supportingLine`/`cta`/`interactionInstructions` above already
+ * cover the copy itself, so this only carries what a beautiful visual +
+ * headline still leaves out — brand positioning, practical/location detail,
+ * how the logo actually sits in the shot, and anything else the concept
+ * specifically requires. Never force a field the idea doesn't need.
+ */
+export interface MarketingCreative {
+  /** Why this brand specifically, distinct from the headline's hook — e.g. "Cooked in silence, served with love." */
+  brandMessage?: string;
+  /** Practical/location detail that finishes the creative — e.g. "Prism Mall, Gachibowli". */
+  secondaryInfo?: string[];
+  /** How the logo/wordmark participates in this specific shot, if it needs a call beyond the brand's default mark. */
+  logoTreatment?: string;
+  /** Anything this concept requires that isn't implied by the other fields. */
+  requiredElements?: string[];
+}
+
+/**
+ * The graphic-design layer that turns an art-directed image into a laid-out
+ * social creative — where things sit, in what order, at what density. Every
+ * field is optional and derived from the concept, never a fixed default: a
+ * minimal visual-metaphor idea might only need `safeAreas`, while a dense
+ * promo needs most of them. Not layout content (that's headline/cta/
+ * marketingCreative above) — this is where that content goes and why.
+ */
+export interface LayoutDirection {
+  /** The overall layout approach this concept calls for — e.g. "editorial vertical split, product foreground-left, copy right column". */
+  layoutType?: string;
+  /** Reading order, each entry naming its job — e.g. "HOOK — headline, top-left", "DIRECT — cta, bottom-right corner". */
+  textHierarchy?: string[];
+  headlinePlacement?: string;
+  supportingCopyPlacement?: string;
+  logoPlacement?: string;
+  /** How brand identity (colour, motif, material) shows up across the piece beyond the logo mark itself. */
+  brandTreatment?: string;
+  /** Where practical/secondary detail (location, campaign tag) sits — not the detail itself, see marketingCreative.secondaryInfo. */
+  secondaryInformation?: string;
+  ctaPlacement?: string;
+  productPlacement?: string;
+  foregroundElements?: string;
+  backgroundElements?: string;
+  textureDirection?: string;
+  typographyDirection?: string;
+  /** How busy the composition should feel — e.g. "minimal, one focal point" or "dense, editorial layering". */
+  visualDensity?: string;
+  /** What must stay clear of text/graphics — e.g. "bottom 15% clear for platform UI". */
+  safeAreas?: string;
+}
+
+export interface CreativeDirection {
+  concept: string;
+  visualStory: string;
+  subject: string;
+  environment: string;
+  composition: string;
+  lighting: string;
+  mood: string;
+  palette: string[];
+  brandConstraints: string[];
+  productTreatment: string;
+  background: string;
+  /** Things the image must NOT contain — invented claims, extra logos, text. */
+  negativeVisualConstraints: string[];
+  aspectRatio: string;
+  platform: string;
+  mode: CreativeMode;
+  /** Fixed from the chosen concept, never re-decided here — see ScoredCreativeConcept.artDirectionFamily. */
+  artDirectionFamily: ArtDirectionFamily;
+  copyTreatment: CopyTreatment;
+  /** Only meaningful when copyTreatment isn't 'none'. Short, human, brand-specific — never filler. */
+  headline: string;
+  supportingLine: string;
+  cta: string;
+  /** For an INTERACTIVE concept — "Which one fits?", "Guess before you scroll." */
+  interactionInstructions: string;
+  /** Absent when the idea communicates entirely through headline/visual alone. */
+  marketingCreative?: MarketingCreative;
+  /** Absent when the concept is simple enough that composition/copyTreatment already say where things go. */
+  layoutDirection?: LayoutDirection;
+}
+
+/** What stage one hands the image call: the direction, and its provenance. */
+export interface CreativeDirectionOutcome {
+  direction: CreativeDirection;
+  meta: { provider: string; model: string; durationMs: number };
+}
+
+/** What the direction model is asked for, before we normalise it. */
+export interface RawCreativeDirectionPayload {
+  concept?: unknown;
+  visualStory?: unknown;
+  subject?: unknown;
+  environment?: unknown;
+  composition?: unknown;
+  lighting?: unknown;
+  mood?: unknown;
+  palette?: unknown;
+  brandConstraints?: unknown;
+  productTreatment?: unknown;
+  background?: unknown;
+  negativeVisualConstraints?: unknown;
+  aspectRatio?: unknown;
+  platform?: unknown;
+  mode?: unknown;
+  copyTreatment?: unknown;
+  headline?: unknown;
+  supportingLine?: unknown;
+  cta?: unknown;
+  interactionInstructions?: unknown;
+  marketingCreative?: {
+    brandMessage?: unknown;
+    secondaryInfo?: unknown;
+    logoTreatment?: unknown;
+    requiredElements?: unknown;
+  };
+  layoutDirection?: {
+    layoutType?: unknown;
+    textHierarchy?: unknown;
+    headlinePlacement?: unknown;
+    supportingCopyPlacement?: unknown;
+    logoPlacement?: unknown;
+    brandTreatment?: unknown;
+    secondaryInformation?: unknown;
+    ctaPlacement?: unknown;
+    productPlacement?: unknown;
+    foregroundElements?: unknown;
+    backgroundElements?: unknown;
+    textureDirection?: unknown;
+    typographyDirection?: unknown;
+    visualDensity?: unknown;
+    safeAreas?: unknown;
+  };
+}
+
+// ─── Creative concepts — the idea stage, ahead of art direction ──────────────
+//
+// FlowPost is the creative director, not the image model (spec §23): before
+// any art direction or image generation, this stage asks "what is the
+// advertising idea?" and answers with several genuinely different mechanisms
+// — never five cosmetic variants of one idea. See
+// `ai/generators/creative-concepts.generator.ts`.
+
+/**
+ * One advertising idea. Every field is optional except the three that anchor
+ * it (conceptName, bigIdea, visualMechanism) — spec §3: "not every concept
+ * needs every field." A puzzle concept has an `interaction`; a visual-
+ * metaphor concept has a `visualMetaphor`; neither needs the other.
+ */
+export interface CreativeConcept {
+  conceptName: string;
+  bigIdea: string;
+  visualMechanism: string;
+  humanInsight?: string;
+  visualMetaphor?: string;
+  interaction?: string;
+  message?: string;
+  productRole?: string;
+  brandConnection?: string;
+  whyItWouldStopTheScroll?: string;
+}
+
+/** The quality gate a concept clears before it reaches the user — spec §18. 0–100 each. */
+export interface CreativeConceptScores {
+  conceptStrength: number;
+  brandSpecificity: number;
+  productRelevance: number;
+  visualOriginality: number;
+  scrollStoppingPotential: number;
+  messageClarity: number;
+  socialInteractionPotential: number;
+  /** Higher = closer to a generic AI-ad default. Lower is better. */
+  templateRisk: number;
+}
+
+export interface ScoredCreativeConcept extends CreativeConcept {
+  mode: CreativeMode;
+  /** The medium/technique this idea's mechanism calls for — see ArtDirectionFamily. Chosen per concept, not defaulted. */
+  artDirectionFamily: ArtDirectionFamily;
+  scores: CreativeConceptScores;
+}
+
+export interface RawCreativeConceptPayload {
+  conceptName?: unknown;
+  bigIdea?: unknown;
+  visualMechanism?: unknown;
+  humanInsight?: unknown;
+  visualMetaphor?: unknown;
+  interaction?: unknown;
+  message?: unknown;
+  productRole?: unknown;
+  brandConnection?: unknown;
+  whyItWouldStopTheScroll?: unknown;
+  mode?: unknown;
+  artDirectionFamily?: unknown;
+  scores?: {
+    conceptStrength?: unknown;
+    brandSpecificity?: unknown;
+    productRelevance?: unknown;
+    visualOriginality?: unknown;
+    scrollStoppingPotential?: unknown;
+    messageClarity?: unknown;
+    socialInteractionPotential?: unknown;
+    templateRisk?: unknown;
+  };
+}
+
+export interface CreativeConceptsOutcome {
+  concepts: ScoredCreativeConcept[];
+  /** How many the model proposed before the quality gate filtered any out. */
+  proposedCount: number;
+  meta: { provider: string; model: string; durationMs: number };
+  /** Present whenever references were analysed (fresh upload or a reused saved profile) — the "FlowPost understood your style" transparency step reads this. */
+  referenceStyle?: ReferenceStyleProfile;
+}
+
+/** The request behind `POST /api/ai/creative/direction` and `/generate`. */
+export interface CreativeGenerationRequest {
+  userId: string;
+  contextType: CaptionMode;
+  brandId?: string;
+  /** The member's natural-language request, verbatim. */
+  prompt: string;
+  goal: MarketingGoal;
+  funnelStage: FunnelStage;
+  platforms: string[];
+  /** Public URLs of product/logo/reference images the member attached. */
+  assetUrls: string[];
+  /**
+   * The member's saved Creative DNA, as the browser read it from `creative_dna`
+   * and sent along — the same pattern `CaptionRequest.brandVoice` uses rather
+   * than a `creativeDnaId` the backend would have to look up itself. The
+   * backend has no read path to a frontend-owned, PostgREST/RLS table.
+   */
+  creativeDna?: CreativeDnaInput;
+  /** Optional brand text identity, same shape as CaptionRequest.brandVoice. */
+  brandVoice?: BrandProfileInput;
+  /**
+   * "Show FlowPost what you like" — 2-6 inspiration/taste images, DISTINCT
+   * from `assetUrls` (product/logo, preserved exactly). These are analysed
+   * for visual LANGUAGE only, never preserved as content. Ignored when
+   * `referenceStyleProfile` is already given.
+   */
+  referenceImageUrls?: string[];
+  /** Optional lightweight labels, same order as referenceImageUrls — informational only, the analyser infers the real role either way. */
+  referenceLabels?: string[];
+  /** A previously-saved "Creative Style Profile" the member is reusing — when present, skips re-analysing referenceImageUrls entirely (spec §9/§13). */
+  referenceStyleProfile?: ReferenceStyleProfile;
+  /**
+   * The concept the member picked from `/concepts`. When present, generation
+   * skips discovering concepts again and art-directs this one directly —
+   * the whole point of separating "what's the idea" from "render it" (§19).
+   * Absent, `generate()` discovers concepts itself and takes the strongest
+   * one, so a caller that skips the picker still gets a real generation.
+   */
+  selectedConcept?: ScoredCreativeConcept;
+}
+
+/** The request behind `POST /api/ai/creative/refine`. */
+export interface CreativeRefinementRequest {
+  userId: string;
+  assetId: string;
+  /** "Make it more premium.", "Keep the product, change the background." */
+  instruction: string;
+}
+
+// ─── Creative research ────────────────────────────────────────────────────────
+//
+// Runs before the creative-direction call. Patterns extracted from how real
+// campaigns are art-directed — never a reference to copy. Gemini + Google
+// Search grounding, not a third-party search vendor — see
+// `ai/research/gemini-grounded-search.ts` and
+// `ai/generators/creative-research.generator.ts`.
+
+export interface CreativeResearchSource {
+  title: string;
+  url: string;
+  domain: string;
+}
+
+export interface CreativeResearch {
+  /** False when grounding wasn't available/configured — the model reasoned from its own knowledge instead. */
+  researchPerformed: boolean;
+  /** Provenance only — never the source's copyrighted text. */
+  sources: CreativeResearchSource[];
+  referenceCount: number;
+  creativeMechanisms: string[];
+  visualPatterns: string[];
+  typographyPatterns: string[];
+  compositionPatterns: string[];
+  productTreatmentPatterns: string[];
+  /** Generic AI-template patterns to avoid for this request specifically. */
+  ideasToAvoid: string[];
+  /** One sentence: how this request's creative should differ from what was found. */
+  originalityDirection: string;
+}
+
+/**
+ * A compact visual fingerprint of one of this brand's recent creatives —
+ * derived from a persisted `CreativeDirection`, never a fresh model call.
+ * Fed to the concepts stage so it has something concrete to diverge from
+ * instead of "be different" with nothing to compare against.
+ */
+export interface RecentCreativeSignature {
+  artDirectionFamily: ArtDirectionFamily;
+  mode: CreativeMode;
+  palette: string[];
+  lighting: string;
+  background: string;
+}
+
+// ─── Reference-style — "understand my taste, don't copy the picture" ─────────
+//
+// A member uploads a few images they like; this is what FlowPost extracts
+// from them — visual LANGUAGE, never content. Modelled on CreativeResearch's
+// exact shape (patterns + an explicit avoid-list + one directional sentence),
+// because the job is identical: inspiration a generator can lean on without
+// ever reproducing a specific source. See `ai/generators/reference-style.generator.ts`.
+
+/** How much weight the extracted style should carry — surfaced to the UI, and a single reference always caps at 'low'. */
+export type ReferenceStyleInfluence = 'low' | 'medium' | 'high';
+
+// The renderer's actual levers. Each axis is a small closed vocabulary so the
+// layout planner can branch on it — free prose can only ever be pattern-matched
+// back into one of these anyway, so the vision model is asked to classify
+// directly instead of us grepping its adjectives afterward.
+export type RecipeTypographyFamily = 'serif-editorial' | 'sans-modern' | 'condensed-display' | 'geometric-sans' | 'mixed';
+export type RecipeLayoutBehaviour = 'asymmetric' | 'centered' | 'grid' | 'stacked' | 'diagonal';
+export type RecipeLogoTreatment = 'integrated' | 'corner' | 'footer' | 'watermark';
+export type RecipeFooterStyle = 'torn-paper' | 'solid-band' | 'hairline' | 'none';
+export type RecipeBorderStyle = 'none' | 'hairline' | 'thick' | 'inset-frame';
+export type RecipeTexture = 'none' | 'paper-grain' | 'film-grain' | 'halftone' | 'noise';
+export type RecipeShapeLanguage = 'organic' | 'geometric' | 'editorial-rules' | 'none';
+export type RecipeVisualDensity = 'minimal' | 'balanced' | 'dense';
+export type RecipeImperfection = 'none' | 'subtle' | 'strong';
+export type RecipeImageTreatment = 'full-bleed' | 'framed' | 'inset';
+export type RecipeSpacing = 'tight' | 'generous' | 'airy';
+
+/**
+ * The reference images turned into an actionable DESIGN SYSTEM, not adjectives.
+ * Split by consumer: the free-text fields art-direct the VISUAL (they flow into
+ * the Gemini prompt via the creative direction); the constrained axes drive the
+ * deterministic renderer — typography stack, layout skeleton, footer treatment,
+ * texture, logo placement. Gemini never sees the axes; the renderer never
+ * guesses from prose.
+ */
+export interface ReferenceDesignRecipe {
+  /** e.g. "warm editorial photography, natural window light" — empty when references aren't photographic. */
+  photographyStyle: string;
+  /** e.g. "loose ink linework, flat gouache colour" — empty when references aren't illustrative. */
+  illustrationStyle: string;
+  /** The character of the headline type — "large expressive serif, tight leading, sentence case". */
+  headlineCharacter: string;
+  /** The character of small supporting copy — "restrained grotesk caps, wide tracking". */
+  supportingTypography: string;
+  /** How the references compose a frame — "subject offset left, copy in cleared right third". */
+  compositionBehaviour: string;
+  /** Reading order as seen in the references — "headline first, one supporting line, tiny footer detail". */
+  textHierarchy: string;
+  typographyFamily: RecipeTypographyFamily;
+  /** Dominant colours actually seen across the references, as hex — the renderer tints paper/ink with these when the brand has no colours of its own. */
+  colorPalette: string[];
+  layoutBehaviour: RecipeLayoutBehaviour;
+  logoTreatment: RecipeLogoTreatment;
+  spacingBehaviour: RecipeSpacing;
+  texture: RecipeTexture;
+  /** Recurring decorative devices — "hand-drawn underline", "thin rule dividers", "starburst badge". */
+  graphicElements: string[];
+  footerStyle: RecipeFooterStyle;
+  borderStyle: RecipeBorderStyle;
+  shapeLanguage: RecipeShapeLanguage;
+  visualDensity: RecipeVisualDensity;
+  imperfectionLevel: RecipeImperfection;
+  imageTreatment: RecipeImageTreatment;
+}
+
+export interface ReferenceStyleProfile {
+  /** False when no references were given, or analysis failed — degrades silently, same tolerance as CreativeResearch.researchPerformed. */
+  analysed: boolean;
+  referenceCount: number;
+  /** One-line overall descriptor — e.g. "editorial, tactile, asymmetric". */
+  visualLanguage: string;
+  compositionPatterns: string[];
+  typographyCharacter: string;
+  /** How colours relate to each other, not a hex list — that's brandColors' job. */
+  colorRelationships: string;
+  textureAndMaterial: string;
+  lightingAndMood: string;
+  /** Which register the references sit in — photographic, illustrative, or a mix. */
+  photographicOrIllustrative: string;
+  /** Density and negative-space feel together — how busy vs. spacious. */
+  visualDensity: string;
+  brandTreatment: string;
+  /** WHAT'S INTERESTING about the references — unusual perspective, tactile texture, hand-drawn type — the actual signal this feature exists to extract. */
+  creativeMechanisms: string[];
+  /** Polish vs. deliberate human imperfection — the anti-generic-AI lever. */
+  imperfectionLevel: string;
+  interactionPatterns: string;
+  /** Explicit negative-copy protection — exact composition/objects/headline/logo placement/character/campaign concept never to reproduce. */
+  doNotCopy: string[];
+  /** One sentence: the coherent direction across all references, or a conflict note when they pull two ways (spec §12). */
+  dominantDirection: string;
+  influence: ReferenceStyleInfluence;
+  /** The structured design system the renderer consumes — absent on profiles saved before recipes existed; the renderer derives a fallback then. */
+  designRecipe?: ReferenceDesignRecipe;
+}
+
+export interface RawReferenceStyleProfilePayload {
+  visualLanguage?: unknown;
+  compositionPatterns?: unknown;
+  typographyCharacter?: unknown;
+  colorRelationships?: unknown;
+  textureAndMaterial?: unknown;
+  lightingAndMood?: unknown;
+  photographicOrIllustrative?: unknown;
+  visualDensity?: unknown;
+  brandTreatment?: unknown;
+  creativeMechanisms?: unknown;
+  imperfectionLevel?: unknown;
+  interactionPatterns?: unknown;
+  doNotCopy?: unknown;
+  dominantDirection?: unknown;
+  influence?: unknown;
+  designRecipe?: Record<string, unknown>;
+}
+
+export interface RawCreativeResearchPayload {
+  creativeMechanisms?: unknown;
+  visualPatterns?: unknown;
+  typographyPatterns?: unknown;
+  compositionPatterns?: unknown;
+  productTreatmentPatterns?: unknown;
+  ideasToAvoid?: unknown;
+  originalityDirection?: unknown;
+}

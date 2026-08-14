@@ -165,7 +165,12 @@ const MAX_FEEDBACK_CAPTION_LENGTH = 500;
 
 // ─── Field readers ───────────────────────────────────────────────────────────
 
-function readString(value: unknown, max: number): string | undefined {
+// Several of these are exported: `creative-generation.service.ts` validates
+// the same shapes (a platform list, a brand voice, an image URL) for the
+// image-generation request, and duplicating the rules here would be exactly
+// the drift `brand-profile.ts`'s header warns about.
+
+export function readString(value: unknown, max: number): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, max) : undefined;
@@ -180,7 +185,7 @@ function readStringArray(value: unknown, maxItems: number): string[] {
 }
 
 /** One of `allowed`, or `fallback` for anything else — including undefined. */
-function readEnum<T extends string>(
+export function readEnum<T extends string>(
   value: unknown,
   allowed: readonly T[],
   fallback: T,
@@ -214,14 +219,14 @@ function readClampedInt(
  * in the response schema and a line in the prompt, so it may only ever be
  * lowercase letters, digits, `-` and `_`.
  */
-function readPlatforms(value: unknown): string[] {
+export function readPlatforms(value: unknown): string[] {
   const requested = readStringArray(value, MAX_PLATFORMS)
     .map((platform) => platform.toLowerCase())
     .filter((platform) => /^[a-z0-9_-]{1,32}$/.test(platform));
   return [...new Set(requested)];
 }
 
-function readBrandVoice(value: unknown): CaptionRequest['brandVoice'] {
+export function readBrandVoice(value: unknown): CaptionRequest['brandVoice'] {
   if (!value || typeof value !== 'object') return undefined;
   const voice = value as Record<string, unknown>;
 
@@ -288,7 +293,7 @@ function readBrandVoice(value: unknown): CaptionRequest['brandVoice'] {
  * as though it were a colour value makes the brand section read as precise
  * when it is not.
  */
-function readColors(value: unknown): string[] {
+export function readColors(value: unknown): string[] {
   return readStringArray(value, 8)
     .map((entry) => entry.trim().toLowerCase())
     .filter((entry) => /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(entry));
@@ -304,7 +309,7 @@ function readColors(value: unknown): string[] {
  * in `ai/vision/image-source.ts`, which is where a URL that resolves to
  * something internal is actually stopped.
  */
-function readImageUrl(value: unknown): string | undefined {
+export function readImageUrl(value: unknown): string | undefined {
   const raw = readString(value, 2000);
   if (!raw) return undefined;
   try {

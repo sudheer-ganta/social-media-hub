@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MediaUploader } from "./MediaUploader";
+import { CreateWithFlowPostChooser } from "./CreateWithFlowPost/CreateWithFlowPostChooser";
 import { ContentTypePicker } from "./ContentTypePicker";
 import { CaptionEditor } from "./CaptionEditor";
 import { PlatformSelector } from "./PlatformSelector";
@@ -1264,6 +1265,13 @@ export function CreatePostForm({ post, context, brand }: CreatePostFormProps) {
                 {/* Media Section */}
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold">Media</Label>
+                  {media.length === 0 && !isPublished && (
+                    <CreateWithFlowPostChooser
+                      contextType={context.contextType === "brand" ? "brand" : "personal"}
+                      {...(context.brandId && { brandId: context.brandId })}
+                      onUseInPost={(item) => setMedia([...media, item])}
+                    />
+                  )}
                   <MediaUploader
                     items={media}
                     onChange={setMedia}

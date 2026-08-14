@@ -1,0 +1,126 @@
+{
+  "structure": "inset/asymmetric/torn-paper-footer/logo:integrated/type:serif-editorial/texture:paper-grain",
+  "designRecipe": {
+    "photographyStyle": "soft natural light, tactile culinary close-up, matte finish",
+    "illustrationStyle": "",
+    "headlineCharacter": "heavy vintage serif, sentence case, tight line height",
+    "supportingTypography": "spaced sans-serif caps combined with flowing serif italics",
+    "compositionBehaviour": "top-heavy editorial title stack with central imagery block and grounded footer base",
+    "textHierarchy": "prominent bold serif title, airy uppercase descriptor, italic accent line",
+    "typographyFamily": "serif-editorial",
+    "colorPalette": [
+      "#efe7d8",
+      "#4a3222",
+      "#d9c3a5",
+      "#2b2725",
+      "#9e8262"
+    ],
+    "layoutBehaviour": "asymmetric",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "generous",
+    "texture": "paper-grain",
+    "graphicElements": [
+      "organic wavy line divider",
+      "hairline border frame",
+      "solid organic paper cut base"
+    ],
+    "footerStyle": "torn-paper",
+    "borderStyle": "hairline",
+    "shapeLanguage": "organic",
+    "visualDensity": "balanced",
+    "imperfectionLevel": "subtle",
+    "imageTreatment": "inset"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1600,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.575
+    },
+    "blocks": [
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.87,
+          "width": 1,
+          "height": 0.13
+        },
+        "style": "torn-paper",
+        "fill": "#f7f4ee"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.906,
+          "width": 0.87,
+          "height": 0.031
+        },
+        "spec": {
+          "lines": [
+            "Visually proves the efficiency of the one-composer tool."
+          ],
+          "x": 104,
+          "y": 1483.2,
+          "fontSize": 40,
+          "lineHeight": 50,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#2563eb",
+          "italic": true
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.62,
+          "width": 0.05,
+          "height": 0.05
+        },
+        "opacity": 1
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.7,
+          "width": 0.86,
+          "height": 0.063
+        },
+        "spec": {
+          "lines": [
+            "Stop repeating yourself."
+          ],
+          "x": 104,
+          "y": 1201.1039999999998,
+          "fontSize": 92.80000000000001,
+          "lineHeight": 100.22400000000002,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#2563eb",
+          "fontWeight": 700,
+          "align": "left",
+          "rotationDeg": -0.6
+        }
+      },
+      {
+        "kind": "border",
+        "style": "hairline",
+        "stroke": "#2563eb"
+      },
+      {
+        "kind": "texture",
+        "texture": "paper-grain"
+      }
+    ],
+    "structure": "inset/asymmetric/torn-paper-footer/logo:integrated/type:serif-editorial/texture:paper-grain"
+  }
+}

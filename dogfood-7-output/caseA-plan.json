@@ -1,0 +1,130 @@
+{
+  "structure": "inset/asymmetric/torn-paper-footer/logo:none/type:serif-editorial/texture:paper-grain",
+  "designRecipe": {
+    "photographyStyle": "soft natural light, tactile culinary close-up, matte finish",
+    "illustrationStyle": "",
+    "headlineCharacter": "heavy vintage serif, sentence case, tight line height",
+    "supportingTypography": "spaced sans-serif caps combined with flowing serif italics",
+    "compositionBehaviour": "top-heavy editorial title stack with central imagery block and grounded footer base",
+    "textHierarchy": "prominent bold serif title, airy uppercase descriptor, italic accent line",
+    "typographyFamily": "serif-editorial",
+    "colorPalette": [
+      "#efe7d8",
+      "#4a3222",
+      "#d9c3a5",
+      "#2b2725",
+      "#9e8262"
+    ],
+    "layoutBehaviour": "asymmetric",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "generous",
+    "texture": "paper-grain",
+    "graphicElements": [
+      "organic wavy line divider",
+      "hairline border frame",
+      "solid organic paper cut base"
+    ],
+    "footerStyle": "torn-paper",
+    "borderStyle": "hairline",
+    "shapeLanguage": "organic",
+    "visualDensity": "balanced",
+    "imperfectionLevel": "subtle",
+    "imageTreatment": "inset"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#efe7d8",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.597
+    },
+    "blocks": [
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.87,
+          "width": 1,
+          "height": 0.13
+        },
+        "style": "torn-paper",
+        "fill": "#efe7d8"
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.728,
+          "y": 0.899,
+          "width": 0.207,
+          "height": 0.04
+        },
+        "spec": {
+          "text": "Save to play",
+          "x": 932.3008,
+          "y": 1437.76,
+          "width": 264.49920000000003,
+          "height": 64.512,
+          "fontSize": 26.880000000000003,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "pill",
+          "fill": "#2b2725",
+          "textFill": "#ffffff"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.633,
+          "width": 0.86,
+          "height": 0.1
+        },
+        "spec": {
+          "lines": [
+            "The weekend's most prized",
+            "possession."
+          ],
+          "x": 83.2,
+          "y": 1078.8096,
+          "fontSize": 74.24000000000001,
+          "lineHeight": 80.17920000000001,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#2b2725",
+          "fontWeight": 700,
+          "align": "left",
+          "rotationDeg": -0.6
+        }
+      },
+      {
+        "kind": "badge",
+        "rect": {
+          "x": 0.065,
+          "y": 0.757,
+          "width": 0.476,
+          "height": 0.03
+        },
+        "text": "Trace the path to claim the last momo.",
+        "fontSize": 24.0448,
+        "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+        "fill": "#2b2725",
+        "textFill": "#ffffff"
+      },
+      {
+        "kind": "border",
+        "style": "hairline",
+        "stroke": "#2b2725"
+      },
+      {
+        "kind": "texture",
+        "texture": "paper-grain"
+      }
+    ],
+    "structure": "inset/asymmetric/torn-paper-footer/logo:none/type:serif-editorial/texture:paper-grain"
+  }
+}

@@ -147,6 +147,7 @@ model Brand {
 
   social_accounts SocialAccount[]
   posts           Post[]
+  generated_assets GeneratedAsset[]
 
   @@unique([created_by, name])
   @@index([created_by])
@@ -169,6 +170,51 @@ model BrandVoice {
   @@index([created_by])
   @@index([created_at(sort: Desc)])
   @@map("brand_voices")
+}
+
+/// Reusable Creative DNA profiles — the visual sibling of BrandVoice. Where
+/// BrandVoice describes how a brand writes, this describes how it looks:
+/// photography style, composition, lighting, mood, colour, logo/product
+/// treatment. The `dna` payload is resolved the same way BrandVoice is —
+/// user-set fields win, image analysis fills gaps — by
+/// `server/src/ai/brand/creative-dna.ts`. Never forced on the user as a
+/// questionnaire: a first save is normally auto-populated from an uploaded
+/// asset and then confirmed/adjusted.
+model CreativeDna {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  dna        Json     @default("{}") // CreativeDnaInput — see src/ai/types.ts
+  is_default Boolean  @default(false)
+  created_by String   @default(dbgenerated("auth.uid()")) @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([created_by, name])
+  @@index([created_by])
+  @@index([created_at(sort: Desc)])
+  @@map("creative_dna")
+}
+
+/// Reusable "Creative Style Profile" — saved output of reference-led creative
+/// generation (spec: "Show FlowPost what you like"). A SIBLING to CreativeDna,
+/// not a field on it: a member can hold several style profiles independent of
+/// brand identity, each one a ReferenceStyleProfile (visual language extracted
+/// from uploaded references — see server/src/ai/types.ts) reusable across
+/// future generations without re-uploading. Same shape/RLS pattern as
+/// CreativeDna, including the one-default-per-owner partial unique index.
+model ReferenceStyleProfile {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  profile    Json     @default("{}") // ReferenceStyleProfile — see src/ai/types.ts
+  is_default Boolean  @default(false)
+  created_by String   @default(dbgenerated("auth.uid()")) @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([created_by, name])
+  @@index([created_by])
+  @@index([created_at(sort: Desc)])
+  @@map("reference_style_profiles")
 }
 
 /// How one member writes, in one publishing context.
@@ -208,6 +254,86 @@ model StyleProfile {
 
   @@index([userId])
   @@map("style_profiles")
+}
+
+enum GeneratedAssetStatus {
+  PENDING
+  COMPLETED
+  FAILED
+
+  @@map("generated_asset_status")
+}
+
+/// Provenance, explicit rather than inferred from `parentAssetId` being set —
+/// business logic lives in a field, not in "does this row happen to have a
+/// parent". AI_GENERATED covers a fresh generation and every campaign
+/// variation; AI_REFINED is only ever set by `refine()`.
+enum GeneratedAssetSource {
+  AI_GENERATED
+  AI_REFINED
+
+  @@map("generated_asset_source")
+}
+
+/// One AI-generated creative, from FlowPost's brand-native image pipeline.
+///
+/// Backend-only, same pattern as `StyleProfile`: RLS enabled with no
+/// PostgREST policies, written and read exclusively through
+/// `server/src/routes/creative.routes.ts` — the frontend never queries this
+/// table directly, since the Gemini/Cloudinary keys that produced these rows
+/// live only on the backend.
+///
+/// Never overwritten. Regenerate and Refine each insert a new row rather than
+/// mutating one, linked back to where they came from via `parentAssetId` —
+/// that lineage is the generation history the UI's Result screen reads, and
+/// `campaignId` groups the linked variations one creative direction produced
+/// (hero/product/lifestyle/...) without inventing a second grouping table.
+model GeneratedAsset {
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  contextType String  @default("personal") @map("context_type")
+  brandId     String? @map("brand_id") @db.Uuid
+  brand       Brand?  @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  /// The member's raw natural-language request, verbatim.
+  prompt String
+
+  /// The structured CreativeDirection actually used to generate — internal,
+  /// never shown raw to the user. See server/src/ai/generators/creative-direction.generator.ts.
+  creativeBrief Json @map("creative_brief")
+
+  /// Input asset URLs (product photo, logo, references) used for this
+  /// generation, if any. Empty for a no-asset request.
+  sourceAssetUrls String[] @default([]) @map("source_asset_urls")
+
+  imageUrl           String? @map("image_url")
+  cloudinaryPublicId  String? @map("cloudinary_public_id")
+  /// From Cloudinary's own upload response — the account already measured
+  /// this asset, so nothing here re-derives it.
+  width  Int?
+  height Int?
+  format String?
+
+  provider String @default("gemini")
+  model    String
+
+  source GeneratedAssetSource @default(AI_GENERATED)
+  status GeneratedAssetStatus @default(PENDING)
+
+  /// Groups the linked variations one creative direction produced.
+  campaignId String? @map("campaign_id") @db.Uuid
+
+  /// The asset this one was regenerated or refined from, if any.
+  parentAssetId String?          @map("parent_asset_id") @db.Uuid
+  parentAsset   GeneratedAsset?  @relation("AssetLineage", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  children      GeneratedAsset[] @relation("AssetLineage")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([campaignId])
+  @@index([parentAssetId])
+  @@map("generated_assets")
 }
 
 // ─── Integrations (backend-only, via Prisma Client) ──────────────────────────

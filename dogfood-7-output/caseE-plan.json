@@ -1,0 +1,161 @@
+{
+  "structure": "framed/stacked/solid-band-footer/logo:corner/type:sans-modern",
+  "designRecipe": {
+    "photographyStyle": "",
+    "illustrationStyle": "Minimalist vector UI placeholders and abstract skeleton screens",
+    "headlineCharacter": "Bold modern sans-serif with strong line-height and multi-color emphasis",
+    "supportingTypography": "Clean neutral sans-serif body copy in dark slate or muted gray",
+    "compositionBehaviour": "Center or left-aligned vertical stack with headline, subhead, abstract wireframe graphic, and primary action button.",
+    "textHierarchy": "Bold multi-tone headline first, followed by lighter body paragraph, graphic asset, and bottom CTA button",
+    "typographyFamily": "sans-modern",
+    "colorPalette": [
+      "#ffffff",
+      "#0b1320",
+      "#2563eb",
+      "#e0e7ff",
+      "#f4f6f8"
+    ],
+    "layoutBehaviour": "stacked",
+    "logoTreatment": "corner",
+    "spacingBehaviour": "generous",
+    "texture": "none",
+    "graphicElements": [
+      "rounded wireframe container cards",
+      "horizontal hairline dividers",
+      "pill CTA buttons"
+    ],
+    "footerStyle": "solid-band",
+    "borderStyle": "none",
+    "shapeLanguage": "geometric",
+    "visualDensity": "minimal",
+    "imperfectionLevel": "none",
+    "imageTreatment": "framed"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1600,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0.065,
+      "y": 0.065,
+      "width": 0.87,
+      "height": 0.379
+    },
+    "blocks": [
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.821,
+          "width": 1,
+          "height": 0.179
+        },
+        "style": "solid-band",
+        "fill": "#f7f4ee"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.856,
+          "width": 0.87,
+          "height": 0.031
+        },
+        "spec": {
+          "lines": [
+            "Consolidate your tools into one elegant workspace."
+          ],
+          "x": 104,
+          "y": 1404.0400000000002,
+          "fontSize": 40,
+          "lineHeight": 50,
+          "fontFamily": "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#2563eb",
+          "italic": true
+        }
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.676,
+          "y": 0.914,
+          "width": 0.259,
+          "height": 0.05
+        },
+        "spec": {
+          "text": "See the workflow",
+          "x": 1082.048,
+          "y": 1462.1600000000003,
+          "width": 413.952,
+          "height": 80.64,
+          "fontSize": 33.6,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "rect",
+          "fill": "#2563eb",
+          "textFill": "#ffffff"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.49,
+          "width": 0.86,
+          "height": 0.153
+        },
+        "spec": {
+          "lines": [
+            "Complex strategy.",
+            "Simple execution."
+          ],
+          "x": 104,
+          "y": 882.972736,
+          "fontSize": 113.12320000000001,
+          "lineHeight": 122.17305600000002,
+          "fontFamily": "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#2563eb",
+          "fontWeight": 700,
+          "align": "left"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.672,
+          "width": 0.86,
+          "height": 0.035
+        },
+        "spec": {
+          "lines": [
+            "Consolidate your workflow into one composer."
+          ],
+          "x": 104,
+          "y": 1109.9304319999999,
+          "fontSize": 41.6,
+          "lineHeight": 56.160000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#2563eb",
+          "align": "left",
+          "opacity": 0.85
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.855,
+          "y": 0.046,
+          "width": 0.08,
+          "height": 0.08
+        },
+        "opacity": 1
+      }
+    ],
+    "structure": "framed/stacked/solid-band-footer/logo:corner/type:sans-modern"
+  }
+}

@@ -1,0 +1,165 @@
+{
+  "structure": "full-bleed/asymmetric/solid-band-footer/logo:none/type:sans-modern",
+  "designRecipe": {
+    "photographyStyle": "",
+    "illustrationStyle": "",
+    "headlineCharacter": "all-caps bold modern sans-serif, tight line spacing, contrasting color fills per line",
+    "supportingTypography": "wide-tracked sans-serif, all-caps, set inside small solid highlight blocks",
+    "compositionBehaviour": "bold left-aligned typography stacked with contrasting color shifts and graphic accents in negative space",
+    "textHierarchy": "massive multi-line headline dominated by color alternation, supported by a tiny secondary tag or callout block",
+    "typographyFamily": "sans-modern",
+    "colorPalette": [
+      "#e52b1e",
+      "#ffd100",
+      "#111111",
+      "#ffffff"
+    ],
+    "layoutBehaviour": "asymmetric",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "tight",
+    "texture": "none",
+    "graphicElements": [
+      "geometric color blocks",
+      "diagonal stripe frame overlay",
+      "dot pattern grid",
+      "solid circle and triangle shapes"
+    ],
+    "footerStyle": "solid-band",
+    "borderStyle": "none",
+    "shapeLanguage": "geometric",
+    "visualDensity": "minimal",
+    "imperfectionLevel": "none",
+    "imageTreatment": "full-bleed"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#ffffff",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.89
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.631,
+          "width": 1,
+          "height": 0.239
+        },
+        "direction": "up",
+        "maxOpacity": 0.45,
+        "color": "#ffffff"
+      },
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.87,
+          "width": 1,
+          "height": 0.13
+        },
+        "style": "solid-band",
+        "fill": "#ffffff"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.05,
+          "y": 0.892,
+          "width": 0.9,
+          "height": 0.025
+        },
+        "spec": {
+          "lines": [
+            "Engineered for maximum comfort."
+          ],
+          "x": 64,
+          "y": 1454.4,
+          "fontSize": 32,
+          "lineHeight": 40,
+          "fontFamily": "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#111111",
+          "italic": true
+        }
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.678,
+          "y": 0.933,
+          "width": 0.272,
+          "height": 0.04
+        },
+        "spec": {
+          "text": "Start the weekend",
+          "x": 868.1728,
+          "y": 1493.1200000000001,
+          "width": 347.8272,
+          "height": 64.512,
+          "fontSize": 26.880000000000003,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "rect",
+          "fill": "#ffd100",
+          "textFill": "#111111"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.05,
+          "y": 0.679,
+          "width": 0.7,
+          "height": 0.135
+        },
+        "spec": {
+          "lines": [
+            "THE WEEKEND",
+            "FORMULA"
+          ],
+          "x": 64,
+          "y": 1174.7897855999997,
+          "fontSize": 99.86048000000001,
+          "lineHeight": 107.84931840000002,
+          "fontFamily": "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#111111",
+          "fontWeight": 700,
+          "align": "left",
+          "letterSpacing": 1.5
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.05,
+          "y": 0.832,
+          "width": 0.7,
+          "height": 0.024
+        },
+        "spec": {
+          "lines": [
+            "DECONSTRUCTING THE PERFECT BITE."
+          ],
+          "x": 64,
+          "y": 1355.4559999999997,
+          "fontSize": 28.288,
+          "lineHeight": 38.1888,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#111111",
+          "align": "left",
+          "letterSpacing": 1.5,
+          "opacity": 0.95
+        }
+      }
+    ],
+    "structure": "full-bleed/asymmetric/solid-band-footer/logo:none/type:sans-modern"
+  }
+}

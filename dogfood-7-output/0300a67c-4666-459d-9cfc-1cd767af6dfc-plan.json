@@ -1,0 +1,173 @@
+{
+  "structure": "inset/centered/torn-paper-footer/logo:integrated/type:serif-editorial/texture:paper-grain",
+  "designRecipe": {
+    "photographyStyle": "intimate overhead, warm soft light, natural tactile ceramics",
+    "illustrationStyle": "",
+    "headlineCharacter": "bold high-contrast display serif, sentence case, warm brown color",
+    "supportingTypography": "clean uppercase sans-serif with wide letter-spacing mixed with elegant italic serif secondary lines",
+    "compositionBehaviour": "centered stacked text over geometric or photographic inset placeholders",
+    "textHierarchy": "large bold serif headline top, thin accent rule, small tracked sans caption, image container middle, dark torn footer with inverted small text",
+    "typographyFamily": "serif-editorial",
+    "colorPalette": [
+      "#f3ebe1",
+      "#e3cfb4",
+      "#4a3222",
+      "#b37c38",
+      "#1f1d1d"
+    ],
+    "layoutBehaviour": "centered",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "generous",
+    "texture": "paper-grain",
+    "graphicElements": [
+      "hand-drawn wavy line",
+      "hairline border frame",
+      "torn paper edge divider"
+    ],
+    "footerStyle": "torn-paper",
+    "borderStyle": "hairline",
+    "shapeLanguage": "editorial-rules",
+    "visualDensity": "minimal",
+    "imperfectionLevel": "subtle",
+    "imageTreatment": "inset"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1600,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.419
+    },
+    "blocks": [
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.87,
+          "width": 1,
+          "height": 0.13
+        },
+        "style": "torn-paper",
+        "fill": "#f7f4ee"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.906,
+          "width": 0.87,
+          "height": 0.031
+        },
+        "spec": {
+          "lines": [
+            "The single-composer workflow."
+          ],
+          "x": 104,
+          "y": 1483.2,
+          "fontSize": 40,
+          "lineHeight": 50,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#2563eb",
+          "italic": true
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.475,
+          "y": 0.465,
+          "width": 0.05,
+          "height": 0.05
+        },
+        "opacity": 1
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.544,
+          "width": 0.87,
+          "height": 0.153
+        },
+        "spec": {
+          "lines": [
+            "Write once. Publish",
+            "everywhere."
+          ],
+          "x": 800,
+          "y": 969.6207359999997,
+          "fontSize": 113.12320000000001,
+          "lineHeight": 122.17305600000002,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#2563eb",
+          "fontWeight": 700,
+          "align": "center",
+          "rotationDeg": -0.6
+        }
+      },
+      {
+        "kind": "underline",
+        "rect": {
+          "x": 0.301,
+          "y": 0.707,
+          "width": 0.399,
+          "height": 0.005
+        },
+        "stroke": "#2563eb",
+        "strokeWidth": 6.4
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.749,
+          "width": 0.87,
+          "height": 0.03
+        },
+        "spec": {
+          "lines": [
+            "THE SINGLE-COMPOSER WORKFLOW."
+          ],
+          "x": 800,
+          "y": 1228.7144319999998,
+          "fontSize": 35.36,
+          "lineHeight": 47.736000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#2563eb",
+          "align": "center",
+          "letterSpacing": 1.5,
+          "opacity": 0.85
+        }
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.065,
+          "y": 0.441,
+          "width": 0.87,
+          "height": 0.002
+        },
+        "stroke": "#2563eb",
+        "opacity": 0.7
+      },
+      {
+        "kind": "border",
+        "style": "hairline",
+        "stroke": "#2563eb"
+      },
+      {
+        "kind": "texture",
+        "texture": "paper-grain"
+      }
+    ],
+    "structure": "inset/centered/torn-paper-footer/logo:integrated/type:serif-editorial/texture:paper-grain"
+  }
+}

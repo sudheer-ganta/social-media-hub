@@ -1,4 +1,5 @@
 import type { AiTextProvider } from './provider.interface';
+import type { AiImageProvider } from './image-provider.interface';
 import {
   geminiProvider,
   geminiCaptionProvider,
@@ -6,6 +7,7 @@ import {
   geminiMarketingProvider,
   geminiLightProvider,
 } from './gemini.provider';
+import { geminiImageProvider } from './gemini-image.provider';
 
 export {
   AiProviderError,
@@ -20,6 +22,12 @@ export {
   geminiMarketingProvider,
   geminiLightProvider,
 } from './gemini.provider';
+export {
+  type AiImageProvider,
+  type GenerateImageOptions,
+  type GeneratedImagePart,
+} from './image-provider.interface';
+export { GeminiImageProvider, geminiImageProvider } from './gemini-image.provider';
 
 export type AiProviderId = 'gemini';
 
@@ -55,14 +63,18 @@ export function activeProvider(id?: string): AiTextProvider {
  *   marketing  Marketing Intelligence — reach scoring, improvements, the
  *              deep-reasoning engine. The only role that earns Pro.
  *   light      chores — alt text and other small, frequent calls.
+ *   creative   the creative-direction brief that precedes an image
+ *              generation — structured reasoning about brand + request, not
+ *              prose, so it shares Marketing's model rather than Caption's.
  */
-export type AiRole = 'caption' | 'vision' | 'marketing' | 'light';
+export type AiRole = 'caption' | 'vision' | 'marketing' | 'light' | 'creative';
 
 const geminiByRole: Record<AiRole, AiTextProvider> = {
   caption: geminiCaptionProvider,
   vision: geminiVisionProvider,
   marketing: geminiMarketingProvider,
   light: geminiLightProvider,
+  creative: geminiMarketingProvider,
 };
 
 /**
@@ -76,4 +88,18 @@ const geminiByRole: Record<AiRole, AiTextProvider> = {
  */
 export function providerForRole(role: AiRole): AiTextProvider {
   return geminiByRole[role];
+}
+
+/**
+ * The image-generation provider, chosen by `AI_PROVIDER` the same way
+ * {@link activeProvider} picks a text provider. One vendor today; a second
+ * would get its own entry here.
+ */
+const aiImageProviders = {
+  gemini: geminiImageProvider,
+} satisfies Record<AiProviderId, AiImageProvider>;
+
+export function activeImageProvider(id?: string): AiImageProvider {
+  const key = (id ?? '').toLowerCase();
+  return (aiImageProviders as Record<string, AiImageProvider>)[key] ?? geminiImageProvider;
 }

@@ -1,0 +1,263 @@
+{
+  "tactile": {
+    "analysed": true,
+    "referenceCount": 4,
+    "visualLanguage": "warm editorial, rustic print layout, tactile neutral palette",
+    "compositionPatterns": [
+      "centered vertical layout with generous margins",
+      "grounded base element anchoring the bottom of the frame"
+    ],
+    "typographyCharacter": "classic editorial serif paired with clean geometric sans-serif subtext",
+    "colorRelationships": "warm cream background contrasted with deep roasted-brown typography and earthy beige accents",
+    "textureAndMaterial": "matte paper stock, raw dark ceramic, soft film grain",
+    "lightingAndMood": "cozy, inviting, warm indoor light with a nostalgic evening atmosphere",
+    "photographicOrIllustrative": "mix of graphic paper layout and editorial culinary photography",
+    "visualDensity": "spacious and calm with focused visual focal points",
+    "brandTreatment": "integrated seamlessly into text hierarchy through establishment dates and subtle sub-text",
+    "creativeMechanisms": [
+      "earthy muted background tones with subtle surface texture",
+      "bold serif headlines mixed with delicate italicized sub-elements",
+      "organic wavy dividing lines as grounding visual anchors",
+      "framed inset placeholders for food photography",
+      "high-contrast dark ceramic tableware creating depth"
+    ],
+    "imperfectionLevel": "subtle human touch via gentle organic divider rules and paper grain texture",
+    "interactionPatterns": "",
+    "doNotCopy": [
+      "exact headline copy 'The Long Autumn Table'",
+      "exact subhead 'Cooked slowly, told warmly'",
+      "the specific date 'EST. 1998'",
+      "the exact bowl of dumplings photography"
+    ],
+    "dominantDirection": "References suggest a warm, nostalgic editorial aesthetic for culinary branding, combining organic geometric graphic elements with rich food photography.",
+    "influence": "medium",
+    "designRecipe": {
+      "photographyStyle": "soft natural light, tactile culinary close-up, matte finish",
+      "illustrationStyle": "",
+      "headlineCharacter": "heavy vintage serif, sentence case, tight line height",
+      "supportingTypography": "spaced sans-serif caps combined with flowing serif italics",
+      "compositionBehaviour": "top-heavy editorial title stack with central imagery block and grounded footer base",
+      "textHierarchy": "prominent bold serif title, airy uppercase descriptor, italic accent line",
+      "typographyFamily": "serif-editorial",
+      "colorPalette": [
+        "#efe7d8",
+        "#4a3222",
+        "#d9c3a5",
+        "#2b2725",
+        "#9e8262"
+      ],
+      "layoutBehaviour": "asymmetric",
+      "logoTreatment": "integrated",
+      "spacingBehaviour": "generous",
+      "texture": "paper-grain",
+      "graphicElements": [
+        "organic wavy line divider",
+        "hairline border frame",
+        "solid organic paper cut base"
+      ],
+      "footerStyle": "torn-paper",
+      "borderStyle": "hairline",
+      "shapeLanguage": "organic",
+      "visualDensity": "balanced",
+      "imperfectionLevel": "subtle",
+      "imageTreatment": "inset"
+    }
+  },
+  "bold": {
+    "analysed": true,
+    "referenceCount": 3,
+    "visualLanguage": "bold, graphic, high-contrast constructivist poster typography",
+    "compositionPatterns": [
+      "asymmetric left-heavy typographic block with graphic shapes balancing the right",
+      "stacked color-shifted words",
+      "solid dark footer band grounding bright background field"
+    ],
+    "typographyCharacter": "Heavy weight modern grotesque/sans, set in uppercase with deliberate line-by-line color shifts.",
+    "colorRelationships": "High-energy, maximum-contrast interaction between saturated red, bright yellow, pure black, and white.",
+    "textureAndMaterial": "Flat digital colors, completely clean vectors without texture or grain.",
+    "lightingAndMood": "Flat graphic clarity, urgent, high-energy, confident.",
+    "photographicOrIllustrative": "purely graphic typographic layout",
+    "visualDensity": "Spacious yet punchy, using large open fields of flat color to amplify the massive typography.",
+    "brandTreatment": "Integrated cleanly into geometric blocks or small high-contrast tag accents.",
+    "creativeMechanisms": [
+      "stark color blocking using ultra-bold primary triad",
+      "extreme scale contrasts in sans-serif headlines",
+      "asymmetric alignment and broken word stacks",
+      "simple geometric accents (dots, triangles, diagonal stripes)",
+      "high contrast text highlighting with background block overlays"
+    ],
+    "imperfectionLevel": "Crisp, vector-sharp, vector-clean alignment and shapes with zero texture or distress.",
+    "interactionPatterns": "",
+    "doNotCopy": [
+      "exact text copy like 'TURN IT UP' or 'MAKE IT IMPOSSIBLE TO IGNORE'",
+      "exact composition with bottom-right triangle and circle",
+      "specific dot-grid array placement",
+      "black bottom footer band layout with yellow text"
+    ],
+    "dominantDirection": "A high-impact, constructivist-inspired graphic layout system driven by bold sans-serif typography, stark primary color blocking, and geometric accents.",
+    "influence": "high",
+    "designRecipe": {
+      "photographyStyle": "",
+      "illustrationStyle": "",
+      "headlineCharacter": "all-caps bold modern sans-serif, tight line spacing, contrasting color fills per line",
+      "supportingTypography": "wide-tracked sans-serif, all-caps, set inside small solid highlight blocks",
+      "compositionBehaviour": "bold left-aligned typography stacked with contrasting color shifts and graphic accents in negative space",
+      "textHierarchy": "massive multi-line headline dominated by color alternation, supported by a tiny secondary tag or callout block",
+      "typographyFamily": "sans-modern",
+      "colorPalette": [
+        "#e52b1e",
+        "#ffd100",
+        "#111111",
+        "#ffffff"
+      ],
+      "layoutBehaviour": "asymmetric",
+      "logoTreatment": "integrated",
+      "spacingBehaviour": "tight",
+      "texture": "none",
+      "graphicElements": [
+        "geometric color blocks",
+        "diagonal stripe frame overlay",
+        "dot pattern grid",
+        "solid circle and triangle shapes"
+      ],
+      "footerStyle": "solid-band",
+      "borderStyle": "none",
+      "shapeLanguage": "geometric",
+      "visualDensity": "minimal",
+      "imperfectionLevel": "none",
+      "imageTreatment": "full-bleed"
+    }
+  },
+  "minimal": {
+    "analysed": true,
+    "referenceCount": 3,
+    "visualLanguage": "ultra-minimalist, quiet, editorial serif with extreme negative space",
+    "compositionPatterns": [
+      "Centered stack with thin divider rule",
+      "Single abstract geometric icon floating in negative space",
+      "Top-left statement with bottom-left baseline anchor"
+    ],
+    "typographyCharacter": "Refined editorial serif combined with subtle, high-tracking small caps.",
+    "colorRelationships": "Strictly monochromatic off-white palette with dark charcoal type and muted grey accents.",
+    "textureAndMaterial": "Smooth matte digital paper effect.",
+    "lightingAndMood": "Quiet, contemplative, premium, and calm.",
+    "photographicOrIllustrative": "graphic",
+    "visualDensity": "Extremely sparse with vast expanse of empty background field.",
+    "brandTreatment": "Integrated centrally or quietly anchored in small tracked typography.",
+    "creativeMechanisms": [
+      "extreme negative space",
+      "micro-scale horizontal rule dividers",
+      "widely tracked small caps typography",
+      "monochromatic off-white background fields",
+      "hairline outer borders",
+      "understated typographic hierarchy"
+    ],
+    "imperfectionLevel": "Ultra-polished, pristine vector alignment and crisp rendering.",
+    "interactionPatterns": "",
+    "doNotCopy": [
+      "exact text 'MAISON'",
+      "exact text 'QUIETLY MADE'",
+      "exact text 'NOTHING UNNECESSARY'",
+      "exact text 'A single good thing, made properly.'",
+      "exact text 'SINCE 2011'",
+      "centered beige filled circle element",
+      "exact hairline inset frame"
+    ],
+    "dominantDirection": "An ultra-restrained editorial layout defined by expansive negative space, delicate serif typography, and subtle horizontal rule accents.",
+    "influence": "high",
+    "designRecipe": {
+      "photographyStyle": "",
+      "illustrationStyle": "",
+      "headlineCharacter": "classic editorial serif, high contrast, balanced stroke weight",
+      "supportingTypography": "widely tracked small caps in muted grey sans/serif",
+      "compositionBehaviour": "centered or corner-anchored minimal text blocks with massive negative space surrounding them",
+      "textHierarchy": "prominent central or upper headline anchored by a tiny horizontal rule and widely spaced secondary caption below",
+      "typographyFamily": "serif-editorial",
+      "colorPalette": [
+        "#f7f6f2",
+        "#222222",
+        "#888888",
+        "#e5e3dc"
+      ],
+      "layoutBehaviour": "centered",
+      "logoTreatment": "integrated",
+      "spacingBehaviour": "airy",
+      "texture": "none",
+      "graphicElements": [
+        "thin horizontal hairline dividers",
+        "fine circular outline"
+      ],
+      "footerStyle": "hairline",
+      "borderStyle": "hairline",
+      "shapeLanguage": "editorial-rules",
+      "visualDensity": "minimal",
+      "imperfectionLevel": "none",
+      "imageTreatment": "full-bleed"
+    }
+  },
+  "saas": {
+    "analysed": true,
+    "referenceCount": 3,
+    "visualLanguage": "clean, tech-editorial, structured minimalism",
+    "compositionPatterns": [
+      "Vertical hierarchy stack: Headline -> Subhead -> Skeleton Card -> CTA",
+      "Headline with second line highlighted in electric blue"
+    ],
+    "typographyCharacter": "Heavy geometric/modern sans-serif headlines with clean body copy.",
+    "colorRelationships": "High contrast between crisp white or dark navy canvas and vibrant electric blue headline highlights and buttons.",
+    "textureAndMaterial": "Flat vector graphics, smooth digital UI components, and solid vector fills.",
+    "lightingAndMood": "Bright, direct, functional, and modern tech tone.",
+    "photographicOrIllustrative": "graphic",
+    "visualDensity": "Spacious and minimal with substantial negative space around key elements.",
+    "brandTreatment": "Clean, modern digital product branding using vibrant primary blue and deep dark slate backgrounds.",
+    "creativeMechanisms": [
+      "Two-tone typography hierarchy with high-contrast color shifts in headlines",
+      "Abstract wireframe and UI placeholder cards with soft rounded corners",
+      "Pill-shaped CTA buttons with bright primary accent colors",
+      "Stacked vertical typography layout with generous negative space",
+      "Subtle hairline divider rules providing soft structural layout sections"
+    ],
+    "imperfectionLevel": "Extremely polished and digital-flat.",
+    "interactionPatterns": "Prominent pill button CTAs situated at the bottom of hero sections.",
+    "doNotCopy": [
+      "Exact copy 'Ship work, not busywork.'",
+      "Exact copy 'Less noise. More signal.'",
+      "Exact copy 'Everything in one flow'",
+      "Exact UI card placeholder layout with top-left square and double lines",
+      "Exact blue CTA pill buttons with 'Get started' or 'Try it free'"
+    ],
+    "dominantDirection": "Modern B2B SaaS landing page visuals characterized by bold sans-serif headlines, vibrant electric blue accent typography, abstract soft-card wireframes, and minimalist stacked layouts.",
+    "influence": "high",
+    "designRecipe": {
+      "photographyStyle": "",
+      "illustrationStyle": "Minimalist vector UI placeholders and abstract skeleton screens",
+      "headlineCharacter": "Bold modern sans-serif with strong line-height and multi-color emphasis",
+      "supportingTypography": "Clean neutral sans-serif body copy in dark slate or muted gray",
+      "compositionBehaviour": "Center or left-aligned vertical stack with headline, subhead, abstract wireframe graphic, and primary action button.",
+      "textHierarchy": "Bold multi-tone headline first, followed by lighter body paragraph, graphic asset, and bottom CTA button",
+      "typographyFamily": "sans-modern",
+      "colorPalette": [
+        "#ffffff",
+        "#0b1320",
+        "#2563eb",
+        "#e0e7ff",
+        "#f4f6f8"
+      ],
+      "layoutBehaviour": "stacked",
+      "logoTreatment": "corner",
+      "spacingBehaviour": "generous",
+      "texture": "none",
+      "graphicElements": [
+        "rounded wireframe container cards",
+        "horizontal hairline dividers",
+        "pill CTA buttons"
+      ],
+      "footerStyle": "solid-band",
+      "borderStyle": "none",
+      "shapeLanguage": "geometric",
+      "visualDensity": "minimal",
+      "imperfectionLevel": "none",
+      "imageTreatment": "framed"
+    }
+  }
+}

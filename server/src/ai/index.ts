@@ -43,8 +43,10 @@ export * from './types';
 export {
   AiProviderError,
   activeProvider,
+  activeImageProvider,
   aiProviders,
   providerForRole,
+  type AiImageProvider,
   type AiProviderId,
   type AiRole,
   type AiTextProvider,
@@ -137,6 +139,30 @@ export {
   renderBrandSection,
   isBrandProfileEmpty,
 } from './brand/brand-profile';
+
+// ─── Creative DNA — the visual sibling of Brand Intelligence ─────────────────
+export {
+  resolveCreativeDna,
+  renderCreativeDnaSection,
+  isCreativeDnaEmpty,
+} from './brand/creative-dna';
+export {
+  buildCreativeDirectionPrompt,
+  CREATIVE_DIRECTION_PROMPT_VERSION,
+} from './prompts/creative-direction.prompt';
+export {
+  generateCreativeDirection,
+  summariseCreativeDirection,
+} from './generators/creative-direction.generator';
+export { generateCreativeConcepts } from './generators/creative-concepts.generator';
+export {
+  generateCreativeResearch,
+  EMPTY_CREATIVE_RESEARCH,
+} from './generators/creative-research.generator';
+export {
+  groundedSearch,
+  isGroundedSearchConfigured,
+} from './research/gemini-grounded-search';
 
 // ─── The two engines ─────────────────────────────────────────────────────────
 //

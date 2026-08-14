@@ -480,3 +480,68 @@ export const EMPTY_GENERATION_META: GenerationMeta = {
   error: null,
   produced: [],
 };
+
+// ─── Creative DNA — the visual sibling of BrandVoice ──────────────────────────
+//
+// Same shape BrandVoice has above: a plain payload, saved as a named profile,
+// picked later. Where BrandVoice describes how a brand writes, this describes
+// how it looks — photography style, composition, lighting, mood, colour,
+// logo/product treatment. Resolved server-side by
+// `server/src/ai/brand/creative-dna.ts`, which fills any gap left blank from
+// whatever Vision reads off an attached image.
+
+export interface CreativeDna {
+  visualStyle: string;
+  photographyStyle: string;
+  composition: string;
+  lighting: string;
+  mood: string;
+  typographyCharacter: string;
+  spacing: string;
+  productTreatment: string;
+  logoTreatment: string;
+  preferredElements: string[];
+  avoidedElements: string[];
+  brandColors: string[];
+  logoAssetUrl: string;
+  referenceAssetUrls: string[];
+}
+
+export const DEFAULT_CREATIVE_DNA: CreativeDna = {
+  visualStyle: "",
+  photographyStyle: "",
+  composition: "",
+  lighting: "",
+  mood: "",
+  typographyCharacter: "",
+  spacing: "",
+  productTreatment: "",
+  logoTreatment: "",
+  preferredElements: [],
+  avoidedElements: [],
+  brandColors: [],
+  logoAssetUrl: "",
+  referenceAssetUrls: [],
+};
+
+export interface CreativeDnaProfile {
+  id: string;
+  name: string;
+  is_default: boolean;
+  dna: CreativeDna;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreativeDnaProfileInsert {
+  name: string;
+  dna: CreativeDna;
+  is_default?: boolean;
+}
+
+export interface CreativeDnaProfileUpdate {
+  name?: string;
+  dna?: CreativeDna;
+  is_default?: boolean;
+}

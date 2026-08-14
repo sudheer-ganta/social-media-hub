@@ -1,0 +1,100 @@
+{
+  "structure": "full-bleed/centered/no-footer/logo:none/type:serif-editorial",
+  "designRecipe": {
+    "photographyStyle": "",
+    "illustrationStyle": "",
+    "headlineCharacter": "classic editorial serif, high contrast, balanced stroke weight",
+    "supportingTypography": "widely tracked small caps in muted grey sans/serif",
+    "compositionBehaviour": "centered or corner-anchored minimal text blocks with massive negative space surrounding them",
+    "textHierarchy": "prominent central or upper headline anchored by a tiny horizontal rule and widely spaced secondary caption below",
+    "typographyFamily": "serif-editorial",
+    "colorPalette": [
+      "#f7f6f2",
+      "#222222",
+      "#888888",
+      "#e5e3dc"
+    ],
+    "layoutBehaviour": "centered",
+    "logoTreatment": "integrated",
+    "spacingBehaviour": "airy",
+    "texture": "none",
+    "graphicElements": [
+      "thin horizontal hairline dividers",
+      "fine circular outline"
+    ],
+    "footerStyle": "hairline",
+    "borderStyle": "hairline",
+    "shapeLanguage": "editorial-rules",
+    "visualDensity": "minimal",
+    "imperfectionLevel": "none",
+    "imageTreatment": "full-bleed"
+  },
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f6f2",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.719,
+          "width": 1,
+          "height": 0.281
+        },
+        "direction": "up",
+        "maxOpacity": 0.45,
+        "color": "#ffffff"
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.085,
+          "y": 0.8,
+          "width": 0.83,
+          "height": 0.132
+        },
+        "spec": {
+          "lines": [
+            "The architecture of",
+            "a better weekend."
+          ],
+          "x": 640,
+          "y": 1366.157312,
+          "fontSize": 97.6896,
+          "lineHeight": 105.504768,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#222222",
+          "fontWeight": 700,
+          "align": "center"
+        }
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.085,
+          "y": 0.782,
+          "width": 0.83,
+          "height": 0.002
+        },
+        "stroke": "#222222",
+        "opacity": 0.7
+      },
+      {
+        "kind": "border",
+        "style": "hairline",
+        "stroke": "#222222"
+      }
+    ],
+    "structure": "full-bleed/centered/no-footer/logo:none/type:serif-editorial"
+  }
+}
