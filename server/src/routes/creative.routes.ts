@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../middleware/auth.middleware';
 import { AiProviderError } from '../ai';
@@ -24,19 +25,40 @@ const router = Router();
 
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
   return async (req: Request, res: Response) => {
+    // Correlation id: one per HTTP request, threaded through the service so
+    // every stage log line can be tied back to the click that caused it —
+    // and so two lines with different ids expose a duplicate frontend call.
+    const requestId = randomUUID().slice(0, 8);
+    res.locals.creativeRequestId = requestId;
+    const startedAt = Date.now();
+    console.info('[creative] request started', { requestId, method: req.method, path: req.path });
     try {
       await fn(req, res);
+      console.info('[creative] request completed', { requestId, durationMs: Date.now() - startedAt });
     } catch (error) {
       if (error instanceof CreativeError || error instanceof AiProviderError || error instanceof CloudinaryUploadError) {
         const status = 'status' in error ? error.status : 502;
+        // The member sees the safe message; the log keeps the vendor detail —
+        // previously this branch logged nothing, so a mapped 502 left no
+        // server-side trace of which stage actually failed.
+        console.error('[creative] request failed', {
+          requestId,
+          durationMs: Date.now() - startedAt,
+          errorType: error.name,
+          status,
+          message: error.message,
+          detail: 'detail' in error ? error.detail : undefined,
+        });
         res.status(status).json({ error: error.message });
         return;
       }
 
       console.error('[creative] request failed', {
+        requestId,
+        durationMs: Date.now() - startedAt,
         method: req.method,
         path: req.path,
-        error: error instanceof Error ? error.message : error,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : error,
       });
       res.status(500).json({ error: 'Something went wrong. Please try again.' });
     }
@@ -65,7 +87,7 @@ router.post(
   '/generate',
   requireAuth,
   handle(async (req, res) => {
-    const asset = await creativeGenerationService.generate(req.user.id, req.body);
+    const asset = await creativeGenerationService.generate(req.user.id, req.body, res.locals.creativeRequestId);
     res.json(asset);
   }),
 );
@@ -74,7 +96,7 @@ router.post(
   '/campaign',
   requireAuth,
   handle(async (req, res) => {
-    const assets = await creativeGenerationService.generateCampaign(req.user.id, req.body);
+    const assets = await creativeGenerationService.generateCampaign(req.user.id, req.body, res.locals.creativeRequestId);
     res.json({ assets });
   }),
 );
@@ -83,7 +105,7 @@ router.post(
   '/refine',
   requireAuth,
   handle(async (req, res) => {
-    const asset = await creativeGenerationService.refine(req.user.id, req.body);
+    const asset = await creativeGenerationService.refine(req.user.id, req.body, res.locals.creativeRequestId);
     res.json(asset);
   }),
 );

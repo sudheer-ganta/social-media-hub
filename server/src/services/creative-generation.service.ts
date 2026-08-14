@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { env } from '../config/env';
 import {
   AiProviderError,
   activeImageProvider,
@@ -604,6 +605,8 @@ interface RunGenerationOptions {
   variationLabel?: string;
   campaignId?: string;
   parentAssetId?: string;
+  /** Correlation id from the HTTP layer — ties every stage log to one request. */
+  requestId?: string;
 }
 
 /**
@@ -626,6 +629,7 @@ async function runGeneration({
   variationLabel,
   campaignId,
   parentAssetId,
+  requestId,
 }: RunGenerationOptions): Promise<StoredGeneratedAsset> {
   const hasAssets = request.assetUrls.length > 0;
 
@@ -684,6 +688,7 @@ async function runGeneration({
     variationLabel,
     creativeDna,
     referenceStyle,
+    requestId,
   });
 }
 
@@ -700,6 +705,8 @@ interface FinishGenerationOptions {
   variationLabel?: string;
   creativeDna: ResolvedCreativeDna;
   referenceStyle?: ReferenceStyleProfile;
+  /** Correlation id from the HTTP layer — ties every stage log to one request. */
+  requestId?: string;
 }
 
 /**
@@ -722,9 +729,35 @@ async function finishGeneration({
   variationLabel,
   creativeDna,
   referenceStyle,
+  requestId,
 }: FinishGenerationOptions): Promise<StoredGeneratedAsset> {
   let visual: { mimeType: string; data: string };
   let logoImage: { mimeType: string; data: string } | undefined;
+
+  // Stage bookkeeping for the failure log: which step was in flight, and for
+  // how long, when an error surfaced — the difference between "Gemini failed"
+  // and "Cloudinary failed" was previously invisible in the server log.
+  let stage = 'reference-fetch';
+  let stageStartedAt = Date.now();
+  const enterStage = (next: string) => {
+    stage = next;
+    stageStartedAt = Date.now();
+  };
+  const stageFailureLog = (error: unknown) => ({
+    requestId,
+    assetId: asset.id,
+    stage,
+    durationMs: Date.now() - stageStartedAt,
+    errorType: error instanceof Error ? error.name : typeof error,
+    status:
+      error instanceof AiProviderError || error instanceof CreativeError ? error.status : undefined,
+    detail:
+      error instanceof AiProviderError || error instanceof CreativeError
+        ? error.detail ?? error.message
+        : error instanceof Error
+          ? error.message
+          : String(error),
+  });
 
   try {
     const referenceImages = await fetchReferenceImages(referenceUrls);
@@ -746,10 +779,26 @@ async function finishGeneration({
     logoImage = logoAssetUrl ? (await fetchReferenceImages([logoAssetUrl]))[0] : undefined;
 
     const imagePrompt = buildImagePrompt(direction, hasAssets, Boolean(logoImage));
+    enterStage('image-generation');
+    console.info('[creative] image generation started', {
+      requestId,
+      assetId: asset.id,
+      model: imageProvider.model,
+      referenceCount: referenceImages.length,
+      hasLogo: Boolean(logoImage),
+    });
     [visual] = await imageProvider.generateImage({
       prompt: imagePrompt,
       referenceImages,
       aspectRatio: direction.aspectRatio,
+    });
+    console.info('[creative] image generation completed', {
+      requestId,
+      assetId: asset.id,
+      durationMs: Date.now() - stageStartedAt,
+      imageGenerated: true,
+      mimeType: visual.mimeType,
+      byteLength: Buffer.from(visual.data, 'base64').length,
     });
 
     // Raster QA (§10): a fake transparency checkerboard rendered as pixels is
@@ -769,6 +818,7 @@ async function finishGeneration({
       }
     }
   } catch (error) {
+    console.error('[creative] stage failed', stageFailureLog(error));
     await generatedAssetRepository.markFailed(asset.id);
     if (error instanceof AiProviderError || error instanceof CreativeError) throw error;
     throw new CreativeError('Image generation failed. Please try again.', 502);
@@ -777,6 +827,8 @@ async function finishGeneration({
   let image: { mimeType: string; data: string };
   let structure: string;
   try {
+    enterStage('renderer');
+    console.info('[creative] renderer started', { requestId, assetId: asset.id });
     const rendered = await renderCreative({
       visualImage: visual,
       direction,
@@ -786,6 +838,13 @@ async function finishGeneration({
     });
     image = { mimeType: rendered.mimeType, data: rendered.data };
     structure = rendered.structure;
+    console.info('[creative] renderer completed', {
+      requestId,
+      assetId: asset.id,
+      durationMs: Date.now() - stageStartedAt,
+      structure: rendered.structure,
+      byteLength: Buffer.from(rendered.data, 'base64').length,
+    });
     dumpDebugArtifacts(asset.id, {
       '1-visual.png': Buffer.from(visual.data, 'base64'),
       '2-final.png': Buffer.from(rendered.data, 'base64'),
@@ -798,18 +857,37 @@ async function finishGeneration({
   } catch (error) {
     // Gemini already succeeded — fall back to the raw visual rather than
     // losing the generation to a compositing bug.
-    console.warn('[creative] renderer failed, falling back to the raw visual', {
-      detail: error instanceof Error ? error.message : String(error),
-    });
+    console.warn('[creative] renderer failed, falling back to the raw visual', stageFailureLog(error));
     image = visual;
     structure = 'none';
   }
 
   try {
+    enterStage('cloudinary-upload');
+    console.info('[creative] cloudinary upload started', {
+      requestId,
+      assetId: asset.id,
+      byteLength: Buffer.from(image.data, 'base64').length,
+      cloudNamePresent: Boolean(env.CLOUDINARY_CLOUD_NAME),
+      apiKeyPresent: Boolean(env.CLOUDINARY_API_KEY),
+      apiSecretPresent: Boolean(env.CLOUDINARY_API_SECRET),
+    });
     const uploaded = await cloudinaryService.uploadImageBuffer(
       Buffer.from(image.data, 'base64'),
       image.mimeType,
     );
+    console.info('[creative] cloudinary upload completed', {
+      requestId,
+      assetId: asset.id,
+      durationMs: Date.now() - stageStartedAt,
+      publicId: uploaded.publicId,
+      secureUrlPresent: Boolean(uploaded.url),
+      width: uploaded.width,
+      height: uploaded.height,
+      format: uploaded.format,
+    });
+
+    enterStage('asset-persistence');
 
     const completed = await generatedAssetRepository.markCompleted(asset.id, {
       imageUrl: uploaded.url,
@@ -818,8 +896,10 @@ async function finishGeneration({
       ...(uploaded.height !== undefined && { height: uploaded.height }),
       ...(uploaded.format !== undefined && { format: uploaded.format }),
     });
+    console.info('[creative] asset persisted', { requestId, assetId: asset.id });
 
     console.info('[creative] generation complete', {
+      requestId,
       userId,
       assetId: asset.id,
       concept: direction.concept,
@@ -834,9 +914,32 @@ async function finishGeneration({
     // Gemini already succeeded here — the image exists, it just isn't saved.
     // Deliberately NOT "image generation failed": that would send the member
     // to retry a Gemini call that already worked, for a Cloudinary problem.
+    // `stage` tells the log apart: cloudinary-upload vs asset-persistence.
+    console.error('[creative] stage failed', stageFailureLog(error));
     await generatedAssetRepository.markFailed(asset.id);
-    const detail = error instanceof CloudinaryUploadError ? error.detail : undefined;
+    const detail =
+      error instanceof CloudinaryUploadError
+        ? error.detail
+        : `${stage}: ${error instanceof Error ? error.message : String(error)}`;
     throw new CreativeError("Image created, but FlowPost couldn't save it. Try again.", 502, detail);
+  }
+}
+
+/**
+ * Pre-flight for the pipeline's LAST stage: a server without Cloudinary
+ * credentials (the deployed-backend misconfiguration behind the observed
+ * 502s) previously paid for a full creative direction AND a real Gemini image
+ * on every click, then failed the save and answered an opaque 502. Checked
+ * before any model is called, so a misconfigured server answers instantly —
+ * and 503, matching the "not set up" answer the AI-provider check gives.
+ */
+function assertStorageConfigured() {
+  if (!cloudinaryService.isConfigured()) {
+    throw new CreativeError(
+      'Image storage is not configured on this server yet.',
+      503,
+      'CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET is empty',
+    );
   }
 }
 
@@ -993,7 +1096,7 @@ export const creativeGenerationService = {
   },
 
   /** Runs the full pipeline and returns the persisted, completed asset. */
-  async generate(userId: string, body: unknown): Promise<StoredGeneratedAsset> {
+  async generate(userId: string, body: unknown, requestId?: string): Promise<StoredGeneratedAsset> {
     const request = parseRequest(body, { userId });
     const textProvider = providerForRole('creative');
     const imageProvider = activeImageProvider();
@@ -1001,6 +1104,7 @@ export const creativeGenerationService = {
     if (!textProvider.isConfigured() || !imageProvider.isConfigured()) {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
     }
+    assertStorageConfigured();
 
     const { brand, creativeDna } = await resolveIdentity(request);
     const { concept, research, referenceStyle } = await resolveConceptAndResearch(request, textProvider, brand, creativeDna);
@@ -1008,6 +1112,7 @@ export const creativeGenerationService = {
     return runGeneration({
       userId, request, textProvider, imageProvider, brand, creativeDna, concept,
       mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle,
+      requestId,
     });
   },
 
@@ -1017,7 +1122,7 @@ export const creativeGenerationService = {
    * Creative DNA are resolved once and reused for every variation, so they
    * stay visually consistent while composition and environment vary per label.
    */
-  async generateCampaign(userId: string, body: unknown): Promise<StoredGeneratedAsset[]> {
+  async generateCampaign(userId: string, body: unknown, requestId?: string): Promise<StoredGeneratedAsset[]> {
     const request = parseRequest(body, { userId });
     const labels = readCampaignLabels((body as Record<string, unknown> | null)?.variationLabels);
     if (labels.length < 2) {
@@ -1029,6 +1134,7 @@ export const creativeGenerationService = {
     if (!textProvider.isConfigured() || !imageProvider.isConfigured()) {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
     }
+    assertStorageConfigured();
 
     const { brand, creativeDna } = await resolveIdentity(request);
     const { concept, research, referenceStyle } = await resolveConceptAndResearch(request, textProvider, brand, creativeDna);
@@ -1048,6 +1154,7 @@ export const creativeGenerationService = {
       referenceStyle,
       variationLabel: labels[0],
       campaignId,
+      requestId,
     });
 
     const rest: StoredGeneratedAsset[] = [];
@@ -1068,6 +1175,7 @@ export const creativeGenerationService = {
           variationLabel: label,
           campaignId,
           parentAssetId: first.id,
+          requestId,
         }),
       );
     }
@@ -1076,7 +1184,7 @@ export const creativeGenerationService = {
   },
 
   /** Natural-language refinement of a previously generated asset. */
-  async refine(userId: string, body: unknown): Promise<StoredGeneratedAsset> {
+  async refine(userId: string, body: unknown, requestId?: string): Promise<StoredGeneratedAsset> {
     if (!body || typeof body !== 'object') {
       throw new CreativeError('Send a JSON body naming the asset and the change.');
     }
@@ -1096,6 +1204,7 @@ export const creativeGenerationService = {
     if (!textProvider.isConfigured() || !imageProvider.isConfigured()) {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
     }
+    assertStorageConfigured();
 
     const brand = resolveBrandProfile({});
     const creativeDna = resolveCreativeDna({});
@@ -1144,6 +1253,7 @@ export const creativeGenerationService = {
       hasAssets: true,
       logoAssetUrl: creativeDna.logoAssetUrl || undefined,
       creativeDna,
+      requestId,
     });
   },
 

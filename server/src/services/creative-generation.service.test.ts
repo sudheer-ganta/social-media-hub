@@ -44,6 +44,7 @@ const repo = vi.hoisted(() => ({
 vi.mock('../repositories/generated-asset.repository', () => repo);
 
 const cloudinary = vi.hoisted(() => ({
+  isConfigured: vi.fn(() => true),
   uploadImageBuffer: vi.fn(async () => ({ url: 'https://cdn.example.com/gen.png', publicId: 'flowpost/generated/gen' })),
 }));
 
@@ -356,6 +357,18 @@ describe('creativeGenerationService', () => {
 
     expect(repo.create.mock.calls[0][0].source).toBe('AI_GENERATED');
     expect(repo.markCompleted.mock.calls[0][1]).toMatchObject({ width: 1024, height: 1024, format: 'png' });
+  });
+
+  it('answers 503 before any model call when image storage is not configured — the deployed-server 502 was one real Gemini image burnt per click', async () => {
+    cloudinary.isConfigured.mockReturnValueOnce(false);
+
+    await expect(creativeGenerationService.generate('user-1', { prompt: 'Launch' })).rejects.toMatchObject({
+      status: 503,
+      message: 'Image storage is not configured on this server yet.',
+    });
+
+    expect(imageProvider.generateImage).not.toHaveBeenCalled();
+    expect(repo.create).not.toHaveBeenCalled();
   });
 
   it('reports "created but couldn\'t save" — not "generation failed" — when Gemini succeeds and only Cloudinary fails', async () => {
