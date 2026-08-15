@@ -1,0 +1,17 @@
+{
+  "extracted": true,
+  "event": "BTS comeback",
+  "culturalContext": "K-pop / BTS fandom",
+  "productCategory": "Korean food",
+  "offer": "50% off",
+  "promotionType": "event promotion",
+  "venueType": "restaurant",
+  "audience": "BTS fans",
+  "requiredClaims": [
+    "BTS is coming back",
+    "50% off",
+    "Korean food"
+  ],
+  "optionalDetails": [],
+  "confidence": {}
+}

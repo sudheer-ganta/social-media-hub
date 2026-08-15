@@ -21,22 +21,34 @@ import {
 import { cn } from "@/lib/utils";
 import { cloudinaryService } from "@/services";
 import { creativeService } from "@/services/creative.service";
+import { useBrandVoices } from "@/hooks/useBrandVoices";
+import { useCreativeDna } from "@/hooks/useCreativeDna";
 import { GOAL_META, FUNNEL_META } from "@/ai/prompts/modules";
 import type { FunnelStage, MarketingGoal } from "@/ai/types";
-import type { GeneratedAsset, ReferenceStyleProfile, ScoredCreativeConcept } from "@/types/creative";
+import type {
+  CreativeIntentBrief,
+  GeneratedAsset,
+  ReferenceStyleProfile,
+  ScoredCreativeConcept,
+} from "@/types/creative";
 import type { PostMediaItem } from "@/types";
 import { ReferenceImagesUploader, type ReferenceImage } from "./ReferenceImagesUploader";
 
 /**
  * "Create with FlowPost" — the AI creative-generation flow.
  *
- * Describe what you want → FlowPost's creative director proposes several
- * genuinely different advertising ideas → you pick one → it's art-directed
- * and rendered → Regenerate/Refine/Use in Post.
+ *   Describe it → concepts → pick one → visual → campaign → Refine / Use in Post
+ *
+ * Two things about that flow are deliberate.
  *
  * The concept step is the point: FlowPost is the creative director, not the
- * image model — an idea is chosen before anything is art-directed or
- * rendered, so the member picks WHAT gets made, not just how it looks.
+ * image model — an idea is chosen before anything is art-directed, so the
+ * member picks WHAT gets made, not just how it looks.
+ *
+ * The campaign step has no button. Picking a concept runs the visual and then
+ * the campaign designed over it, as one action, because "image or campaign?"
+ * is not a question a member has any basis to answer — they asked for a
+ * creative. The two labels below are the only place the seam shows.
  */
 
 const GOALS = Object.keys(GOAL_META) as MarketingGoal[];
@@ -84,13 +96,29 @@ export function CreateWithFlowPostDialog({
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const [referenceStyle, setReferenceStyle] = useState<ReferenceStyleProfile | null>(null);
   const [concepts, setConcepts] = useState<ScoredCreativeConcept[]>([]);
+  const [intent, setIntent] = useState<CreativeIntentBrief | null>(null);
   const [asset, setAsset] = useState<GeneratedAsset | null>(null);
   const [refineInstruction, setRefineInstruction] = useState("");
   const [refining, setRefining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [generatingLabel, setGeneratingLabel] = useState("Generating visual…");
+  const [generatingLabel, setGeneratingLabel] = useState("Finding the creative direction…");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const generatingLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const generatingLabelTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  // The member's saved identity. Neither of these used to be sent at all,
+  // which is why brand mode produced creatives with no logo and none of the
+  // brand's own voice — the backend was resolving both from nothing.
+  const { defaultProfile: brandVoiceProfile } = useBrandVoices();
+  const { defaultProfile: creativeDnaProfile } = useCreativeDna();
+
+  // A logo uploaded in this dialog overrides the saved one for this creative.
+  const [logoOverride, setLogoOverride] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoAssetUrl = logoOverride ?? creativeDnaProfile?.dna.logoAssetUrl ?? "";
+  // Brand mode renders nothing without a real logo — FlowPost will not invent
+  // one, and a branded creative carrying a made-up mark is worse than none.
+  const logoMissing = contextType === "brand" && !logoAssetUrl;
 
   function reset() {
     setStep("input");
@@ -99,12 +127,18 @@ export function CreateWithFlowPostDialog({
     setReferenceImages([]);
     setReferenceStyle(null);
     setConcepts([]);
+    setIntent(null);
     setAsset(null);
     setRefineInstruction("");
+    setLogoOverride(null);
     setError(null);
   }
 
   function buildRequest(selectedConcept?: ScoredCreativeConcept) {
+    const dna = {
+      ...(creativeDnaProfile?.dna ?? {}),
+      ...(logoAssetUrl && { logoAssetUrl }),
+    };
     return {
       prompt,
       contextType,
@@ -113,11 +147,17 @@ export function CreateWithFlowPostDialog({
       funnelStage,
       platforms: [],
       assetUrls: assets.map((a) => a.url),
+      ...(brandVoiceProfile && { brandVoice: brandVoiceProfile.voice as unknown as Record<string, unknown> }),
+      ...(Object.keys(dna).length > 0 && { creativeDna: dna }),
       ...(referenceImages.length > 0 && {
         referenceImageUrls: referenceImages.map((r) => r.url),
         referenceLabels: referenceImages.map((r) => r.label ?? ""),
       }),
+      // Reusing the profile `/concepts` already analysed keeps the same design
+      // language on the finished creative and skips a second vision call.
+      ...(referenceStyle?.analysed && { referenceStyleProfile: referenceStyle }),
       ...(selectedConcept && { selectedConcept }),
+      ...(intent && { intent }),
     };
   }
 
@@ -135,6 +175,20 @@ export function CreateWithFlowPostDialog({
     }
   }
 
+  async function handleAttachLogo(file: File) {
+    setUploadingLogo(true);
+    try {
+      const uploaded = await cloudinaryService.uploadMedia(file);
+      setLogoOverride(uploaded.url);
+    } catch (err) {
+      toast.error("Could not upload that logo", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
   async function handleDiscoverConcepts() {
     if (prompt.trim().length < 3) {
       setError("Tell us what you want to create — a sentence is enough.");
@@ -146,6 +200,7 @@ export function CreateWithFlowPostDialog({
       const result = await creativeService.discoverConcepts(buildRequest());
       setConcepts(result.concepts);
       setReferenceStyle(result.referenceStyle ?? null);
+      setIntent(result.intent ?? null);
       setStep("concepts");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -153,15 +208,29 @@ export function CreateWithFlowPostDialog({
     }
   }
 
+  /**
+   * One action, two stages. Picking a concept generates the visual and then
+   * the campaign designed over it — there is no second button, and no point
+   * at which the member is asked to choose between them.
+   */
   async function handleCreateConcept(concept: ScoredCreativeConcept) {
+    if (logoMissing) {
+      setError("Add your brand logo to create a branded creative.");
+      setStep("input");
+      return;
+    }
     setStep("generating");
     setError(null);
     // No backend progress stream for a single request/response call — this
-    // timed swap is cosmetic, just naming the two real stages (Gemini's
-    // visual, then FlowPost's deterministic renderer) so the wait doesn't
-    // read as one opaque black box.
-    setGeneratingLabel("Generating visual…");
-    generatingLabelTimer.current = setTimeout(() => setGeneratingLabel("Designing your creative…"), 6000);
+    // timed walk through the pipeline's real stages is cosmetic, but it keeps
+    // a ~40–60s wait from reading as one opaque "please wait". Offsets track
+    // the backend's stage budget (direction → image → campaign → QC/upload).
+    setGeneratingLabel("Finding the creative direction…");
+    generatingLabelTimers.current = [
+      setTimeout(() => setGeneratingLabel("Creating your visual…"), 10000),
+      setTimeout(() => setGeneratingLabel("Designing your campaign…"), 25000),
+      setTimeout(() => setGeneratingLabel("Final check…"), 42000),
+    ];
     try {
       const result = await creativeService.generateCreative(buildRequest(concept));
       setAsset(result);
@@ -170,10 +239,16 @@ export function CreateWithFlowPostDialog({
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setStep("concepts");
     } finally {
-      if (generatingLabelTimer.current) clearTimeout(generatingLabelTimer.current);
+      generatingLabelTimers.current.forEach(clearTimeout);
+      generatingLabelTimers.current = [];
     }
   }
 
+  /**
+   * A refinement that fails must never cost the member the creative they
+   * already have: `asset` is only replaced on success, so the previous
+   * creative stays on screen exactly as it was.
+   */
   async function handleRefine() {
     if (!asset || !refineInstruction.trim()) return;
     setRefining(true);
@@ -182,7 +257,7 @@ export function CreateWithFlowPostDialog({
       setAsset(result);
       setRefineInstruction("");
     } catch (err) {
-      toast.error("Could not apply that change", {
+      toast.error("Refinement failed. Your previous creative is unchanged.", {
         description: err instanceof Error ? err.message : undefined,
       });
     } finally {
@@ -270,8 +345,60 @@ export function CreateWithFlowPostDialog({
                 </div>
               </div>
 
+              {contextType === "brand" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">
+                    Brand logo <span className="text-destructive">*</span>
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Required for branded creatives. FlowPost places your real logo file — it never draws one.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {logoAssetUrl ? (
+                      <img
+                        src={logoAssetUrl}
+                        alt="Brand logo"
+                        className="h-10 w-10 rounded border bg-secondary object-contain p-1"
+                      />
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={uploadingLogo || busy}
+                      onClick={() => logoInputRef.current?.click()}
+                    >
+                      {uploadingLogo ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : logoAssetUrl ? (
+                        "Replace logo"
+                      ) : (
+                        "+ Upload logo"
+                      )}
+                    </Button>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleAttachLogo(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </div>
+                  {logoMissing && (
+                    <p className="text-[11px] text-destructive">
+                      Add your brand logo to create a branded creative.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Product / reference / logo (optional)</Label>
+                <Label className="text-xs text-muted-foreground">Product / reference (optional)</Label>
                 <div className="flex flex-wrap gap-2">
                   {assets.map((a) => (
                     <span
@@ -364,7 +491,7 @@ export function CreateWithFlowPostDialog({
                       size="sm"
                       variant="outline"
                       className="mt-1 self-start"
-                      disabled={busy}
+                      disabled={busy || logoMissing}
                       onClick={() => handleCreateConcept(concept)}
                     >
                       {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
@@ -424,10 +551,15 @@ export function CreateWithFlowPostDialog({
               Find creative directions
             </Button>
           )}
+          {step === "concepts" && logoMissing && (
+            <p className="mr-auto text-xs text-destructive">
+              Add your brand logo to create a branded creative.
+            </p>
+          )}
           {step === "discovering" && (
             <Button disabled>
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              Thinking of ideas…
+              Understanding your idea…
             </Button>
           )}
           {step === "concepts" && (

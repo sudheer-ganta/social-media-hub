@@ -1,0 +1,154 @@
+{
+  "structure": "inset/grid/solid-band-footer/logo:corner/type:serif-editorial",
+  "designRecipe": "derived-fallback",
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.58
+    },
+    "blocks": [
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.856,
+          "width": 1,
+          "height": 0.144
+        },
+        "style": "solid-band",
+        "fill": "#f7f4ee"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.885,
+          "width": 0.87,
+          "height": 0.025
+        },
+        "spec": {
+          "lines": [
+            "The best luxury comfort for your culinary trip."
+          ],
+          "x": 83.2,
+          "y": 1443.232,
+          "fontSize": 32,
+          "lineHeight": 40,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1a1a1a",
+          "italic": true
+        }
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.663,
+          "y": 0.931,
+          "width": 0.272,
+          "height": 0.04
+        },
+        "spec": {
+          "text": "Book Your Journey",
+          "x": 848.9728,
+          "y": 1489.7279999999998,
+          "width": 347.8272,
+          "height": 64.512,
+          "fontSize": 26.880000000000003,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "rect",
+          "fill": "#1a1a1a",
+          "textFill": "#ffffff"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.94,
+          "width": 0.569,
+          "height": 0.022
+        },
+        "spec": {
+          "lines": [
+            "50% OFF ALL KOREAN FOOD"
+          ],
+          "x": 83.2,
+          "y": 1530.944,
+          "fontSize": 25.6,
+          "lineHeight": 33.28,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#1a1a1a",
+          "opacity": 0.75,
+          "letterSpacing": 1
+        }
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.616,
+          "width": 0.86,
+          "height": 0.1
+        },
+        "spec": {
+          "lines": [
+            "Your Passport to the BTS",
+            "Comeback."
+          ],
+          "x": 83.2,
+          "y": 1051.0912,
+          "fontSize": 74.24000000000001,
+          "lineHeight": 80.17920000000001,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1a1a1a",
+          "fontWeight": 700,
+          "align": "left"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.74,
+          "width": 0.86,
+          "height": 0.028
+        },
+        "spec": {
+          "lines": [
+            "Stamp your journey with cheap yet luxury authentic dining."
+          ],
+          "x": 83.2,
+          "y": 1211.8464,
+          "fontSize": 33.28,
+          "lineHeight": 44.928000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#1a1a1a",
+          "align": "left",
+          "opacity": 0.85
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.855,
+          "y": 0.036,
+          "width": 0.08,
+          "height": 0.064
+        },
+        "opacity": 1
+      }
+    ],
+    "structure": "inset/grid/solid-band-footer/logo:corner/type:serif-editorial"
+  }
+}

@@ -155,6 +155,7 @@ vi.mock('../ai/generators/creative-concepts.generator', () => ({
     proposedCount: 1,
     meta: { provider: 'gemini', model: 'gemini-3.1-pro-preview', durationMs: 5 },
   })),
+  classifyMechanismFamily: vi.fn(() => 'VISUAL_METAPHOR'),
 }));
 
 const EMPTY_RESEARCH = {
@@ -343,6 +344,8 @@ describe('creativeGenerationService', () => {
 
     expect(asset.status).toBe('COMPLETED');
     expect(asset.imageUrl).toBe('https://cdn.example.com/gen.png');
+    // ONE row per generation (§14): the campaign design completes the same
+    // asset the pipeline opened — no transient Stage A row left behind.
     expect(repo.create).toHaveBeenCalledTimes(1);
     expect(repo.markCompleted).toHaveBeenCalledTimes(1);
     expect(repo.markFailed).not.toHaveBeenCalled();
@@ -350,6 +353,199 @@ describe('creativeGenerationService', () => {
     // No reference images sent — this is a text-to-image request.
     const call = imageProvider.generateImage.mock.calls[0][0];
     expect(call.referenceImages).toHaveLength(0);
+  });
+
+  it('the campaign pass runs automatically and is designed over the SAME visual, never a fresh image', async () => {
+    await creativeGenerationService.generate('user-1', { prompt: 'Summer collection launch' });
+
+    expect(imageProvider.generateImage).toHaveBeenCalledTimes(2);
+    const campaignCall = imageProvider.generateImage.mock.calls[1][0];
+    // The Stage A visual leads the reference list — it is the foundation.
+    expect(campaignCall.referenceImages[0]).toEqual({ mimeType: 'image/png', data: 'aW1hZ2U=' });
+    expect(campaignCall.prompt).toContain('VISUAL FOUNDATION');
+    expect(campaignCall.prompt).toContain('designing ON TOP OF this exact image');
+  });
+
+  it('keeps the standalone creative when the campaign pass fails — a successful generation is never lost', async () => {
+    imageProvider.generateImage
+      .mockResolvedValueOnce([{ mimeType: 'image/png', data: 'aW1hZ2U=' }])
+      .mockRejectedValueOnce(new Error('campaign model unavailable'));
+
+    const asset = await creativeGenerationService.generate('user-1', { prompt: 'Summer collection launch' });
+
+    expect(asset.status).toBe('COMPLETED');
+    expect(asset.imageUrl).toBe('https://cdn.example.com/gen.png');
+    // Only the Stage A row was created, and nothing was marked failed.
+    expect(repo.create).toHaveBeenCalledTimes(1);
+    expect(repo.markFailed).not.toHaveBeenCalled();
+  });
+
+  // Distinct bytes per artifact so uploads can be told apart:
+  // 'dmlzdWFs' = "visual", 'cmVuZGVy' = "render", 'Y2FtcGFpZ24=' = "campaign".
+  const RENDER_PLAN = {
+    canvas: { width: 1280, height: 1600 },
+    paper: '#f7f4ee',
+    imageRect: { x: 0, y: 0, width: 1, height: 1 },
+    blocks: [],
+    structure: '',
+  };
+
+  it('never uploads the intermediate Stage A render when the campaign succeeds — storage runs once, after the creative work', async () => {
+    imageProvider.generateImage
+      .mockResolvedValueOnce([{ mimeType: 'image/png', data: 'dmlzdWFs' }])
+      .mockResolvedValueOnce([{ mimeType: 'image/png', data: 'Y2FtcGFpZ24=' }]);
+    renderer.renderCreative.mockResolvedValueOnce({
+      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', plan: RENDER_PLAN,
+    });
+
+    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+
+    const uploadedPayloads = cloudinary.uploadImageBuffer.mock.calls.map((call) =>
+      (call[0] as Buffer).toString('base64'),
+    );
+    // Exactly two uploads: the wordless visual foundation (a refinement's
+    // starting point, concurrent with the campaign design) and the finished
+    // campaign. The intermediate Stage A render never touches Cloudinary.
+    expect(uploadedPayloads).toHaveLength(2);
+    expect(uploadedPayloads).toContain('dmlzdWFs');
+    expect(uploadedPayloads).toContain('Y2FtcGFpZ24=');
+    expect(uploadedPayloads).not.toContain('cmVuZGVy');
+  });
+
+  it('falls back to uploading the Stage A creative when the campaign fails — the successful image is never lost', async () => {
+    imageProvider.generateImage
+      .mockResolvedValueOnce([{ mimeType: 'image/png', data: 'dmlzdWFs' }])
+      .mockRejectedValueOnce(new Error('campaign model unavailable'));
+    renderer.renderCreative.mockResolvedValueOnce({
+      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', plan: RENDER_PLAN,
+    });
+
+    const asset = await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+
+    expect(asset.status).toBe('COMPLETED');
+    const uploadedPayloads = cloudinary.uploadImageBuffer.mock.calls.map((call) =>
+      (call[0] as Buffer).toString('base64'),
+    );
+    expect(uploadedPayloads).toContain('cmVuZGVy');
+    expect(repo.markFailed).not.toHaveBeenCalled();
+  });
+
+  it('generates exactly one creative direction per request', async () => {
+    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+
+    const direction = await import('../ai/generators/creative-direction.generator');
+    expect(direction.generateCreativeDirection).toHaveBeenCalledTimes(1);
+  });
+
+  it('campaign QC regenerates at most once, and only for critical defects', async () => {
+    // QC reports the same critical defect on both attempts — the pipeline
+    // still stops at ONE targeted regeneration.
+    textProvider.generateJson.mockResolvedValue({
+      problems: [{ severity: 'critical', fix: 'The word "comeback" is misspelled' }],
+    });
+
+    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+
+    // visual + campaign + exactly one regeneration.
+    expect(imageProvider.generateImage).toHaveBeenCalledTimes(3);
+  });
+
+  it('minor QC defects ship without a regeneration', async () => {
+    textProvider.generateJson.mockResolvedValue({
+      problems: [{ severity: 'minor', fix: 'Tiny prop text on the jar label' }],
+    });
+
+    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+
+    // visual + campaign only — a cosmetic nit never costs an image call.
+    expect(imageProvider.generateImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('a campaign stage that exceeds its latency budget ships the Stage A creative instead of failing', async () => {
+    vi.useFakeTimers();
+    try {
+      imageProvider.generateImage
+        .mockResolvedValueOnce([{ mimeType: 'image/png', data: 'aW1hZ2U=' }])
+        .mockImplementationOnce(() => new Promise(() => {})); // campaign hangs forever
+
+      const pending = creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+      await vi.advanceTimersByTimeAsync(61_000);
+      const asset = await pending;
+
+      expect(asset.status).toBe('COMPLETED');
+      expect(repo.markFailed).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('persists the wordless visual foundation URL for future refinements', async () => {
+    cloudinary.uploadImageBuffer
+      .mockResolvedValueOnce({ url: 'https://cdn.example.com/visual.png', publicId: 'v' })
+      .mockResolvedValueOnce({ url: 'https://cdn.example.com/final.png', publicId: 'f', width: 1, height: 1, format: 'png' });
+
+    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+
+    const completed = repo.markCompleted.mock.calls[0][1];
+    expect(completed.renderContext.visualImageUrl).toBe('https://cdn.example.com/visual.png');
+    expect(completed.imageUrl).toBe('https://cdn.example.com/final.png');
+  });
+
+  it('logs per-stage timing and call counts for every generation', async () => {
+    const info = vi.spyOn(console, 'info');
+    try {
+      await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+
+      const timing = info.mock.calls.find(([message]) => message === '[creative] request timing');
+      expect(timing).toBeDefined();
+      expect(timing![1]).toMatchObject({ imageCalls: 2, cloudinaryUploads: 2 });
+      expect(timing![1]).toHaveProperty('totalDurationMs');
+      expect(timing![1]).toHaveProperty('directionDurationMs');
+      expect(timing![1]).toHaveProperty('textCalls');
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it('brand mode refuses to render without a real logo, before any model is called', async () => {
+    await expect(
+      creativeGenerationService.generate('user-1', {
+        prompt: 'Diwali campaign',
+        contextType: 'brand',
+        brandId: 'brand-1',
+      }),
+    ).rejects.toMatchObject({
+      status: 422,
+      message: 'Add your brand logo to create a branded creative.',
+    });
+
+    expect(imageProvider.generateImage).not.toHaveBeenCalled();
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+
+  it('brand mode with a real logo proceeds, and the logo is never sent to the campaign model to draw', async () => {
+    const asset = await creativeGenerationService.generate('user-1', {
+      prompt: 'Diwali campaign',
+      contextType: 'brand',
+      brandId: 'brand-1',
+      creativeDna: { logoAssetUrl: 'https://cdn.example.com/logo.png' },
+    });
+
+    expect(asset.status).toBe('COMPLETED');
+    const campaignCall = imageProvider.generateImage.mock.calls[1][0];
+    expect(campaignCall.prompt).toContain('Do NOT draw, letter, invent, approximate, or place any logo');
+    // The logo file itself never rides along as something to reproduce.
+    expect(campaignCall.referenceImages).not.toContainEqual({ mimeType: 'image/jpeg', data: 'ZmFrZQ==' });
+  });
+
+  it('concept discovery is still allowed in brand mode without a logo — only rendering is gated', async () => {
+    const outcome = await creativeGenerationService.discoverConcepts('user-1', {
+      prompt: 'Diwali campaign',
+      contextType: 'brand',
+      brandId: 'brand-1',
+    });
+
+    expect(outcome.concepts).toHaveLength(1);
   });
 
   it('generate() records provenance as AI_GENERATED and persists Cloudinary\'s own dimensions', async () => {
@@ -372,13 +568,12 @@ describe('creativeGenerationService', () => {
   });
 
   it('reports "created but couldn\'t save" — not "generation failed" — when Gemini succeeds and only Cloudinary fails', async () => {
-    cloudinary.uploadImageBuffer.mockRejectedValueOnce(new CloudinaryUploadErrorMock('Cloudinary rejected the upload'));
+    cloudinary.uploadImageBuffer.mockRejectedValue(new CloudinaryUploadErrorMock('Cloudinary rejected the upload'));
 
     await expect(creativeGenerationService.generate('user-1', { prompt: 'Launch' })).rejects.toMatchObject({
       message: "Image created, but FlowPost couldn't save it. Try again.",
     });
 
-    expect(imageProvider.generateImage).toHaveBeenCalledTimes(1);
     expect(repo.markFailed).toHaveBeenCalledTimes(1);
   });
 
@@ -390,7 +585,8 @@ describe('creativeGenerationService', () => {
     const asset = await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
 
     expect(asset.status).toBe('COMPLETED');
-    expect(imageProvider.generateImage).toHaveBeenCalledTimes(2);
+    // Visual, its retry, then the campaign pass over the clean visual.
+    expect(imageProvider.generateImage).toHaveBeenCalledTimes(3);
     expect(imageProvider.generateImage.mock.calls[1][0].prompt).toContain('checkerboard');
   });
 
@@ -550,5 +746,120 @@ describe('creativeGenerationService', () => {
     // refine add a new row and the previous generation stays in history.
     expect(repo.markCompleted).not.toHaveBeenCalledWith('parent-1', expect.anything());
     expect(repo.markFailed).not.toHaveBeenCalledWith('parent-1');
+  });
+
+  // ── The refine bug ────────────────────────────────────────────────────────
+  //
+  // refine() used to resolve an EMPTY brand and an EMPTY Creative DNA, so
+  // every refinement lost the real logo, the brand palette and the analysed
+  // design recipe and then re-derived a different one. "Make it darker" came
+  // back as a different creative because nothing held it steady.
+
+  const PARENT_WITH_CONTEXT = {
+    id: 'parent-1',
+    prompt: 'BTS comeback — 50% off Korean food',
+    creativeBrief: { concept: 'Quiet Luxury', mode: 'EDITORIAL', artDirectionFamily: 'EDITORIAL_PHOTOGRAPHY' },
+    sourceAssetUrls: ['https://cdn.example.com/dish.jpg'],
+    imageUrl: 'https://cdn.example.com/prior-campaign.png',
+    contextType: 'brand',
+    brandId: 'brand-1',
+    campaignId: null,
+    renderContext: {
+      brand: { name: 'Seven Sisters', industry: 'Restaurant', wordsToAvoid: [] },
+      creativeDna: { logoAssetUrl: 'https://cdn.example.com/logo.png', brandColors: ['#8b1e1e'], logoTreatment: 'corner' },
+      referenceStyle: SAMPLE_REFERENCE_STYLE,
+      intent: { extracted: true, requiredClaims: ['BTS comeback', 'Korean food', '50% off'], offer: '50% off' },
+      goal: 'event_promotion',
+      funnelStage: 'BOFU',
+      platforms: ['instagram'],
+      visualImageUrl: 'https://cdn.example.com/prior-visual.png',
+    },
+  };
+
+  it('refine() inherits the parent brand, Creative DNA, logo, design language and requirements', async () => {
+    repo.findById.mockResolvedValueOnce(PARENT_WITH_CONTEXT);
+
+    await creativeGenerationService.refine('user-1', { assetId: 'parent-1', instruction: 'make it darker' });
+
+    const direction = await import('../ai/generators/creative-direction.generator');
+    const call = vi.mocked(direction.generateCreativeDirection).mock.calls[0][0];
+
+    expect(call.brand).toMatchObject({ name: 'Seven Sisters' });
+    expect(call.creativeDna).toMatchObject({ logoAssetUrl: 'https://cdn.example.com/logo.png' });
+    expect(call.referenceStyle).toEqual(SAMPLE_REFERENCE_STYLE);
+    expect(call.intent?.requiredClaims).toEqual(['BTS comeback', 'Korean food', '50% off']);
+    expect(call.goal).toBe('event_promotion');
+    expect(call.funnelStage).toBe('BOFU');
+    expect(call.refinementOf).toMatchObject({ instruction: 'make it darker' });
+
+    // The real logo is fetched again for this refinement, so the refined
+    // creative carries the same mark rather than losing it.
+    expect(fetchInlineImage).toHaveBeenCalledWith('https://cdn.example.com/logo.png');
+  });
+
+  it('refine() re-executes from the parent WORDLESS visual, not from the finished creative', async () => {
+    repo.findById.mockResolvedValueOnce(PARENT_WITH_CONTEXT);
+
+    await creativeGenerationService.refine('user-1', { assetId: 'parent-1', instruction: 'make it darker' });
+
+    // Handing an image model back its own typeset creative is what garbles
+    // text on a refinement.
+    expect(fetchInlineImage).toHaveBeenCalledWith('https://cdn.example.com/prior-visual.png');
+    expect(fetchInlineImage).not.toHaveBeenCalledWith('https://cdn.example.com/prior-campaign.png');
+  });
+
+  it('refine() falls back to the finished image for rows saved before the visual was kept', async () => {
+    repo.findById.mockResolvedValueOnce({
+      ...PARENT_WITH_CONTEXT,
+      renderContext: { ...PARENT_WITH_CONTEXT.renderContext, visualImageUrl: undefined },
+    });
+
+    await creativeGenerationService.refine('user-1', { assetId: 'parent-1', instruction: 'make it darker' });
+
+    expect(fetchInlineImage).toHaveBeenCalledWith('https://cdn.example.com/prior-campaign.png');
+  });
+
+  it('refine() still works on a row written before renderContext existed', async () => {
+    repo.findById.mockResolvedValueOnce({
+      id: 'legacy-1',
+      prompt: 'Original request',
+      creativeBrief: { concept: 'Quiet Luxury', mode: 'EDITORIAL' },
+      sourceAssetUrls: [],
+      imageUrl: 'https://cdn.example.com/prior.png',
+      contextType: 'personal',
+      brandId: null,
+      campaignId: null,
+      renderContext: null,
+    });
+
+    const asset = await creativeGenerationService.refine('user-1', {
+      assetId: 'legacy-1',
+      instruction: 'make it darker',
+    });
+
+    expect(asset.status).toBe('COMPLETED');
+  });
+
+  it('refine() persists the inherited context on the new row, so the NEXT refinement inherits it too', async () => {
+    repo.findById.mockResolvedValueOnce(PARENT_WITH_CONTEXT);
+
+    await creativeGenerationService.refine('user-1', { assetId: 'parent-1', instruction: 'make it darker' });
+
+    const createCall = repo.create.mock.calls[0][0] as any;
+    expect(createCall.renderContext.brand).toMatchObject({ name: 'Seven Sisters' });
+    expect(createCall.renderContext.intent.requiredClaims).toContain('50% off');
+  });
+
+  it('refine() surfaces a failure without touching the parent — the previous creative survives', async () => {
+    repo.findById.mockResolvedValueOnce(PARENT_WITH_CONTEXT);
+    imageProvider.generateImage.mockRejectedValueOnce(new Error('model unavailable'));
+
+    await expect(
+      creativeGenerationService.refine('user-1', { assetId: 'parent-1', instruction: 'make it darker' }),
+    ).rejects.toBeInstanceOf(CreativeError);
+
+    // Only the new child row is marked failed; the parent is never written to.
+    expect(repo.markFailed).not.toHaveBeenCalledWith('parent-1');
+    expect(repo.markCompleted).not.toHaveBeenCalledWith('parent-1', expect.anything());
   });
 });

@@ -115,13 +115,29 @@ export function deriveFallbackRecipe(
   const typographic = family === 'TYPOGRAPHY_LED';
   const studio = family === 'PRODUCT_STUDIO' || family === 'INFORMATIONAL';
 
+  // With no typographic prose to go on, the CONCEPT's own medium decides —
+  // never one universal house serif. A playful graphic idea gets geometric
+  // energy, a studio/informational shot gets a clean sans, editorial and
+  // cinematic families earn the serif.
+  const familyTypography: RecipeTypographyFamily =
+    family === 'TYPOGRAPHY_LED'
+      ? 'condensed-display'
+      : family === 'PLAYFUL_GRAPHIC' || family === 'INTERACTIVE_GRAPHIC'
+        ? 'geometric-sans'
+        : family === 'PRODUCT_STUDIO' || family === 'INFORMATIONAL' || family === 'MINIMAL_ART'
+          ? 'sans-modern'
+          : family === 'COLLAGE' || family === 'HANDCRAFTED'
+            ? 'mixed'
+            : 'serif-editorial';
   const typographyFamily: RecipeTypographyFamily = /condensed|display|impact/.test(prose)
     ? 'condensed-display'
     : /geometric|grotesk|modern sans|minimal/.test(prose)
       ? 'geometric-sans'
       : /sans/.test(prose)
         ? 'sans-modern'
-        : 'serif-editorial';
+        : /serif|editorial|classic/.test(prose)
+          ? 'serif-editorial'
+          : familyTypography;
 
   return {
     photographyStyle: creativeDna.photographyStyle,

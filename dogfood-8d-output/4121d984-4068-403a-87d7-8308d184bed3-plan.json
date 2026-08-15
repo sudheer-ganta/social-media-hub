@@ -1,0 +1,175 @@
+{
+  "structure": "full-bleed/asymmetric/no-footer/logo:corner/type:serif-editorial",
+  "designRecipe": "derived-fallback",
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.483,
+          "width": 1,
+          "height": 0.517
+        },
+        "direction": "up",
+        "maxOpacity": 0.58,
+        "color": "#000000"
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.545,
+          "width": 0.7,
+          "height": 0.166
+        },
+        "spec": {
+          "lines": [
+            "First Class to",
+            "Seoul: BTS is Coming",
+            "Back."
+          ],
+          "x": 83.2,
+          "y": 944.7679999999999,
+          "fontSize": 81.92,
+          "lineHeight": 88.4736,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "fontWeight": 700,
+          "align": "left",
+          "shadow": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.735,
+          "width": 0.7,
+          "height": 0.056
+        },
+        "spec": {
+          "lines": [
+            "Celebrate the return with the best culinary flight",
+            "in town."
+          ],
+          "x": 83.2,
+          "y": 1203.8272,
+          "fontSize": 33.28,
+          "lineHeight": 44.928000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "left",
+          "shadow": true,
+          "opacity": 0.95
+        }
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.814,
+          "width": 0.7,
+          "height": 0.026
+        },
+        "spec": {
+          "lines": [
+            "The cheapest luxury trip you'll ever take."
+          ],
+          "x": 83.2,
+          "y": 1330.0352,
+          "fontSize": 32,
+          "lineHeight": 41.6,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "italic": true,
+          "align": "left",
+          "opacity": 0.9,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.065,
+          "y": 0.864,
+          "width": 0.376,
+          "height": 0.04
+        },
+        "spec": {
+          "text": "Reserve your comfort seat",
+          "x": 83.2,
+          "y": 1381.8752,
+          "width": 481.15200000000004,
+          "height": 64.512,
+          "fontSize": 26.880000000000003,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "underline",
+          "fill": "#1a1a1a",
+          "textFill": "#ffffff"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.927,
+          "width": 0.7,
+          "height": 0.021
+        },
+        "spec": {
+          "lines": [
+            "50% OFF ALL KOREAN FOOD · Book your table now for the best experience"
+          ],
+          "x": 83.2,
+          "y": 1507.3791999999999,
+          "fontSize": 23.552000000000003,
+          "lineHeight": 30.617600000000007,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "left",
+          "opacity": 0.75,
+          "letterSpacing": 1,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.036,
+          "width": 0.08,
+          "height": 0.064
+        },
+        "opacity": 1
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.065,
+          "y": 0.508,
+          "width": 0.28,
+          "height": 0.002
+        },
+        "stroke": "#ffffff",
+        "opacity": 0.7
+      }
+    ],
+    "structure": "full-bleed/asymmetric/no-footer/logo:corner/type:serif-editorial"
+  }
+}

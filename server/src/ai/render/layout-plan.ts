@@ -114,13 +114,22 @@ function saturation(hex: string): number {
 }
 
 /**
- * Brand colours always win — they're the member's explicit identity, and the
- * first one stays the accent. With no brand colours, the recipe's reference
- * palette tints the piece instead — paper from its lightest, ink from its
- * darkest, accent from its most SATURATED entry (the first entry is usually
- * the background cream, which as an accent would paint invisible CTAs).
+ * Colour comes from the client, never from a FlowPost default. Priority
+ * mirrors the DNA layers: brand colours always win — they're the member's
+ * explicit identity, and the first one stays the accent. Next the recipe's
+ * reference palette (the member's own uploaded taste), then the direction's
+ * campaign palette — derived per-campaign from brand + occasion + product +
+ * concept. Paper comes from a source's lightest, ink from its darkest,
+ * accent from its most SATURATED entry (the first entry is usually the
+ * background cream, which as an accent would paint invisible CTAs). The
+ * grey/cream NEUTRAL is a legibility floor of last resort, only reachable
+ * when every layer above supplied nothing.
  */
-export function resolvePalette(brandColors: string[], recipePalette: string[]): BrandPalette {
+export function resolvePalette(
+  brandColors: string[],
+  recipePalette: string[],
+  directionPalette: string[] = [],
+): BrandPalette {
   const pick = (colors: string[], accentBySaturation: boolean): BrandPalette | null => {
     const valid = colors.filter((c) => /^#[0-9a-f]{6}$/i.test(c.trim()));
     if (valid.length === 0) return null;
@@ -130,7 +139,7 @@ export function resolvePalette(brandColors: string[], recipePalette: string[]): 
     const accent = accentBySaturation ? [...valid].sort((a, b) => saturation(b) - saturation(a))[0] : valid[0];
     return { ink, paper, accent };
   };
-  return pick(brandColors, false) ?? pick(recipePalette, true) ?? NEUTRAL;
+  return pick(brandColors, false) ?? pick(recipePalette, true) ?? pick(directionPalette, true) ?? NEUTRAL;
 }
 
 /** An accent that would vanish against this fill falls back to ink — a CTA must never be invisible. */

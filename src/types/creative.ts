@@ -20,6 +20,10 @@ export type CopyTreatment = "none" | "headline" | "headline_support" | "interact
 /** Whatever a headline + visual still leaves out of a FINISHED social creative — brand positioning, location/practical detail, logo handling. Optional and additive; absent when the idea doesn't need it. */
 export interface MarketingCreative {
   brandMessage?: string;
+  /** The offer as a short display fragment ("50% OFF ALL KOREAN FOOD") — the campaign's star graphic device. */
+  offerText?: string;
+  /** A 2–4 word event label rendered as a badge/ribbon device. */
+  eventBadge?: string;
   secondaryInfo?: string[];
   logoTreatment?: string;
   requiredElements?: string[];
@@ -96,12 +100,48 @@ export interface CreativeConceptScores {
   messageClarity: number;
   socialInteractionPotential: number;
   templateRisk: number;
+  /** How far the mechanism sits from the brief's obvious first idea. Higher is better. */
+  mechanismNovelty?: number;
+  /** Self-reported closeness to the other concepts in the same set. Lower is better. */
+  similarityToOtherConcepts?: number;
+}
+
+/** How completely a concept carries the member's stated requirements. Absent when the request stated none. */
+export interface IntentFidelity {
+  score: number;
+  requiredElementsPresent: string[];
+  missingRequirements: string[];
 }
 
 export interface ScoredCreativeConcept extends CreativeConcept {
   mode: CreativeMode;
   artDirectionFamily: ArtDirectionFamily;
+  /** The mechanism family this idea belongs to — the axis concept-set diversity is judged on. */
+  mechanismFamily?: string;
   scores: CreativeConceptScores;
+  intentFidelity?: IntentFidelity;
+}
+
+/**
+ * What the member actually asked for, extracted from their own words.
+ *
+ * The browser never shows this and never edits it — it holds the brief from
+ * `/concepts` and hands it straight back on `/generate`, so the creative that
+ * gets rendered is validated against exactly the requirements the concepts
+ * were gated on. Mirrors server/src/ai/types.ts CreativeIntentBrief.
+ */
+export interface CreativeIntentBrief {
+  extracted: boolean;
+  event: string;
+  culturalContext: string;
+  productCategory: string;
+  offer: string;
+  promotionType: string;
+  venueType: string;
+  audience: string;
+  requiredClaims: string[];
+  optionalDetails: string[];
+  confidence: Record<string, number>;
 }
 
 /** How much weight the extracted style should carry — a single reference always caps at 'medium'. */
@@ -211,6 +251,8 @@ export interface DiscoveredConcepts {
   meta: { provider: string; model: string; durationMs: number };
   /** Present whenever references were analysed (fresh upload or a reused saved profile). */
   referenceStyle?: ReferenceStyleProfile;
+  /** Handed straight back on generate — never shown, never edited. */
+  intent?: CreativeIntentBrief;
 }
 
 export interface UnderstoodCreative {

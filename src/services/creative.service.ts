@@ -2,6 +2,7 @@ import { getSupabase } from "@/lib/supabase";
 import { API_BASE_URL } from "@/constants/api";
 import type { CreativeDna, FunnelStage, MarketingGoal } from "@/ai/types";
 import type {
+  CreativeIntentBrief,
   DiscoveredConcepts,
   GeneratedAsset,
   ReferenceStyleProfile,
@@ -17,8 +18,13 @@ import type {
 
 const CREATIVE_ENDPOINT = "/api/ai/creative";
 
-/** Image generation is slower than a caption call — give it real room. */
-const REQUEST_TIMEOUT_MS = 90_000;
+/**
+ * Generation is two image models back to back — the visual, then the campaign
+ * designed over it — so it needs materially more room than a caption call.
+ * A timeout here aborts a request the server is still paying for, which is
+ * the one failure mode worse than waiting.
+ */
+const REQUEST_TIMEOUT_MS = 180_000;
 
 async function getAccessToken(): Promise<string> {
   const {
@@ -83,6 +89,8 @@ export interface CreativeRequestInput {
   referenceStyleProfile?: ReferenceStyleProfile;
   /** The concept picked from `discoverConcepts`. Omitted, the backend discovers concepts itself and picks the strongest. */
   selectedConcept?: ScoredCreativeConcept;
+  /** The brief `discoverConcepts` returned, handed back so generation validates against the same requirements the concepts were gated on. */
+  intent?: CreativeIntentBrief;
 }
 
 /**

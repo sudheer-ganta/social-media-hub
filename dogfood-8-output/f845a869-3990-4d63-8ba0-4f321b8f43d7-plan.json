@@ -1,0 +1,159 @@
+{
+  "structure": "full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial",
+  "designRecipe": "derived-fallback",
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.565,
+          "width": 1,
+          "height": 0.435
+        },
+        "direction": "up",
+        "maxOpacity": 0.45,
+        "color": "#ffffff"
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.627,
+          "width": 0.7,
+          "height": 0.111
+        },
+        "spec": {
+          "lines": [
+            "The weekend is",
+            "slipping away."
+          ],
+          "x": 83.2,
+          "y": 1075.3023999999998,
+          "fontSize": 81.92,
+          "lineHeight": 88.4736,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1a1a1a",
+          "fontWeight": 700,
+          "align": "left"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.761,
+          "width": 0.7,
+          "height": 0.028
+        },
+        "spec": {
+          "lines": [
+            "Taste our Indian food weekend before it's gone."
+          ],
+          "x": 83.2,
+          "y": 1245.888,
+          "fontSize": 33.28,
+          "lineHeight": 44.928000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#1a1a1a",
+          "align": "left",
+          "opacity": 0.95
+        }
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.812,
+          "width": 0.7,
+          "height": 0.026
+        },
+        "spec": {
+          "lines": [
+            "Freshly cooked to order."
+          ],
+          "x": 83.2,
+          "y": 1327.168,
+          "fontSize": 32,
+          "lineHeight": 41.6,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1a1a1a",
+          "italic": true,
+          "align": "left",
+          "opacity": 0.9
+        }
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.065,
+          "y": 0.862,
+          "width": 0.246,
+          "height": 0.04
+        },
+        "spec": {
+          "text": "Book your table",
+          "x": 83.2,
+          "y": 1379.0079999999998,
+          "width": 314.49600000000004,
+          "height": 64.512,
+          "fontSize": 26.880000000000003,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "underline",
+          "fill": "#1a1a1a",
+          "textFill": "#1a1a1a"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.926,
+          "width": 0.7,
+          "height": 0.022
+        },
+        "spec": {
+          "lines": [
+            "Indian food weekend"
+          ],
+          "x": 83.2,
+          "y": 1506.5599999999997,
+          "fontSize": 25.6,
+          "lineHeight": 33.28,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#1a1a1a",
+          "align": "left",
+          "opacity": 0.75,
+          "letterSpacing": 1
+        }
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.065,
+          "y": 0.59,
+          "width": 0.28,
+          "height": 0.002
+        },
+        "stroke": "#1a1a1a",
+        "opacity": 0.7
+      }
+    ],
+    "structure": "full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial"
+  }
+}

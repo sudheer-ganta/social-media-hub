@@ -1,0 +1,151 @@
+{
+  "structure": "full-bleed/centered/no-footer/logo:corner/type:serif-editorial",
+  "designRecipe": "derived-fallback",
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.667,
+          "width": 1,
+          "height": 0.333
+        },
+        "direction": "up",
+        "maxOpacity": 0.58,
+        "color": "#000000"
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.73,
+          "width": 0.87,
+          "height": 0.072
+        },
+        "spec": {
+          "lines": [
+            "BTS is coming back!"
+          ],
+          "x": 640,
+          "y": 1260.9152000000001,
+          "fontSize": 105.984,
+          "lineHeight": 114.46272,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "fontWeight": 700,
+          "align": "center",
+          "shadow": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.825,
+          "width": 0.87,
+          "height": 0.028
+        },
+        "spec": {
+          "lines": [
+            "Celebrate their return with our special menu."
+          ],
+          "x": 640,
+          "y": 1347.8400000000001,
+          "fontSize": 33.28,
+          "lineHeight": 44.928000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "center",
+          "shadow": true,
+          "opacity": 0.95
+        }
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.876,
+          "width": 0.87,
+          "height": 0.026
+        },
+        "spec": {
+          "lines": [
+            "Experience the best luxury and comfort."
+          ],
+          "x": 640,
+          "y": 1429.1200000000001,
+          "fontSize": 32,
+          "lineHeight": 41.6,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "italic": true,
+          "align": "center",
+          "opacity": 0.9,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.926,
+          "width": 0.87,
+          "height": 0.022
+        },
+        "spec": {
+          "lines": [
+            "50% OFF ALL KOREAN FOOD · Cheap prices, premium taste"
+          ],
+          "x": 640,
+          "y": 1506.56,
+          "fontSize": 25.6,
+          "lineHeight": 33.28,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "center",
+          "opacity": 0.75,
+          "letterSpacing": 1,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.46,
+          "y": 0.036,
+          "width": 0.08,
+          "height": 0.064
+        },
+        "opacity": 1
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.065,
+          "y": 0.692,
+          "width": 0.87,
+          "height": 0.002
+        },
+        "stroke": "#ffffff",
+        "opacity": 0.7
+      }
+    ],
+    "structure": "full-bleed/centered/no-footer/logo:corner/type:serif-editorial"
+  }
+}

@@ -10,12 +10,21 @@ import {
 } from '../ai';
 import { resolveCreativeDna } from '../ai/brand/creative-dna';
 import { generateCreativeDirection, summariseCreativeDirection } from '../ai/generators/creative-direction.generator';
-import { generateCreativeConcepts } from '../ai/generators/creative-concepts.generator';
+import { classifyMechanismFamily, generateCreativeConcepts } from '../ai/generators/creative-concepts.generator';
+import { generateCreativeIntent, normaliseIntent } from '../ai/generators/creative-intent.generator';
 import { generateCreativeResearch } from '../ai/generators/creative-research.generator';
 import { generateReferenceStyleProfile } from '../ai/generators/reference-style.generator';
 import { normaliseDesignRecipe } from '../ai/render/design-recipe';
 import { renderCreative } from '../ai/render/creative-renderer';
 import { detectCheckerboard } from '../ai/render/render-validation';
+import { describePaletteColor } from '../ai/render/palette-words';
+import {
+  buildCampaignCreativePrompt,
+  buildCampaignQcPrompt,
+  collectCampaignCopy,
+  CAMPAIGN_QC_RESPONSE_SCHEMA,
+} from '../ai/prompts/campaign-creative.prompt';
+import { compositeLogo } from '../ai/render/logo-composite';
 import type { CreativeResearchContext } from '../ai/prompts/creative-research.prompt';
 import { analyseImage } from '../ai/generators/image-analysis.generator';
 import { fetchInlineImage, ImageFetchError } from '../ai/vision/image-source';
@@ -31,11 +40,14 @@ import type {
   CreativeDirection,
   CreativeDnaInput,
   CreativeGenerationRequest,
+  CreativeIntentBrief,
   CreativeMode,
   CreativeRefinementRequest,
+  CreativeRenderContext,
   CreativeResearch,
   FunnelStage,
   MarketingGoal,
+  MechanismFamily,
   RecentCreativeSignature,
   ReferenceStyleProfile,
   ResolvedCreativeDna,
@@ -172,6 +184,20 @@ function readReferenceStyleProfile(value: unknown): ReferenceStyleProfile | unde
   };
 }
 
+/**
+ * The intent brief `/concepts` already extracted, handed back on `/generate`
+ * so generation validates against exactly the requirements the chosen concept
+ * was gated on — and so a second extraction call isn't paid for. Bounded the
+ * same defensive way `readConcept` bounds a model-shaped payload arriving in
+ * an ordinary request body.
+ */
+function readIntent(value: unknown): CreativeIntentBrief | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  if (!raw.extracted) return undefined;
+  return normaliseIntent(raw);
+}
+
 function readCreativeDna(value: unknown): CreativeDnaInput | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const d = value as Record<string, unknown>;
@@ -222,6 +248,12 @@ const ART_DIRECTION_FAMILIES_LIST: ArtDirectionFamily[] = [
   'INFORMATIONAL', 'ILLUSTRATIVE',
 ];
 
+const MECHANISM_FAMILIES_LIST: MechanismFamily[] = [
+  'VISUAL_METAPHOR', 'HUMAN_OBSERVATIONAL', 'INTERACTIVE_PUZZLE', 'TYPOGRAPHY_WORDPLAY', 'SURPRISING_SCALE',
+  'JUXTAPOSITION', 'BEFORE_AFTER', 'TRANSFORMATION', 'STORYTELLING', 'OBJECT_INTERACTION',
+  'CULTURAL_OBSERVATION', 'ABSURD_SURREAL', 'PRODUCT_AS_METAPHOR', 'DOCUMENTARY_MOMENT', 'COLLAGE_GRAPHIC',
+];
+
 /**
  * The concept the member picked from `/concepts`, read back off the wire.
  * Trusted only as far as its shape — every field still goes through the same
@@ -258,6 +290,11 @@ function readConcept(value: unknown): ScoredCreativeConcept | undefined {
     }),
     mode: readEnum(c.mode, MODES_LIST, 'EDITORIAL'),
     artDirectionFamily: readEnum(c.artDirectionFamily, ART_DIRECTION_FAMILIES_LIST, 'EDITORIAL_PHOTOGRAPHY'),
+    mechanismFamily: readEnum(
+      c.mechanismFamily,
+      MECHANISM_FAMILIES_LIST,
+      classifyMechanismFamily(`${visualMechanism} ${bigIdea}`),
+    ),
     scores: {
       conceptStrength: asScore(scoresInput.conceptStrength),
       brandSpecificity: asScore(scoresInput.brandSpecificity),
@@ -267,6 +304,8 @@ function readConcept(value: unknown): ScoredCreativeConcept | undefined {
       messageClarity: asScore(scoresInput.messageClarity),
       socialInteractionPotential: asScore(scoresInput.socialInteractionPotential),
       templateRisk: asScore(scoresInput.templateRisk),
+      mechanismNovelty: asScore(scoresInput.mechanismNovelty),
+      similarityToOtherConcepts: asScore(scoresInput.similarityToOtherConcepts),
     },
   };
 }
@@ -286,6 +325,12 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
   }
 
   const contextType = readEnum(input.contextType, MODES, 'personal');
+  // `generated_assets_context_brand_check` requires a brand id in brand mode.
+  // Caught here so a caller that forgets one gets a sentence it can act on,
+  // rather than a 500 from a constraint violation after a paid model call.
+  if (contextType === 'brand' && !readString(input.brandId, 64)) {
+    throw new CreativeError('Pick which brand this creative is for.', 422);
+  }
   const creativeDna = readCreativeDna(input.creativeDna);
   const brandVoice = readBrandVoice(input.brandVoice) as BrandProfileInput | undefined;
   const referenceImageUrls = readReferenceImageUrls(input.referenceImageUrls);
@@ -308,7 +353,121 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
     ...(referenceImageUrls.length > 0 && { referenceLabels: readReferenceLabels(input.referenceLabels) }),
     ...(referenceStyleProfile && { referenceStyleProfile }),
     ...(readConcept(input.selectedConcept) && { selectedConcept: readConcept(input.selectedConcept) }),
+    ...(readIntent(input.intent) && { intent: readIntent(input.intent) }),
   };
+}
+
+/**
+ * Brand mode requires a real logo before anything is rendered (spec §3).
+ *
+ * Concept discovery is deliberately still allowed without one — exploring
+ * ideas costs nothing and blocking it would be obstructive. What must never
+ * happen is a *branded creative* going out carrying a logo FlowPost invented,
+ * so the gate sits exactly where pixels start being made.
+ */
+function assertBrandLogo(request: CreativeGenerationRequest) {
+  if (request.contextType !== 'brand') return;
+  if (request.creativeDna?.logoAssetUrl) return;
+  throw new CreativeError('Add your brand logo to create a branded creative.', 422);
+}
+
+/**
+ * Per-request latency + spend ledger (§15/§16). Stage durations accumulate by
+ * name; the call counters prove whether an optimization actually removed
+ * model/upload calls rather than just moving them. Logged once per request by
+ * `logMetrics`, so a BEFORE/AFTER comparison is a single grep.
+ */
+interface CreativeMetrics {
+  startedAt: number;
+  stages: Record<string, number>;
+  imageCalls: number;
+  textCalls: number;
+  cloudinaryUploads: number;
+}
+
+function newMetrics(): CreativeMetrics {
+  return { startedAt: Date.now(), stages: {}, imageCalls: 0, textCalls: 0, cloudinaryUploads: 0 };
+}
+
+/** Times one stage into the ledger. Durations accumulate, so a stage that runs per-variation reports its total. */
+async function timed<T>(
+  metrics: CreativeMetrics | undefined,
+  stage: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!metrics) return fn();
+  const startedAt = Date.now();
+  try {
+    return await fn();
+  } finally {
+    metrics.stages[stage] = (metrics.stages[stage] ?? 0) + (Date.now() - startedAt);
+  }
+}
+
+function logMetrics(metrics: CreativeMetrics, requestId?: string) {
+  const s = metrics.stages;
+  console.info('[creative] request timing', {
+    requestId,
+    intentDurationMs: s.intent ?? 0,
+    researchDurationMs: s.research ?? 0,
+    conceptDurationMs: s.concepts ?? 0,
+    directionDurationMs: s.direction ?? 0,
+    imageDurationMs: s.image ?? 0,
+    campaignDurationMs: s.campaign ?? 0,
+    qcDurationMs: s.qc ?? 0,
+    cloudinaryDurationMs: s.cloudinary ?? 0,
+    totalDurationMs: Date.now() - metrics.startedAt,
+    imageCalls: metrics.imageCalls,
+    textCalls: metrics.textCalls,
+    cloudinaryUploads: metrics.cloudinaryUploads,
+  });
+}
+
+/**
+ * Latency ceiling for the campaign pass (§11). Past it, the member gets the
+ * already-finished Stage A creative instead of a longer wait — the losing
+ * promise is abandoned, not cancelled, which is fine for a best-effort stage.
+ */
+const CAMPAIGN_STAGE_TIMEOUT_MS =
+  Number.parseInt(process.env.CREATIVE_CAMPAIGN_TIMEOUT_MS ?? '', 10) || 60_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    work.finally(() => clearTimeout(timer)),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new CreativeError(`${label} timed out`, 504, `${label} exceeded ${ms}ms`)),
+        ms,
+      );
+    }),
+  ]);
+}
+
+/**
+ * The member's own requirements, resolved once per request: whatever the
+ * browser handed back from `/concepts`, or a fresh extraction. Never fatal —
+ * `generateCreativeIntent` degrades to an empty brief on failure.
+ *
+ * Reads brand context straight off the request's own brand voice (not the
+ * vision-resolved profile) so it can run CONCURRENTLY with image analysis —
+ * extraction parses the member's sentence, and the typed brand description is
+ * the same either way; only a vision-inferred one is forgone.
+ */
+async function resolveIntent(
+  request: CreativeGenerationRequest,
+  metrics?: CreativeMetrics,
+): Promise<CreativeIntentBrief> {
+  if (request.intent?.extracted) return request.intent;
+  if (metrics) metrics.textCalls += 1;
+  return timed(metrics, 'intent', () =>
+    generateCreativeIntent({
+      provider: providerForRole('fast'),
+      request: request.prompt,
+      ...(request.brandVoice?.description && { brandDescription: request.brandVoice.description }),
+      ...(request.brandVoice?.industry && { industry: request.brandVoice.industry }),
+    }),
+  );
 }
 
 /** Resolves brand + Creative DNA for a request, running Vision on the first asset if one was given. */
@@ -408,39 +567,6 @@ async function resolveReferenceStyle(
   });
 }
 
-const HUE_NAMES: Array<[number, string]> = [
-  [15, 'red'], [40, 'orange'], [65, 'amber'], [95, 'yellow-green'], [150, 'green'],
-  [185, 'teal'], [215, 'blue'], [255, 'indigo'], [290, 'violet'], [330, 'magenta'], [360, 'red'],
-];
-
-/**
- * A hex code in the image prompt has been observed rendered INTO the image as
- * literal text ("#2563EEb" written on a prop). Colours are described in plain
- * words instead — the model needs the feeling of the palette, never the code.
- */
-export function describePaletteColor(raw: string): string {
-  const hex = raw.trim().toLowerCase();
-  if (!/^#[0-9a-f]{6}$/.test(hex)) return raw;
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const light = (max + min) / 2;
-  const sat = max === min ? 0 : (max - min) / (1 - Math.abs(2 * light - 1));
-
-  if (sat < 0.12) {
-    return light > 0.9 ? 'white' : light > 0.7 ? 'light grey' : light > 0.4 ? 'grey' : light > 0.15 ? 'charcoal' : 'black';
-  }
-  let hue = 0;
-  if (max === r) hue = ((g - b) / (max - min)) % 6;
-  else if (max === g) hue = (b - r) / (max - min) + 2;
-  else hue = (r - g) / (max - min) + 4;
-  hue = (hue * 60 + 360) % 360;
-  const name = HUE_NAMES.find(([limit]) => hue <= limit)?.[1] ?? 'red';
-  const prefix = light > 0.82 ? 'pale ' : light > 0.62 ? 'soft ' : light < 0.28 ? 'deep ' : '';
-  const muted = sat < 0.35 ? 'muted ' : '';
-  return `${prefix}${muted}${name}`;
-}
-
 /**
  * Builds the actual image-model prompt from a structured direction. No model
  * call — deterministic assembly, the same way `renderBrandSection` turns a
@@ -516,6 +642,64 @@ function buildImagePrompt(direction: CreativeDirection, hasAssets: boolean, hasL
     // like brandConstraints) have been rendered INTO the image as garbled
     // wordmarks — every one becomes a plain-words colour description.
     .replace(/#[0-9a-fA-F]{6}\b/g, (hex) => describePaletteColor(hex));
+}
+
+/** Vision QC findings, split by what they cost: only critical defects earn the one regeneration. */
+interface CampaignQcResult {
+  critical: string[];
+  minor: string[];
+}
+
+/**
+ * Reads the finished campaign image against the exact copy list and the
+ * member's hard requirements — the §14 vision quality check. Best-effort by
+ * construction: any failure of the QC call itself reads as "no defects found",
+ * because a broken proofreader must never block a finished campaign.
+ *
+ * Findings carry a severity: CRITICAL (wrong offer/copy, invented logo,
+ * unreadable headline, missing claim…) justifies the single targeted
+ * regeneration; MINOR (tiny prop text, decorative typo, small artifact away
+ * from the key content) ships as-is — a second image call costs more latency
+ * than a cosmetic nit is worth.
+ */
+async function inspectCampaignImage(
+  image: { mimeType: string; data: string },
+  copy: ReturnType<typeof collectCampaignCopy>,
+  requiredClaims: string[],
+  requestId?: string,
+  metrics?: CreativeMetrics,
+): Promise<CampaignQcResult> {
+  try {
+    if (metrics) metrics.textCalls += 1;
+    const payload = (await providerForRole('vision').generateJson({
+      systemInstruction:
+        'You are a meticulous print-production proofreader. You only report real, visible defects — never taste. Return only the JSON object described.',
+      prompt: buildCampaignQcPrompt(copy, requiredClaims),
+      responseSchema: CAMPAIGN_QC_RESPONSE_SCHEMA,
+      temperature: 0.1,
+      images: [{ mimeType: image.mimeType, data: image.data }],
+    })) as { problems?: unknown };
+    const critical: string[] = [];
+    const minor: string[] = [];
+    for (const raw of (Array.isArray(payload.problems) ? payload.problems : []).slice(0, 8)) {
+      // A plain string (the pre-severity shape) is treated as critical — the
+      // safe reading for a defect with no rating.
+      if (typeof raw === 'string' && raw.trim()) {
+        critical.push(raw.trim());
+      } else if (raw && typeof raw === 'object') {
+        const problem = raw as { severity?: unknown; fix?: unknown };
+        const fix = typeof problem.fix === 'string' ? problem.fix.trim() : '';
+        if (fix) (problem.severity === 'minor' ? minor : critical).push(fix);
+      }
+    }
+    return { critical, minor };
+  } catch (error) {
+    console.warn('[creative] campaign vision QC failed, treating as pass', {
+      requestId,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    return { critical: [], minor: [] };
+  }
 }
 
 /** Dev-only QA tap (§16/§18): with CREATIVE_DEBUG_DIR set, every generation drops its raw visual, finished creative and layout plan there for side-by-side review. Never on in production. */
@@ -601,12 +785,21 @@ interface RunGenerationOptions {
   /** Computed once per request/campaign and reused across variations. Absent when a concept was already selected — the research that shaped it already ran in `discoverConcepts`. */
   research?: CreativeResearch;
   referenceStyle?: ReferenceStyleProfile;
+  /** The member's hard requirements — validated through direction and carried into the campaign pass. */
+  intent?: CreativeIntentBrief;
+  /**
+   * False for a campaign variation, which is already a finished creative of
+   * its own and would only be re-designed into a near-duplicate.
+   */
+  withCampaignStage?: boolean;
   /** Set for one shot of a campaign set — e.g. "Hero", "Product", "Lifestyle". */
   variationLabel?: string;
   campaignId?: string;
   parentAssetId?: string;
   /** Correlation id from the HTTP layer — ties every stage log to one request. */
   requestId?: string;
+  /** The request's latency/spend ledger — shared across variations of one campaign. */
+  metrics?: CreativeMetrics;
 }
 
 /**
@@ -626,10 +819,13 @@ async function runGeneration({
   artDirectionFamily,
   research,
   referenceStyle,
+  intent,
+  withCampaignStage = true,
   variationLabel,
   campaignId,
   parentAssetId,
   requestId,
+  metrics,
 }: RunGenerationOptions): Promise<StoredGeneratedAsset> {
   const hasAssets = request.assetUrls.length > 0;
 
@@ -647,21 +843,38 @@ async function runGeneration({
     .filter((part): part is string => typeof part === 'string' && part.length > 0)
     .join(' ');
 
-  const { direction } = await generateCreativeDirection({
-    provider: textProvider,
-    request: directionRequest,
+  const { direction, meta: directionMeta } = await timed(metrics, 'direction', () =>
+    generateCreativeDirection({
+      provider: textProvider,
+      request: directionRequest,
+      goal: request.goal,
+      funnelStage: request.funnelStage,
+      platforms: request.platforms,
+      hasAssets,
+      concept,
+      mode,
+      artDirectionFamily,
+      research,
+      referenceStyle,
+      intent,
+      brand,
+      creativeDna,
+    }),
+  );
+  if (metrics) metrics.textCalls += directionMeta.attempts ?? 1;
+
+  // Everything a later refinement needs to re-execute this creative as it was
+  // actually made — brand, visual identity, the analysed design language and
+  // the member's own requirements. See CreativeRenderContext.
+  const renderContext: CreativeRenderContext = {
+    brand,
+    creativeDna,
+    ...(referenceStyle && { referenceStyle }),
+    ...(intent && { intent }),
     goal: request.goal,
     funnelStage: request.funnelStage,
     platforms: request.platforms,
-    hasAssets,
-    concept,
-    mode,
-    artDirectionFamily,
-    research,
-    referenceStyle,
-    brand,
-    creativeDna,
-  });
+  };
 
   const asset = await generatedAssetRepository.create({
     userId,
@@ -669,6 +882,7 @@ async function runGeneration({
     brandId: request.brandId,
     prompt: variationLabel ? `${request.prompt} (${variationLabel})` : request.prompt,
     creativeBrief: direction,
+    renderContext,
     sourceAssetUrls: request.assetUrls,
     provider: imageProvider.id,
     model: imageProvider.model,
@@ -688,8 +902,30 @@ async function runGeneration({
     variationLabel,
     creativeDna,
     referenceStyle,
+    renderContext,
+    ...(withCampaignStage && {
+      campaign: {
+        brand,
+        ...(intent && { intent }),
+        goal: request.goal,
+        platforms: request.platforms,
+      },
+    }),
     requestId,
+    metrics,
   });
+}
+
+/**
+ * Everything Stage B needs, beyond what Stage A already had. Absent means
+ * "stop after the standalone image" — which is what a campaign variation
+ * does, since each variation is already its own finished creative.
+ */
+interface CampaignStageInput {
+  brand: BrandProfile;
+  intent?: CreativeIntentBrief;
+  goal: MarketingGoal;
+  platforms: string[];
 }
 
 interface FinishGenerationOptions {
@@ -697,26 +933,46 @@ interface FinishGenerationOptions {
   asset: StoredGeneratedAsset;
   direction: CreativeDirection;
   imageProvider: AiImageProvider;
-  /** URLs to send as reference images — source assets for a fresh generation, plus the prior output for a refinement. */
+  /** URLs to send as reference images — source assets for a fresh generation, plus the prior visual for a refinement. */
   referenceUrls: string[];
   hasAssets: boolean;
-  /** The brand's real logo, if any — composited onto the finished creative by the renderer, never sent to the image model. */
+  /** The brand's real logo, if any — composited pixel-exact, never sent to the image model to draw. */
   logoAssetUrl?: string;
   variationLabel?: string;
   creativeDna: ResolvedCreativeDna;
   referenceStyle?: ReferenceStyleProfile;
+  /** Persisted on the row so a later refinement re-executes this creative faithfully. */
+  renderContext?: CreativeRenderContext;
+  /** Present for a normal generation — runs the automatic campaign pass on top of the visual. */
+  campaign?: CampaignStageInput;
   /** Correlation id from the HTTP layer — ties every stage log to one request. */
   requestId?: string;
+  /** The request's latency/spend ledger. */
+  metrics?: CreativeMetrics;
 }
 
 /**
- * The half of generation that happens after a row already exists: fetch
- * references, call the image model, upload to Cloudinary, persist. Shared by
- * `runGeneration` and `refine` so both give the same accurate answer when
- * Gemini succeeds but the save fails — see spec's failure-handling rule:
- * "Image created, but FlowPost couldn't save it" is a materially different
- * fact from "image generation failed", and the member should be told which
- * one actually happened.
+ * The half of generation that happens after a row already exists.
+ *
+ * Two stages, and the split is the whole design:
+ *
+ *   Stage A — the image model paints the wordless visual, FlowPost's renderer
+ *             composites the copy and the real logo. All in memory — nothing
+ *             is uploaded yet, so a successful image never waits on storage.
+ *   Stage B — that same visual goes back to the image model with the full
+ *             campaign brief, which designs the finished campaign creative
+ *             around it. The real logo is composited afterward, never drawn.
+ *
+ * Storage comes LAST (§13): whichever image survives — the campaign design
+ * when Stage B succeeds, the Stage A render when it fails or times out — gets
+ * the one Cloudinary upload and completes the one row this generation owns.
+ * The wordless foundation's own upload (a refinement's starting point) runs
+ * concurrently with Stage B, entirely off the critical path.
+ *
+ * Stage B is automatic and has no button. It is also entirely optional at
+ * runtime: anything that goes wrong in it — including exceeding its latency
+ * budget — ships the Stage A creative instead, so a member never loses a
+ * generation that already succeeded.
  */
 async function finishGeneration({
   userId,
@@ -729,10 +985,14 @@ async function finishGeneration({
   variationLabel,
   creativeDna,
   referenceStyle,
+  renderContext,
+  campaign,
   requestId,
+  metrics,
 }: FinishGenerationOptions): Promise<StoredGeneratedAsset> {
   let visual: { mimeType: string; data: string };
   let logoImage: { mimeType: string; data: string } | undefined;
+  let referenceImages: Array<{ mimeType: string; data: string }> = [];
 
   // Stage bookkeeping for the failure log: which step was in flight, and for
   // how long, when an error surfaced — the difference between "Gemini failed"
@@ -760,7 +1020,16 @@ async function finishGeneration({
   });
 
   try {
-    const referenceImages = await fetchReferenceImages(referenceUrls);
+    // The member's references and the logo are independent fetches — one
+    // round trip, not two. The logo is never sent to the image model; it's
+    // composited pixel-exact by the renderer below (§5: never redraw a logo
+    // through Gemini), and a failed logo fetch is never fatal.
+    const [fetchedReferences, fetchedLogo] = await Promise.all([
+      fetchReferenceImages(referenceUrls),
+      logoAssetUrl ? fetchReferenceImages([logoAssetUrl]) : Promise.resolve([]),
+    ]);
+    referenceImages = fetchedReferences;
+    logoImage = fetchedLogo[0];
 
     // Asset safety: a member who attached a required product/reference image
     // and had every one of them fail to fetch gets a clear error, not a
@@ -772,12 +1041,6 @@ async function finishGeneration({
       );
     }
 
-    // The logo is fetched here but never sent to the image model — it's
-    // composited pixel-exact by the renderer below (§5: never redraw a logo
-    // through Gemini). A failed fetch is never fatal, it just means no logo
-    // slot gets filled.
-    logoImage = logoAssetUrl ? (await fetchReferenceImages([logoAssetUrl]))[0] : undefined;
-
     const imagePrompt = buildImagePrompt(direction, hasAssets, Boolean(logoImage));
     enterStage('image-generation');
     console.info('[creative] image generation started', {
@@ -787,11 +1050,14 @@ async function finishGeneration({
       referenceCount: referenceImages.length,
       hasLogo: Boolean(logoImage),
     });
-    [visual] = await imageProvider.generateImage({
-      prompt: imagePrompt,
-      referenceImages,
-      aspectRatio: direction.aspectRatio,
-    });
+    if (metrics) metrics.imageCalls += 1;
+    [visual] = await timed(metrics, 'image', () =>
+      imageProvider.generateImage({
+        prompt: imagePrompt,
+        referenceImages,
+        aspectRatio: direction.aspectRatio,
+      }),
+    );
     console.info('[creative] image generation completed', {
       requestId,
       assetId: asset.id,
@@ -807,11 +1073,14 @@ async function finishGeneration({
     let scan = await detectCheckerboard(Buffer.from(visual.data, 'base64'));
     if (scan.detected) {
       console.warn('[creative] visual failed checkerboard scan, regenerating once', { assetId: asset.id, coverage: scan.coverage });
-      [visual] = await imageProvider.generateImage({
-        prompt: `${imagePrompt}\nCRITICAL: the previous attempt rendered a grey-and-white transparency checkerboard pattern. Fill every part of the canvas with the photographed/illustrated scene itself — no checkerboard, no grid of grey squares, no "transparent" areas of any kind.`,
-        referenceImages,
-        aspectRatio: direction.aspectRatio,
-      });
+      if (metrics) metrics.imageCalls += 1;
+      [visual] = await timed(metrics, 'image', () =>
+        imageProvider.generateImage({
+          prompt: `${imagePrompt}\nCRITICAL: the previous attempt rendered a grey-and-white transparency checkerboard pattern. Fill every part of the canvas with the photographed/illustrated scene itself — no checkerboard, no grid of grey squares, no "transparent" areas of any kind.`,
+          referenceImages,
+          aspectRatio: direction.aspectRatio,
+        }),
+      );
       scan = await detectCheckerboard(Buffer.from(visual.data, 'base64'));
       if (scan.detected) {
         throw new CreativeError('The generated visual contained a rendering artifact. Please try again.', 502, `checkerboard coverage ${scan.coverage}`);
@@ -862,20 +1131,199 @@ async function finishGeneration({
     structure = 'none';
   }
 
+  // ── Stage B before storage (§1/§13) ───────────────────────────────────────
+  //
+  // The wordless foundation's own upload — a future refinement's starting
+  // point, kept only in `renderContext` and never shown — starts here and
+  // rides CONCURRENTLY with the campaign design. Best-effort by construction:
+  // a failure costs a future refinement some fidelity and nothing else.
+  const uploadVisualFoundation = (): Promise<string | undefined> => {
+    if (metrics) metrics.cloudinaryUploads += 1;
+    return cloudinaryService
+      .uploadImageBuffer(Buffer.from(visual.data, 'base64'), visual.mimeType)
+      .then((uploaded) => uploaded.url)
+      .catch((error: unknown) => {
+        console.warn('[creative] visual-foundation upload failed, refinements will re-derive it', {
+          requestId,
+          assetId: asset.id,
+          detail: error instanceof Error ? error.message : String(error),
+        });
+        return undefined;
+      });
+  };
+
+  let finalImage: { mimeType: string; data: Buffer } = {
+    mimeType: image.mimeType,
+    data: Buffer.from(image.data, 'base64'),
+  };
+  let campaignDesigned = false;
+  let visualUploadPromise: Promise<string | undefined> | undefined;
+
+  if (campaign) {
+    visualUploadPromise = uploadVisualFoundation();
+
+    const designCampaign = async (): Promise<Buffer> => {
+      enterStage('campaign-design');
+      const campaignPrompt = buildCampaignCreativePrompt({
+        direction,
+        brand: campaign.brand,
+        creativeDna,
+        referenceStyle,
+        intent: campaign.intent,
+        goal: campaign.goal,
+        platforms: campaign.platforms,
+        hasLogo: Boolean(logoImage),
+        hasProductAssets: referenceImages.length > 0,
+      });
+
+      console.info('[creative] campaign design started', {
+        requestId,
+        assetId: asset.id,
+        model: imageProvider.model,
+        copyLines: [direction.headline, direction.supportingLine, direction.cta].filter(Boolean).length,
+        hasLogo: Boolean(logoImage),
+      });
+
+      // The visual leads: it is the foundation the campaign is designed over.
+      // The member's own product/reference photos ride behind it so the design
+      // pass can still see the real product it must not replace. In-memory —
+      // the campaign never waits on any storage round trip.
+      if (metrics) metrics.imageCalls += 1;
+      const [designed] = await timed(metrics, 'campaign', () =>
+        imageProvider.generateImage({
+          prompt: campaignPrompt,
+          referenceImages: [visual, ...referenceImages],
+          aspectRatio: direction.aspectRatio,
+        }),
+      );
+
+      let campaignBuffer: Buffer = Buffer.from(designed.data, 'base64');
+      const scan = await detectCheckerboard(campaignBuffer);
+      if (scan.detected) {
+        throw new CreativeError(
+          'The campaign design contained a rendering artifact.',
+          502,
+          `checkerboard coverage ${scan.coverage}`,
+        );
+      }
+
+      // Vision QC (§14): read the actual pixels against the exact copy list.
+      // Only CRITICAL defects (wrong copy, missing claim, invented logo,
+      // unreadable headline…) earn the one targeted regeneration; minor
+      // cosmetic nits ship — a second image call costs more latency than
+      // they're worth. The QC call itself failing never blocks the campaign.
+      enterStage('campaign-qc');
+      const qcCopy = collectCampaignCopy(direction);
+      const qcClaims = campaign.intent?.requiredClaims ?? [];
+      const qc = await timed(metrics, 'qc', () =>
+        inspectCampaignImage(designed, qcCopy, qcClaims, requestId, metrics),
+      );
+      if (qc.minor.length > 0) {
+        console.info('[creative] campaign QC minor defects, shipping without regeneration', {
+          requestId,
+          assetId: asset.id,
+          problems: qc.minor,
+        });
+      }
+      if (qc.critical.length > 0) {
+        console.warn('[creative] campaign failed vision QC, one targeted regeneration', {
+          requestId,
+          assetId: asset.id,
+          problems: qc.critical,
+        });
+        try {
+          if (metrics) metrics.imageCalls += 1;
+          const [redesigned] = await timed(metrics, 'campaign', () =>
+            imageProvider.generateImage({
+              prompt: `${campaignPrompt}\n\nYOUR PREVIOUS ATTEMPT HAD THESE DEFECTS — fix every one, change nothing else about the design:\n${qc.critical
+                .map((problem) => `- ${problem}`)
+                .join('\n')}`,
+              referenceImages: [visual, ...referenceImages],
+              aspectRatio: direction.aspectRatio,
+            }),
+          );
+          const redesignedBuffer = Buffer.from(redesigned.data, 'base64');
+          const rescan = await detectCheckerboard(redesignedBuffer);
+          const reQc = rescan.detected
+            ? null
+            : await timed(metrics, 'qc', () =>
+                inspectCampaignImage(redesigned, qcCopy, qcClaims, requestId, metrics),
+              );
+          if (reQc !== null && reQc.critical.length <= qc.critical.length) {
+            campaignBuffer = redesignedBuffer;
+          }
+        } catch (error) {
+          console.warn('[creative] targeted regeneration failed, keeping the first campaign attempt', {
+            requestId,
+            detail: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // The real logo, at real pixels, into the zone the prompt kept clear.
+      // A broken logo file is never worth losing a good campaign over.
+      if (logoImage) {
+        try {
+          campaignBuffer = await compositeLogo({
+            image: campaignBuffer,
+            logo: Buffer.from(logoImage.data, 'base64'),
+            placement: direction.layoutDirection?.logoPlacement || creativeDna.logoTreatment || 'bottom-right',
+          });
+        } catch (error) {
+          console.warn('[creative] logo composite failed, campaign kept without the mark', {
+            requestId,
+            detail: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      dumpDebugArtifacts(asset.id, { '3-campaign.png': campaignBuffer });
+      return campaignBuffer;
+    };
+
+    try {
+      const campaignBuffer = await withTimeout(
+        designCampaign(),
+        CAMPAIGN_STAGE_TIMEOUT_MS,
+        'campaign stage',
+      );
+      finalImage = { mimeType: 'image/png', data: campaignBuffer };
+      campaignDesigned = true;
+      console.info('[creative] campaign design complete', {
+        requestId,
+        assetId: asset.id,
+        concept: direction.concept,
+      });
+    } catch (error) {
+      // Spec §11: the standalone creative that already succeeded ships
+      // instead of the whole request failing — a timeout or a campaign bug
+      // costs the design pass, never the generation. The member can retry
+      // the campaign look from the UI via refine.
+      console.warn('[creative] campaign stage failed, shipping the standalone creative', stageFailureLog(error));
+    }
+  }
+
+  // ── Storage last: one upload, for whichever image survived ────────────────
   try {
     enterStage('cloudinary-upload');
     console.info('[creative] cloudinary upload started', {
       requestId,
       assetId: asset.id,
-      byteLength: Buffer.from(image.data, 'base64').length,
+      byteLength: finalImage.data.length,
+      campaignDesigned,
       cloudNamePresent: Boolean(env.CLOUDINARY_CLOUD_NAME),
       apiKeyPresent: Boolean(env.CLOUDINARY_API_KEY),
       apiSecretPresent: Boolean(env.CLOUDINARY_API_SECRET),
     });
-    const uploaded = await cloudinaryService.uploadImageBuffer(
-      Buffer.from(image.data, 'base64'),
-      image.mimeType,
-    );
+    if (metrics) metrics.cloudinaryUploads += 1;
+    const [uploaded, visualImageUrl] = await Promise.all([
+      timed(metrics, 'cloudinary', () =>
+        cloudinaryService.uploadImageBuffer(finalImage.data, finalImage.mimeType),
+      ),
+      // Already in flight when a campaign ran; otherwise it rides alongside
+      // the final upload rather than after it.
+      visualUploadPromise ?? uploadVisualFoundation(),
+    ]);
     console.info('[creative] cloudinary upload completed', {
       requestId,
       assetId: asset.id,
@@ -888,15 +1336,14 @@ async function finishGeneration({
     });
 
     enterStage('asset-persistence');
-
     const completed = await generatedAssetRepository.markCompleted(asset.id, {
       imageUrl: uploaded.url,
       cloudinaryPublicId: uploaded.publicId,
       ...(uploaded.width !== undefined && { width: uploaded.width }),
       ...(uploaded.height !== undefined && { height: uploaded.height }),
       ...(uploaded.format !== undefined && { format: uploaded.format }),
+      ...(renderContext && { renderContext: { ...renderContext, ...(visualImageUrl && { visualImageUrl }) } }),
     });
-    console.info('[creative] asset persisted', { requestId, assetId: asset.id });
 
     console.info('[creative] generation complete', {
       requestId,
@@ -907,6 +1354,7 @@ async function finishGeneration({
       variationLabel,
       model: imageProvider.model,
       structure,
+      campaignDesigned,
     });
 
     return completed;
@@ -957,64 +1405,32 @@ function pickTopConcept(concepts: ScoredCreativeConcept[]): ScoredCreativeConcep
  * research-informed thinking, so re-running research here would just be a
  * second grounded call paying for the same answer — skipped entirely in that
  * case. Only a caller that skips the picker (passes no `selectedConcept`)
- * triggers a fresh research → concepts → auto-pick round trip.
+ * triggers a fresh research → concepts → auto-pick round trip. Exactly ONE
+ * research operation ever runs per request, and its result is reused by
+ * concepts, direction and the campaign pass alike.
  */
 async function resolveConceptAndResearch(
   request: CreativeGenerationRequest,
-  textProvider: AiTextProvider,
   brand: BrandProfile,
   creativeDna: ResolvedCreativeDna,
-): Promise<{ concept: ScoredCreativeConcept; research: CreativeResearch | undefined; referenceStyle: ReferenceStyleProfile | undefined }> {
+  intent: CreativeIntentBrief,
+  referenceStyle: ReferenceStyleProfile | undefined,
+  metrics?: CreativeMetrics,
+): Promise<{ concept: ScoredCreativeConcept; research: CreativeResearch | undefined }> {
   if (request.selectedConcept) {
-    // A concept picked from `/concepts` already carries whatever reference
-    // style shaped it — no reason to resolve/analyse it again here.
-    return { concept: request.selectedConcept, research: undefined, referenceStyle: undefined };
+    return { concept: request.selectedConcept, research: undefined };
   }
 
-  const [research, recentSignatures, referenceStyle] = await Promise.all([
-    generateCreativeResearch({ provider: textProvider, context: buildResearchContext(request, brand) }),
+  const [research, recentSignatures] = await Promise.all([
+    timed(metrics, 'research', () =>
+      generateCreativeResearch({ provider: providerForRole('fast'), context: buildResearchContext(request, brand) }),
+    ),
     fetchRecentSignatures(request),
-    resolveReferenceStyle(request),
   ]);
-  const { concepts } = await generateCreativeConcepts({
-    provider: textProvider,
-    request: request.prompt,
-    goal: request.goal,
-    funnelStage: request.funnelStage,
-    platforms: request.platforms,
-    hasAssets: request.assetUrls.length > 0,
-    brand,
-    creativeDna,
-    research,
-    recentSignatures,
-    referenceStyle,
-  });
-
-  return { concept: pickTopConcept(concepts), research, referenceStyle };
-}
-
-export const creativeGenerationService = {
-  /**
-   * FlowPost's creative director: "what is the advertising idea?" — 3–5
-   * genuinely different, quality-gated concepts, no art direction and no
-   * image generated yet. This is what the picker (spec §19) shows.
-   */
-  async discoverConcepts(userId: string, body: unknown) {
-    const request = parseRequest(body, { userId });
-    const textProvider = providerForRole('creative');
-    if (!textProvider.isConfigured()) {
-      throw new CreativeError('AI generation is not set up on this server yet.', 503);
-    }
-
-    const { brand, creativeDna } = await resolveIdentity(request);
-    const [research, recentSignatures, referenceStyle] = await Promise.all([
-      generateCreativeResearch({ provider: textProvider, context: buildResearchContext(request, brand) }),
-      fetchRecentSignatures(request),
-      resolveReferenceStyle(request),
-    ]);
-
-    const outcome = await generateCreativeConcepts({
-      provider: textProvider,
+  if (metrics) metrics.textCalls += 1;
+  const { concepts, meta } = await timed(metrics, 'concepts', () =>
+    generateCreativeConcepts({
+      provider: providerForRole('fast'),
       request: request.prompt,
       goal: request.goal,
       funnelStage: request.funnelStage,
@@ -1025,9 +1441,64 @@ export const creativeGenerationService = {
       research,
       recentSignatures,
       referenceStyle,
+      intent,
+    }),
+  );
+  if (metrics) metrics.textCalls += meta.attempts ?? 1;
+
+  return { concept: pickTopConcept(concepts), research };
+}
+
+export const creativeGenerationService = {
+  /**
+   * FlowPost's creative director: "what is the advertising idea?" — 3–5
+   * genuinely different, quality-gated concepts, no art direction and no
+   * image generated yet. This is what the picker (spec §19) shows.
+   */
+  async discoverConcepts(userId: string, body: unknown) {
+    const request = parseRequest(body, { userId });
+    if (!providerForRole('creative').isConfigured()) {
+      throw new CreativeError('AI generation is not set up on this server yet.', 503);
+    }
+
+    // Identity (vision), intent extraction, the repetition memory and the
+    // reference-style analysis are mutually independent — one round of
+    // parallel context prep (§2). Research needs only the resolved brand, so
+    // it starts the moment identity lands, while intent and reference
+    // analysis are still in flight; concepts follow because they read
+    // everything.
+    const identityPromise = resolveIdentity(request);
+    const [{ brand, creativeDna }, intent, recentSignatures, referenceStyle, research] = await Promise.all([
+      identityPromise,
+      resolveIntent(request),
+      fetchRecentSignatures(request),
+      resolveReferenceStyle(request),
+      identityPromise.then((identity) =>
+        generateCreativeResearch({
+          provider: providerForRole('fast'),
+          context: buildResearchContext(request, identity.brand),
+        }),
+      ),
+    ]);
+
+    const outcome = await generateCreativeConcepts({
+      provider: providerForRole('fast'),
+      request: request.prompt,
+      goal: request.goal,
+      funnelStage: request.funnelStage,
+      platforms: request.platforms,
+      hasAssets: request.assetUrls.length > 0,
+      brand,
+      creativeDna,
+      research,
+      recentSignatures,
+      referenceStyle,
+      intent,
     });
 
-    return { ...outcome, ...(referenceStyle && { referenceStyle }) };
+    // The brief travels back to the browser so `/generate` validates against
+    // exactly the requirements these concepts were gated on.
+    return { ...outcome, intent, ...(referenceStyle && { referenceStyle }) };
   },
 
   /**
@@ -1043,15 +1514,22 @@ export const creativeGenerationService = {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
     }
 
-    const { brand, creativeDna } = await resolveIdentity(request);
-    const [research, recentSignatures, referenceStyle] = await Promise.all([
-      generateCreativeResearch({ provider: textProvider, context: buildResearchContext(request, brand) }),
+    const identityPromise = resolveIdentity(request);
+    const [{ brand, creativeDna }, intent, recentSignatures, referenceStyle, research] = await Promise.all([
+      identityPromise,
+      resolveIntent(request),
       fetchRecentSignatures(request),
       resolveReferenceStyle(request),
+      identityPromise.then((identity) =>
+        generateCreativeResearch({
+          provider: providerForRole('fast'),
+          context: buildResearchContext(request, identity.brand),
+        }),
+      ),
     ]);
 
     const { concepts } = await generateCreativeConcepts({
-      provider: textProvider,
+      provider: providerForRole('fast'),
       request: request.prompt,
       goal: request.goal,
       funnelStage: request.funnelStage,
@@ -1062,6 +1540,7 @@ export const creativeGenerationService = {
       research,
       recentSignatures,
       referenceStyle,
+      intent,
     });
     const concept = pickTopConcept(concepts);
 
@@ -1079,12 +1558,14 @@ export const creativeGenerationService = {
       artDirectionFamily: concept.artDirectionFamily,
       research,
       referenceStyle,
+      intent,
     });
 
     return {
       direction,
       concepts,
       research,
+      intent,
       summary: summariseCreativeDirection(direction, {
         goal: request.goal,
         funnelStage: request.funnelStage,
@@ -1105,15 +1586,31 @@ export const creativeGenerationService = {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
     }
     assertStorageConfigured();
+    assertBrandLogo(request);
 
-    const { brand, creativeDna } = await resolveIdentity(request);
-    const { concept, research, referenceStyle } = await resolveConceptAndResearch(request, textProvider, brand, creativeDna);
+    const metrics = newMetrics();
+    try {
+      // Identity (vision), intent and reference style are independent — one
+      // round of parallel context prep (§2). A concept picked from /concepts
+      // skips research entirely; the intent brief handed back skips a second
+      // extraction — nothing is recomputed within a request (§12).
+      const [{ brand, creativeDna }, intent, referenceStyle] = await Promise.all([
+        resolveIdentity(request),
+        resolveIntent(request, metrics),
+        resolveReferenceStyle(request),
+      ]);
+      const { concept, research } = await resolveConceptAndResearch(
+        request, brand, creativeDna, intent, referenceStyle, metrics,
+      );
 
-    return runGeneration({
-      userId, request, textProvider, imageProvider, brand, creativeDna, concept,
-      mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle,
-      requestId,
-    });
+      return await runGeneration({
+        userId, request, textProvider, imageProvider, brand, creativeDna, concept,
+        mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle, intent,
+        requestId, metrics,
+      });
+    } finally {
+      logMetrics(metrics, requestId);
+    }
   },
 
   /**
@@ -1135,55 +1632,90 @@ export const creativeGenerationService = {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
     }
     assertStorageConfigured();
+    assertBrandLogo(request);
 
-    const { brand, creativeDna } = await resolveIdentity(request);
-    const { concept, research, referenceStyle } = await resolveConceptAndResearch(request, textProvider, brand, creativeDna);
-    const campaignId = randomUUID();
-
-    const first = await runGeneration({
-      userId,
-      request,
-      textProvider,
-      imageProvider,
-      brand,
-      creativeDna,
-      concept,
-      mode: concept.mode,
-      artDirectionFamily: concept.artDirectionFamily,
-      research,
-      referenceStyle,
-      variationLabel: labels[0],
-      campaignId,
-      requestId,
-    });
-
-    const rest: StoredGeneratedAsset[] = [];
-    for (const label of labels.slice(1)) {
-      rest.push(
-        await runGeneration({
-          userId,
-          request,
-          textProvider,
-          imageProvider,
-          brand,
-          creativeDna,
-          concept,
-          mode: concept.mode,
-          artDirectionFamily: concept.artDirectionFamily,
-          research,
-          referenceStyle,
-          variationLabel: label,
-          campaignId,
-          parentAssetId: first.id,
-          requestId,
-        }),
+    const metrics = newMetrics();
+    try {
+      const [{ brand, creativeDna }, intent, referenceStyle] = await Promise.all([
+        resolveIdentity(request),
+        resolveIntent(request, metrics),
+        resolveReferenceStyle(request),
+      ]);
+      const { concept, research } = await resolveConceptAndResearch(
+        request, brand, creativeDna, intent, referenceStyle, metrics,
       );
-    }
+      const campaignId = randomUUID();
 
-    return [first, ...rest];
+      const first = await runGeneration({
+        userId,
+        request,
+        textProvider,
+        imageProvider,
+        brand,
+        creativeDna,
+        concept,
+        mode: concept.mode,
+        artDirectionFamily: concept.artDirectionFamily,
+        research,
+        referenceStyle,
+        intent,
+        // Each labelled variation is already a finished creative in its own
+        // right; running the campaign pass over every one would just produce a
+        // near-duplicate of it at double the cost.
+        withCampaignStage: false,
+        variationLabel: labels[0],
+        campaignId,
+        requestId,
+        metrics,
+      });
+
+      const rest: StoredGeneratedAsset[] = [];
+      for (const label of labels.slice(1)) {
+        rest.push(
+          await runGeneration({
+            userId,
+            request,
+            textProvider,
+            imageProvider,
+            brand,
+            creativeDna,
+            concept,
+            mode: concept.mode,
+            artDirectionFamily: concept.artDirectionFamily,
+            research,
+            referenceStyle,
+            intent,
+            withCampaignStage: false,
+            variationLabel: label,
+            campaignId,
+            parentAssetId: first.id,
+            requestId,
+            metrics,
+          }),
+        );
+      }
+
+      return [first, ...rest];
+    } finally {
+      logMetrics(metrics, requestId);
+    }
   },
 
-  /** Natural-language refinement of a previously generated asset. */
+  /**
+   * Natural-language refinement of a previously generated asset.
+   *
+   * The whole job here is to change ONLY what the member asked for. That is a
+   * question of what the refinement inherits, not of prompt wording: this used
+   * to resolve an EMPTY brand and an EMPTY Creative DNA, so every refinement
+   * silently lost the real logo, the brand palette and the analysed design
+   * recipe, then re-derived a different one — which is why "make it darker"
+   * came back looking like a different creative rather than a darker one.
+   *
+   * Everything now comes from the parent's persisted `renderContext`, and the
+   * pass re-executes from the parent's own wordless visual so the scene itself
+   * stays put. Rows written before that column existed still work; they simply
+   * degrade to the old empty-resolve behaviour.
+   */
   async refine(userId: string, body: unknown, requestId?: string): Promise<StoredGeneratedAsset> {
     if (!body || typeof body !== 'object') {
       throw new CreativeError('Send a JSON body naming the asset and the change.');
@@ -1206,25 +1738,59 @@ export const creativeGenerationService = {
     }
     assertStorageConfigured();
 
-    const brand = resolveBrandProfile({});
-    const creativeDna = resolveCreativeDna({});
+    const inherited = parent.renderContext;
+    const brand = inherited?.brand ?? resolveBrandProfile({});
+    const creativeDna = inherited?.creativeDna ?? resolveCreativeDna({});
+    const referenceStyle = inherited?.referenceStyle;
+    const intent = inherited?.intent;
+    const goal = inherited?.goal ?? 'brand_awareness';
+    const funnelStage = inherited?.funnelStage ?? 'TOFU';
+    const platforms = inherited?.platforms ?? [];
 
-    const { direction } = await generateCreativeDirection({
-      provider: textProvider,
-      request: parent.prompt,
-      goal: 'brand_awareness',
-      funnelStage: 'TOFU',
-      platforms: [],
-      hasAssets: parent.sourceAssetUrls.length > 0,
+    console.info('[creative] refine started', {
+      requestId,
+      parentAssetId: parent.id,
+      instruction,
+      inheritedContext: Boolean(inherited),
+      hasLogo: Boolean(creativeDna.logoAssetUrl),
+      hasReferenceStyle: Boolean(referenceStyle?.analysed),
+      requiredClaims: intent?.requiredClaims ?? [],
+    });
+
+    const metrics = newMetrics();
+    const { direction, meta: directionMeta } = await timed(metrics, 'direction', () =>
+      generateCreativeDirection({
+        provider: textProvider,
+        request: parent.prompt,
+        goal,
+        funnelStage,
+        platforms,
+        hasAssets: parent.sourceAssetUrls.length > 0,
+        brand,
+        creativeDna,
+        referenceStyle,
+        // Carried so an edit can never quietly drop the offer or the event on
+        // its way through — the same gate a fresh generation passes.
+        intent,
+        // A refinement re-executes the prior direction's own idea rather than
+        // being handed a fresh concept — mode and family carry over with
+        // everything else. No research runs: the parent's already shaped this.
+        mode: parent.creativeBrief.mode,
+        artDirectionFamily: parent.creativeBrief.artDirectionFamily,
+        refinementOf: { priorDirection: parent.creativeBrief, instruction },
+      }),
+    );
+    metrics.textCalls += directionMeta.attempts ?? 1;
+
+    const renderContext: CreativeRenderContext = {
       brand,
       creativeDna,
-      // A refinement re-executes the prior direction's own idea rather than
-      // being handed a fresh concept — mode and family carry over with
-      // everything else.
-      mode: parent.creativeBrief.mode,
-      artDirectionFamily: parent.creativeBrief.artDirectionFamily,
-      refinementOf: { priorDirection: parent.creativeBrief, instruction },
-    });
+      ...(referenceStyle && { referenceStyle }),
+      ...(intent && { intent }),
+      goal,
+      funnelStage,
+      platforms,
+    };
 
     const child = await generatedAssetRepository.create({
       userId,
@@ -1232,6 +1798,7 @@ export const creativeGenerationService = {
       brandId: parent.brandId,
       prompt: `${parent.prompt} — refine: ${instruction}`,
       creativeBrief: direction,
+      renderContext,
       sourceAssetUrls: parent.sourceAssetUrls,
       provider: imageProvider.id,
       model: imageProvider.model,
@@ -1240,21 +1807,39 @@ export const creativeGenerationService = {
       campaignId: parent.campaignId,
     });
 
-    // The prior output rides as a reference too, so "make it darker" edits
-    // the image the member is looking at rather than starting over. `parent`
-    // is never touched — regenerate/refine only ever add a new row, so the
-    // previous generation stays in history exactly as it was.
-    return finishGeneration({
-      userId,
-      asset: child,
-      direction,
-      imageProvider,
-      referenceUrls: [...parent.sourceAssetUrls, parent.imageUrl],
-      hasAssets: true,
-      logoAssetUrl: creativeDna.logoAssetUrl || undefined,
-      creativeDna,
-      requestId,
-    });
+    // The parent's WORDLESS visual is the reference, not its finished
+    // creative: handing an image model back its own baked-in typography is
+    // what garbles text on a refinement. Falling back to the finished image
+    // only matters for rows written before the visual was kept.
+    const priorVisual = inherited?.visualImageUrl ?? parent.imageUrl;
+
+    // `parent` is never touched — refine only ever adds a new row, so the
+    // previous successful creative stays in history exactly as it was and
+    // the UI can keep showing it if this fails.
+    try {
+      return await finishGeneration({
+        userId,
+        asset: child,
+        direction,
+        imageProvider,
+        referenceUrls: [...parent.sourceAssetUrls, priorVisual],
+        hasAssets: true,
+        logoAssetUrl: creativeDna.logoAssetUrl || undefined,
+        creativeDna,
+        referenceStyle,
+        renderContext,
+        campaign: {
+          brand,
+          ...(intent && { intent }),
+          goal,
+          platforms,
+        },
+        requestId,
+        metrics,
+      });
+    } finally {
+      logMetrics(metrics, requestId);
+    }
   },
 
   async history(userId: string, query: { contextType?: string; brandId?: string }) {

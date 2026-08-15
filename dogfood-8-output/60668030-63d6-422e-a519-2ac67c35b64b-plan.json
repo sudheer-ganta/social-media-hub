@@ -1,0 +1,142 @@
+{
+  "structure": "full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial",
+  "designRecipe": "derived-fallback",
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.658,
+          "width": 1,
+          "height": 0.342
+        },
+        "direction": "up",
+        "maxOpacity": 0.58,
+        "color": "#000000"
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.72,
+          "width": 0.7,
+          "height": 0.055
+        },
+        "spec": {
+          "lines": [
+            "BTS IS COMING BACK!"
+          ],
+          "x": 83.2,
+          "y": 1224.128,
+          "fontSize": 81.92,
+          "lineHeight": 88.4736,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "fontWeight": 700,
+          "align": "left",
+          "shadow": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.799,
+          "width": 0.7,
+          "height": 0.028
+        },
+        "spec": {
+          "lines": [
+            "30% off all our Korean food."
+          ],
+          "x": 83.2,
+          "y": 1306.24,
+          "fontSize": 33.28,
+          "lineHeight": 44.928000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "left",
+          "shadow": true,
+          "opacity": 0.95
+        }
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.85,
+          "width": 0.7,
+          "height": 0.052
+        },
+        "spec": {
+          "lines": [
+            "Event in our restaurant — celebrating the comeback",
+            "with the ARMY."
+          ],
+          "x": 83.2,
+          "y": 1387.52,
+          "fontSize": 32,
+          "lineHeight": 41.6,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "italic": true,
+          "align": "left",
+          "opacity": 0.9,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.926,
+          "width": 0.7,
+          "height": 0.022
+        },
+        "spec": {
+          "lines": [
+            "Seven Sisters, Hyderabad · 50% off"
+          ],
+          "x": 83.2,
+          "y": 1506.56,
+          "fontSize": 25.6,
+          "lineHeight": 33.28,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "left",
+          "opacity": 0.75,
+          "letterSpacing": 1,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.065,
+          "y": 0.683,
+          "width": 0.28,
+          "height": 0.002
+        },
+        "stroke": "#ffffff",
+        "opacity": 0.7
+      }
+    ],
+    "structure": "full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial"
+  }
+}

@@ -302,6 +302,13 @@ model GeneratedAsset {
   /// never shown raw to the user. See server/src/ai/generators/creative-direction.generator.ts.
   creativeBrief Json @map("creative_brief")
 
+  /// Brand, Creative DNA, reference style and the member's extracted intent —
+  /// everything a refinement needs to re-execute this creative faithfully
+  /// rather than rebuilding from empty. Null on rows written before refine
+  /// inherited its parent's context. See server/src/ai/types.ts
+  /// CreativeRenderContext.
+  renderContext Json? @map("render_context")
+
   /// Input asset URLs (product photo, logo, references) used for this
   /// generation, if any. Empty for a no-asset request.
   sourceAssetUrls String[] @default([]) @map("source_asset_urls")

@@ -163,4 +163,36 @@ describe('deriveFallbackRecipe / resolveDesignRecipe', () => {
     const recipe = deriveFallbackRecipe({ ...BASE_DIRECTION, artDirectionFamily: 'TYPOGRAPHY_LED' }, EMPTY_DNA);
     expect(recipe.layoutBehaviour).toBe('centered');
   });
+
+  it('typography follows the concept medium, never one universal house serif', () => {
+    const familyOf = (artDirectionFamily: typeof BASE_DIRECTION.artDirectionFamily) =>
+      deriveFallbackRecipe({ ...BASE_DIRECTION, artDirectionFamily }, EMPTY_DNA).typographyFamily;
+    expect(familyOf('PLAYFUL_GRAPHIC')).toBe('geometric-sans');
+    expect(familyOf('PRODUCT_STUDIO')).toBe('sans-modern');
+    expect(familyOf('COLLAGE')).toBe('mixed');
+    expect(familyOf('TYPOGRAPHY_LED')).toBe('condensed-display');
+    // Editorial media still earn the serif — as a derived choice, not a default.
+    expect(familyOf('EDITORIAL_PHOTOGRAPHY')).toBe('serif-editorial');
+  });
+});
+
+describe('resolvePalette — no FlowPost house palette', () => {
+  it('brand colours outrank reference colours, which outrank the campaign palette', () => {
+    const brand = resolvePalette(['#8b1e1e'], ['#2244cc'], ['#22aa66']);
+    expect(brand.accent).toBe('#8b1e1e');
+    const reference = resolvePalette([], ['#2244cc'], ['#22aa66']);
+    expect(reference.accent).toBe('#2244cc');
+  });
+
+  it('with no brand and no reference colours, the campaign palette tints the piece — never the neutral cream', () => {
+    const palette = resolvePalette([], [], ['#0b3d2e', '#e8f4ec', '#ff6b35']);
+    expect(palette.accent).toBe('#ff6b35');
+    expect(palette.paper).toBe('#e8f4ec');
+    expect(palette.ink).toBe('#0b3d2e');
+  });
+
+  it('the neutral floor is reachable only when every DNA layer supplied nothing', () => {
+    const palette = resolvePalette([], [], []);
+    expect(palette.paper).toBe('#f7f4ee');
+  });
 });

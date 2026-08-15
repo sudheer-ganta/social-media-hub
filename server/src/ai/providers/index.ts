@@ -6,6 +6,8 @@ import {
   geminiVisionProvider,
   geminiMarketingProvider,
   geminiLightProvider,
+  geminiFastProvider,
+  geminiCreativeProvider,
 } from './gemini.provider';
 import { geminiImageProvider } from './gemini-image.provider';
 
@@ -21,6 +23,8 @@ export {
   geminiVisionProvider,
   geminiMarketingProvider,
   geminiLightProvider,
+  geminiFastProvider,
+  geminiCreativeProvider,
 } from './gemini.provider';
 export {
   type AiImageProvider,
@@ -65,16 +69,21 @@ export function activeProvider(id?: string): AiTextProvider {
  *   light      chores — alt text and other small, frequent calls.
  *   creative   the creative-direction brief that precedes an image
  *              generation — structured reasoning about brand + request, not
- *              prose, so it shares Marketing's model rather than Caption's.
+ *              prose. CREATIVE_TEXT_MODEL, the pipeline's strong tier.
+ *   fast       the creative pipeline's structured bookkeeping — intent
+ *              extraction, research synthesis, concept generation, QC.
+ *              FAST_TEXT_MODEL: latency-sensitive, runs several times per
+ *              generation, never the call that decides visual quality.
  */
-export type AiRole = 'caption' | 'vision' | 'marketing' | 'light' | 'creative';
+export type AiRole = 'caption' | 'vision' | 'marketing' | 'light' | 'creative' | 'fast';
 
 const geminiByRole: Record<AiRole, AiTextProvider> = {
   caption: geminiCaptionProvider,
   vision: geminiVisionProvider,
   marketing: geminiMarketingProvider,
   light: geminiLightProvider,
-  creative: geminiMarketingProvider,
+  creative: geminiCreativeProvider,
+  fast: geminiFastProvider,
 };
 
 /**

@@ -1,0 +1,153 @@
+{
+  "structure": "inset/grid/solid-band-footer/logo:corner/type:serif-editorial",
+  "designRecipe": "derived-fallback",
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.635
+    },
+    "blocks": [
+      {
+        "kind": "footer",
+        "rect": {
+          "x": 0,
+          "y": 0.856,
+          "width": 1,
+          "height": 0.144
+        },
+        "style": "solid-band",
+        "fill": "#f7f4ee"
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.885,
+          "width": 0.87,
+          "height": 0.025
+        },
+        "spec": {
+          "lines": [
+            "The best luxury comfort for your culinary trip."
+          ],
+          "x": 83.2,
+          "y": 1443.232,
+          "fontSize": 32,
+          "lineHeight": 40,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1a1a1a",
+          "italic": true
+        }
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.549,
+          "y": 0.931,
+          "width": 0.386,
+          "height": 0.04
+        },
+        "spec": {
+          "text": "Claim Your Luxury Experience",
+          "x": 702.9821439999998,
+          "y": 1489.7279999999998,
+          "width": 493.81785600000006,
+          "height": 64.512,
+          "fontSize": 24.729600000000005,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "rect",
+          "fill": "#1a1a1a",
+          "textFill": "#ffffff"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.94,
+          "width": 0.455,
+          "height": 0.022
+        },
+        "spec": {
+          "lines": [
+            "50% OFF"
+          ],
+          "x": 83.2,
+          "y": 1530.944,
+          "fontSize": 25.6,
+          "lineHeight": 33.28,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#1a1a1a",
+          "opacity": 0.75,
+          "letterSpacing": 1
+        }
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.672,
+          "width": 0.86,
+          "height": 0.05
+        },
+        "spec": {
+          "lines": [
+            "BTS is coming back."
+          ],
+          "x": 83.2,
+          "y": 1140.1792,
+          "fontSize": 74.24000000000001,
+          "lineHeight": 80.17920000000001,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#1a1a1a",
+          "fontWeight": 700,
+          "align": "left"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.745,
+          "width": 0.86,
+          "height": 0.028
+        },
+        "spec": {
+          "lines": [
+            "Stamp your journey with cheap yet luxury authentic Korean food."
+          ],
+          "x": 83.2,
+          "y": 1220.7552,
+          "fontSize": 33.28,
+          "lineHeight": 44.928000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#1a1a1a",
+          "align": "left",
+          "opacity": 0.85
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.855,
+          "y": 0.036,
+          "width": 0.08,
+          "height": 0.064
+        },
+        "opacity": 1
+      }
+    ],
+    "structure": "inset/grid/solid-band-footer/logo:corner/type:serif-editorial"
+  }
+}

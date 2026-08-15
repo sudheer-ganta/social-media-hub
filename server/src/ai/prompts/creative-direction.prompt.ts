@@ -1,10 +1,12 @@
 import { renderBrandSection } from '../brand/brand-profile';
 import { renderCreativeDnaSection } from '../brand/creative-dna';
+import { renderIntentSection } from '../generators/creative-intent.generator';
 import type {
   ArtDirectionFamily,
   BrandProfile,
   CreativeConcept,
   CreativeDirection,
+  CreativeIntentBrief,
   CreativeResearch,
   FunnelStage,
   MarketingGoal,
@@ -45,15 +47,22 @@ const ART_DIRECTION_FAMILY_HINTS: Record<ArtDirectionFamily, string> = {
  * spec §23: "the image model is not the creative director."
  */
 
-export const CREATIVE_DIRECTION_PROMPT_VERSION = 4;
+export const CREATIVE_DIRECTION_PROMPT_VERSION = 6;
 
-const SYSTEM_INSTRUCTION = `You are an art director at a brand studio, executing one specific creative idea — never inventing a new one and never defaulting to a generic template.
+const SYSTEM_INSTRUCTION = `You are an art director at a multi-brand studio, executing one specific creative idea for one specific client — never inventing a new one, never defaulting to a generic template, and never applying a house style of your own.
 
 Rules you never break:
+- Three inputs, three jobs, in priority order — never let one collapse into another: the brand's confirmed identity (logo, colours, typography preferences, tone, personality, audience) CONSTRAINS the creative; the member's request + stated requirements (product, offer, event, occasion, audience, message) DETERMINE what is being advertised; any reference style INFLUENCES how it feels. The same brand must be able to look dramatically different across campaigns, and different brands given the same request must produce dramatically different work.
+- Every aesthetic choice — palette, typography character, texture, lighting, mood — must be traceable to THIS brand, THIS campaign/occasion/product, THESE references, or THIS concept. Never reach for a stock aesthetic (dark-purple event glow, blue-and-white "premium SaaS", warm amber "restaurant cosy", beige "luxury minimal", or any other genre default) unless this client's own brand, campaign or references specifically call for it.
 - Execute the given concept's mechanism specifically. If it's a visual metaphor, the metaphor must be visibly the subject. If it's a puzzle/interaction, the image must actually look like something to solve or respond to — not a product photo with a caption bolted on.
 - The product must participate in the idea, not just sit inside a pretty scene. If a product or reference image was attached, preserve its actual identity — describe it as "the attached product/subject", never invent a replacement.
 - Never invent claims, prices, offers, or a logo that was not provided. negativeVisualConstraints must name anything the image must NOT show.
 - The IMAGE is wordless, always. concept, visualStory, subject, environment, composition and layoutDirection describe a photograph/illustration that contains NO letters, words, numerals, labels, wordmarks, or typography of any kind — never "the word X formed in steam", never "blueprint with labelled parts", never a diagram with callouts. FlowPost typesets every word itself afterward, so any verbal or typographic idea must live in headline/supportingLine/cta/marketingCreative instead. An "anatomy/blueprint/explainer" concept renders as one richly-detailed WORDLESS subject; its explanation becomes the copy.
+- HARD REQUIREMENTS ARE TYPESET, NOT IMPLIED. If a "## What the member actually asked for" section is given below, every requirement it lists must appear in the WORDS of this creative — headline, supportingLine, cta, marketingCreative.offerText, marketingCreative.brandMessage or marketingCreative.secondaryInfo. The image cannot carry them on its own, so a requirement that only lives in the subject or visualStory fields is invisible on the finished creative. Never assume the viewer will infer the offer from a photograph. Write them the member's way — "50% off" stays "50% off", never "half price", never "a special treat". Everything else about how they are phrased and arranged is yours.
+- OFFERS AND EVENTS ARE DESIGNED DEVICES, NOT SENTENCES. When the member states an offer, author marketingCreative.offerText as a short display fragment in their exact terms ("50% OFF ALL KOREAN FOOD") — it becomes the campaign's second focal element after the headline, so never bury the same offer again inside a long supporting sentence. When the request centres on an event, author marketingCreative.eventBadge as a 2–4 word label ("BTS COMEBACK EVENT"). A promotional request wants promotional copy energy: a headline that sounds like a campaign shouted with conviction, not a polite caption — but still in this brand's voice, never generic hype that contradicts it.
+- When the request centres on a cultural moment with a strong visual identity of its own (a fandom, a festival, a team), let the palette and graphic mood lean into that identity — the viewer should feel the moment instantly — while keeping the brand's own colours present so the piece is still unmistakably the brand's. A promotional/event campaign's palette must include at least one saturated signature colour used with conviction; an all-neutral or greyscale palette is acceptable only when the brand's confirmed identity demands it.
+- When the campaign promotes a physical product or food, that product is visibly present — and appetising/desirable — in the scene. Even when the concept's mechanism is another object (a ticket, a receipt, a sign), stage the product WITH that object rather than letting the mechanism replace it: a restaurant promo whose frame contains no food has failed, however clever the device.
+- The request is THIS campaign's subject; the brand profile is a persistent constraint on voice, palette and personality, never the subject. A multi-cuisine restaurant asking for a Korean campaign gets Korean food, in that brand's voice.
 - Decide copyTreatment from what the idea needs, not from habit: 'none' when the visual alone communicates it, 'headline' for one short line, 'headline_support' for a headline plus one supporting line, 'interactive' when the concept is a puzzle/game and needs a short instruction, 'editorial_punchline' for a single punchy line in an editorial layout. Most ideas need less text than you'd think.
 - Any headline/supportingLine/cta must be short, human and specific to this brand and request. Never generic marketing language, never "revolutionary/seamless/game-changing/elevate/unlock/unleash" or similar AI-sounding filler, never a paragraph.
 - A beautiful image with a headline bolted on is a CONCEPT, not a finished creative. A finished creative is concept + visual + copy + brand + (audience interaction, when the idea is participatory) + secondary information, when the idea needs any of those. Before you finish, ask: does the viewer know what this is about, what's being sold, and remember the brand — or is it just a nice picture? If a request is promotional and the brand/value proposition wouldn't be clear from the image alone, add what's missing via marketingCreative rather than shipping a mood board.
@@ -98,7 +107,10 @@ export const CREATIVE_DIRECTION_RESPONSE_SCHEMA: Record<string, unknown> = {
     },
     lighting: { type: 'string', description: 'The quality and direction of light.' },
     mood: { type: 'string', description: 'The emotional register in a few words.' },
-    palette: stringArray('3–6 hex colours this creative should use.', 6),
+    palette: stringArray(
+      '3–6 hex colours DERIVED for this specific creative from brand identity + campaign/occasion + product + concept (+ reference palette when given) — never a genre default or a palette reused from unrelated work.',
+      6,
+    ),
     brandConstraints: stringArray(
       'Concrete rules this generation must honour from the brand/visual identity given.',
       8,
@@ -137,6 +149,14 @@ export const CREATIVE_DIRECTION_RESPONSE_SCHEMA: Record<string, unknown> = {
         brandMessage: {
           type: 'string',
           description: 'Why this brand specifically, distinct from the headline — e.g. "Cooked in silence, served with love." Empty string if the headline already carries this.',
+        },
+        offerText: {
+          type: 'string',
+          description: 'The offer as a SHORT display fragment for a large graphic device — e.g. "50% OFF ALL KOREAN FOOD", never a sentence. Keep the member\'s exact numbers/terms. Empty string when there is no offer.',
+        },
+        eventBadge: {
+          type: 'string',
+          description: 'A 2–4 word event label for a small badge/ribbon device — e.g. "BTS COMEBACK EVENT". Empty string when the request has no event.',
         },
         secondaryInfo: stringArray('Practical/location detail that finishes the creative, e.g. ["Prism Mall, Gachibowli"]. Empty array if none applies.', 4),
         logoTreatment: {
@@ -308,6 +328,8 @@ export function buildCreativeDirectionPrompt(context: {
   refinementOf?: { priorDirection: CreativeDirection; instruction: string };
   research?: CreativeResearch;
   referenceStyle?: ReferenceStyleProfile;
+  /** The member's hard requirements — carried into a refinement too, so an edit never quietly drops the offer. */
+  intent?: CreativeIntentBrief;
 }): BuiltCreativeDirectionPrompt {
   const brandSection = renderBrandSection(context.brand);
   const dnaSection = renderCreativeDnaSection(context.creativeDna);
@@ -322,6 +344,8 @@ export function buildCreativeDirectionPrompt(context: {
     context.refinementOf
       ? `Refine the existing creative per this instruction: "${context.refinementOf.instruction}". Change only what the instruction names — everything else must match the prior direction below exactly.`
       : `Art-direct this idea for the request: "${context.request}"`,
+
+    renderIntentSection(context.intent),
 
     `## Art direction family to execute (fixed, do not change): ${context.artDirectionFamily}\n${ART_DIRECTION_FAMILY_HINTS[context.artDirectionFamily]}`,
 

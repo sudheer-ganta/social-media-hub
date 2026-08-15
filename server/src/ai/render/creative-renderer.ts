@@ -63,9 +63,18 @@ const sameCopy = (a: string, b: string) => a.toLowerCase().replace(/[^a-z0-9]/g,
 
 export function buildContent(direction: CreativeDirection, hasLogo: boolean): ContentInput {
   const wantsCopy = direction.copyTreatment !== 'none';
-  const support =
+  let support =
     direction.copyTreatment === 'headline_support' && direction.supportingLine ? direction.supportingLine : undefined;
   const brandMessage = direction.marketingCreative?.brandMessage;
+  // Stage A has no dedicated offer device — the offer display fragment rides
+  // as the support line (or joins the footer) so the standalone creative
+  // still carries it. Stage B gives it its own graphic treatment.
+  const offerText = direction.marketingCreative?.offerText;
+  const secondaryInfo = [...(direction.marketingCreative?.secondaryInfo ?? [])];
+  if (offerText && !(direction.headline && sameCopy(offerText, direction.headline)) && !(support && sameCopy(offerText, support))) {
+    if (wantsCopy && !support) support = offerText;
+    else if (!secondaryInfo.some((line) => sameCopy(line, offerText))) secondaryInfo.unshift(offerText);
+  }
   return {
     ...(wantsCopy && direction.headline && { headline: direction.headline }),
     ...(support && { support }),
@@ -74,8 +83,8 @@ export function buildContent(direction: CreativeDirection, hasLogo: boolean): Co
     // The direction model sometimes files the same line as both supportingLine
     // and brandMessage — one of them renders, never both.
     ...(brandMessage && !(support && sameCopy(brandMessage, support)) && { brandMessage }),
-    ...(direction.marketingCreative?.secondaryInfo?.length && {
-      secondaryInfo: direction.marketingCreative.secondaryInfo.join(' · '),
+    ...(secondaryInfo.length && {
+      secondaryInfo: secondaryInfo.join(' · '),
     }),
     ...(direction.cta && { cta: direction.cta }),
     hasLogo,
@@ -197,7 +206,7 @@ export async function renderCreative({
 }: RenderCreativeOptions): Promise<RenderedCreative> {
   const { width, height } = resolveCanvasSize(direction.aspectRatio);
   const recipe = resolveDesignRecipe(direction, creativeDna, referenceStyle);
-  const palette = resolvePalette(creativeDna.brandColors, recipe.colorPalette);
+  const palette = resolvePalette(creativeDna.brandColors, recipe.colorPalette, direction.palette);
   const content = buildContent(direction, Boolean(logoImage));
 
   const copyZoneTone =

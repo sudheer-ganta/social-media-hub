@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import type { CreativeDirection } from '../ai/types';
+import type { CreativeDirection, CreativeRenderContext } from '../ai/types';
 
 /**
  * The only module that reads or writes `generated_assets`.
@@ -24,6 +24,8 @@ export interface CreateGeneratedAssetInput {
   brandId?: string | null;
   prompt: string;
   creativeBrief: CreativeDirection;
+  /** Everything a refinement of this asset will need — brand, DNA, reference style, intent. */
+  renderContext?: CreativeRenderContext;
   sourceAssetUrls: string[];
   provider: string;
   model: string;
@@ -40,6 +42,8 @@ export interface StoredGeneratedAsset {
   brandId: string | null;
   prompt: string;
   creativeBrief: CreativeDirection;
+  /** Null on rows written before refinements inherited their parent's context. */
+  renderContext: CreativeRenderContext | null;
   sourceAssetUrls: string[];
   imageUrl: string | null;
   cloudinaryPublicId: string | null;
@@ -64,6 +68,7 @@ function mapRow(row: Record<string, unknown>): StoredGeneratedAsset {
     brandId: row.brandId as string | null,
     prompt: row.prompt as string,
     creativeBrief: row.creativeBrief as CreativeDirection,
+    renderContext: (row.renderContext as CreativeRenderContext | null) ?? null,
     sourceAssetUrls: row.sourceAssetUrls as string[],
     imageUrl: row.imageUrl as string | null,
     cloudinaryPublicId: row.cloudinaryPublicId as string | null,
@@ -89,6 +94,7 @@ export async function create(input: CreateGeneratedAssetInput): Promise<StoredGe
       brandId: input.contextType === 'brand' ? (input.brandId ?? null) : null,
       prompt: input.prompt,
       creativeBrief: input.creativeBrief as unknown as object,
+      ...(input.renderContext && { renderContext: input.renderContext as unknown as object }),
       sourceAssetUrls: input.sourceAssetUrls,
       provider: input.provider,
       model: input.model,
@@ -103,7 +109,15 @@ export async function create(input: CreateGeneratedAssetInput): Promise<StoredGe
 
 export async function markCompleted(
   id: string,
-  data: { imageUrl: string; cloudinaryPublicId: string; width?: number; height?: number; format?: string },
+  data: {
+    imageUrl: string;
+    cloudinaryPublicId: string;
+    width?: number;
+    height?: number;
+    format?: string;
+    /** Written here rather than at create() because it carries the visual's own URL, which only exists once the image has been made. */
+    renderContext?: CreativeRenderContext;
+  },
 ): Promise<StoredGeneratedAsset> {
   const row = await prisma.generatedAsset.update({
     where: { id },
@@ -114,6 +128,7 @@ export async function markCompleted(
       ...(data.width !== undefined && { width: data.width }),
       ...(data.height !== undefined && { height: data.height }),
       ...(data.format !== undefined && { format: data.format }),
+      ...(data.renderContext && { renderContext: data.renderContext as unknown as object }),
     },
   });
   return mapRow(row);

@@ -1,4 +1,5 @@
 import { buildCreativeDirectionPrompt } from '../prompts/creative-direction.prompt';
+import { missingFromCreative } from '../intent/claim-match';
 import type { AiTextProvider } from '../providers';
 import type {
   ArtDirectionFamily,
@@ -7,6 +8,7 @@ import type {
   CreativeConcept,
   CreativeDirection,
   CreativeDirectionOutcome,
+  CreativeIntentBrief,
   CreativeMode,
   CreativeResearch,
   FunnelStage,
@@ -73,16 +75,20 @@ function normaliseMarketingCreative(
   if (!raw || typeof raw !== 'object') return undefined;
 
   const brandMessage = asString(raw.brandMessage, 200);
+  const offerText = asString(raw.offerText, 60);
+  const eventBadge = asString(raw.eventBadge, 40);
   const secondaryInfo = asStringArray(raw.secondaryInfo, 4, 120);
   const logoTreatment = asString(raw.logoTreatment, 200);
   const requiredElements = asStringArray(raw.requiredElements, 6, 120);
 
-  if (!brandMessage && secondaryInfo.length === 0 && !logoTreatment && requiredElements.length === 0) {
+  if (!brandMessage && !offerText && !eventBadge && secondaryInfo.length === 0 && !logoTreatment && requiredElements.length === 0) {
     return undefined;
   }
 
   return {
     ...(brandMessage && { brandMessage }),
+    ...(offerText && { offerText }),
+    ...(eventBadge && { eventBadge }),
     ...(secondaryInfo.length > 0 && { secondaryInfo }),
     ...(logoTreatment && { logoTreatment }),
     ...(requiredElements.length > 0 && { requiredElements }),
@@ -176,6 +182,35 @@ function isUncommunicative(direction: CreativeDirection): boolean {
   return true;
 }
 
+/**
+ * Last-resort repair (spec §1.4): the model was asked twice and still left a
+ * hard requirement off the creative, so FlowPost types it on itself rather
+ * than returning a creative that drops what the member paid for.
+ *
+ * Deliberately unglamorous — the claims land in `secondaryInfo`, which the
+ * renderer sets in small footer type. A less pretty creative that says "50%
+ * off" beats a beautiful one that doesn't, and this only ever runs after the
+ * model has had its chance to say it better.
+ */
+export function repairMissingRequirements(
+  direction: CreativeDirection,
+  missing: string[],
+): CreativeDirection {
+  if (missing.length === 0) return direction;
+  const existing = direction.marketingCreative?.secondaryInfo ?? [];
+  return {
+    ...direction,
+    // 'none' would mean the renderer typesets nothing at all — a creative
+    // carrying required claims always needs at least a copy layer.
+    copyTreatment: direction.copyTreatment === 'none' ? 'headline' : direction.copyTreatment,
+    headline: direction.headline || missing[0],
+    marketingCreative: {
+      ...direction.marketingCreative,
+      secondaryInfo: [...new Set([...existing, ...missing])].slice(0, 4),
+    },
+  };
+}
+
 export interface GenerateCreativeDirectionOptions {
   provider: AiTextProvider;
   request: string;
@@ -194,6 +229,8 @@ export interface GenerateCreativeDirectionOptions {
   refinementOf?: { priorDirection: CreativeDirection; instruction: string };
   research?: CreativeResearch;
   referenceStyle?: ReferenceStyleProfile;
+  /** The member's hard requirements. Validated against the copy this stage authors — see spec §1.4. */
+  intent?: CreativeIntentBrief;
 }
 
 export async function generateCreativeDirection({
@@ -211,6 +248,7 @@ export async function generateCreativeDirection({
   refinementOf,
   research,
   referenceStyle,
+  intent,
 }: GenerateCreativeDirectionOptions): Promise<CreativeDirectionOutcome> {
   const startedAt = Date.now();
 
@@ -227,6 +265,7 @@ export async function generateCreativeDirection({
     refinementOf,
     research,
     referenceStyle,
+    intent,
   });
 
   const payload = (await provider.generateJson({
@@ -238,22 +277,67 @@ export async function generateCreativeDirection({
 
   let direction = normaliseDirection(payload, mode, artDirectionFamily);
 
-  // Spec: "if the brief is effectively empty, don't call the image model —
-  // generate another concept." A full re-run back through concept discovery
-  // is more machinery than this earns; one bounded retry with an explicit
-  // nudge covers the actual failure mode (the model defaulted to 'none' for
-  // a request that needed to say what's being sold).
-  if (!refinementOf && COMMUNICATION_CRITICAL_GOALS.includes(goal) && isUncommunicative(direction)) {
+  // ── One bounded repair, never more (latency budget: direction ≤ 2 calls) ──
+  // Two defects used to earn a retry each, so a bad day cost three sequential
+  // model calls. Both checks now run against the first attempt and share a
+  // single repair call naming every problem at once; whatever that still
+  // misses is fixed deterministically by repairMissingRequirements.
+  let missing = missingFromCreative(direction, intent);
+  const uncommunicative =
+    !refinementOf && COMMUNICATION_CRITICAL_GOALS.includes(goal) && isUncommunicative(direction);
+  let directionAttempts = 1;
+  const repairAttempted = missing.length > 0 || uncommunicative;
+  let repaired = false;
+
+  if (repairAttempted) {
+    console.warn('[ai] creative direction needs repair', {
+      missing,
+      uncommunicative,
+      refinement: Boolean(refinementOf),
+    });
+    const problems = [
+      uncommunicative &&
+        `it shipped no headline and no brand message — for a ${goal.replace(/_/g, ' ')} request, the viewer needs to know what's being sold. Add a headline, brandMessage, or secondaryInfo — whichever actually fits this idea.`,
+      missing.length > 0 &&
+        `it left ${missing.length === 1 ? 'a requirement the member stated' : 'requirements the member stated'} off the creative entirely: ${missing
+          .map((claim) => `"${claim}"`)
+          .join(', ')}. ${
+          refinementOf
+            ? 'Keep the refinement instruction, and keep every other field as the prior direction had it — but the copy must still carry these.'
+            : 'Keep the idea.'
+        } Put each one into the words of the creative — headline, supportingLine, cta, marketingCreative.offerText, marketingCreative.brandMessage or marketingCreative.secondaryInfo — using the member's own phrasing. The image is wordless, so the copy is the only place these can live.`,
+    ].filter((problem): problem is string => typeof problem === 'string');
+
+    directionAttempts += 1;
     const retryPayload = (await provider.generateJson({
       systemInstruction: built.systemInstruction,
-      prompt: `${built.prompt}\n\nYour previous attempt at this brief shipped no headline and no brand message — for a ${goal.replace(/_/g, ' ')} request, the viewer needs to know what's being sold. Add a headline, brandMessage, or secondaryInfo — whichever actually fits this idea.`,
+      prompt: `${built.prompt}\n\nYour previous attempt had ${problems.length === 1 ? 'a problem' : 'problems'}:\n${problems
+        .map((problem) => `- ${problem}`)
+        .join('\n')}`,
       responseSchema: built.responseSchema,
       temperature: built.temperature,
     })) as RawCreativeDirectionPayload;
-    direction = normaliseDirection(retryPayload, mode, artDirectionFamily);
+    const retried = normaliseDirection(retryPayload, mode, artDirectionFamily);
+    const retriedMissing = missingFromCreative(retried, intent);
+    // Keep whichever attempt carries more of the requirements — a retry that
+    // fixed the offer but lost the event is not an improvement. On a tie the
+    // retry wins: it was also asked to fix communicativeness.
+    if (retriedMissing.length <= missing.length) {
+      direction = retried;
+      missing = retriedMissing;
+    }
+    if (missing.length > 0) {
+      direction = repairMissingRequirements(direction, missing);
+      repaired = true;
+      missing = missingFromCreative(direction, intent);
+    }
   }
 
   const durationMs = Date.now() - startedAt;
+  const repairSucceeded =
+    repairAttempted &&
+    missing.length === 0 &&
+    !(!refinementOf && COMMUNICATION_CRITICAL_GOALS.includes(goal) && isUncommunicative(direction));
 
   console.info('[ai] creative direction generated', {
     model: provider.model,
@@ -263,11 +347,17 @@ export async function generateCreativeDirection({
     copyTreatment: direction.copyTreatment,
     hasAssets,
     refinement: Boolean(refinementOf),
+    requiredClaims: intent?.requiredClaims ?? [],
+    directionAttempts,
+    repairAttempted,
+    repairSucceeded,
+    deterministicRepair: repaired,
+    stillMissing: missing,
   });
 
   return {
     direction,
-    meta: { provider: provider.id, model: provider.model, durationMs },
+    meta: { provider: provider.id, model: provider.model, durationMs, attempts: directionAttempts },
   };
 }
 

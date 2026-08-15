@@ -1,0 +1,175 @@
+{
+  "structure": "full-bleed/asymmetric/no-footer/logo:corner/type:serif-editorial",
+  "designRecipe": "derived-fallback",
+  "plan": {
+    "canvas": {
+      "width": 1280,
+      "height": 1600
+    },
+    "paper": "#f7f4ee",
+    "imageRect": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "blocks": [
+      {
+        "kind": "scrim",
+        "rect": {
+          "x": 0,
+          "y": 0.481,
+          "width": 1,
+          "height": 0.519
+        },
+        "direction": "up",
+        "maxOpacity": 0.58,
+        "color": "#000000"
+      },
+      {
+        "kind": "text",
+        "role": "headline",
+        "rect": {
+          "x": 0.065,
+          "y": 0.544,
+          "width": 0.7,
+          "height": 0.166
+        },
+        "spec": {
+          "lines": [
+            "BTS is coming back.",
+            "Your cheap ticket to",
+            "celebrate."
+          ],
+          "x": 83.2,
+          "y": 941.9007999999999,
+          "fontSize": 81.92,
+          "lineHeight": 88.4736,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "fontWeight": 700,
+          "align": "left",
+          "shadow": true
+        }
+      },
+      {
+        "kind": "text",
+        "role": "support",
+        "rect": {
+          "x": 0.065,
+          "y": 0.733,
+          "width": 0.7,
+          "height": 0.056
+        },
+        "spec": {
+          "lines": [
+            "Enjoy 50% off all Korean food in honor of the",
+            "comeback."
+          ],
+          "x": 83.2,
+          "y": 1200.9599999999998,
+          "fontSize": 33.28,
+          "lineHeight": 44.928000000000004,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "left",
+          "shadow": true,
+          "opacity": 0.95
+        }
+      },
+      {
+        "kind": "text",
+        "role": "brandMessage",
+        "rect": {
+          "x": 0.065,
+          "y": 0.812,
+          "width": 0.7,
+          "height": 0.026
+        },
+        "spec": {
+          "lines": [
+            "The best luxury Korean food."
+          ],
+          "x": 83.2,
+          "y": 1327.168,
+          "fontSize": 32,
+          "lineHeight": 41.6,
+          "fontFamily": "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+          "fill": "#ffffff",
+          "italic": true,
+          "align": "left",
+          "opacity": 0.9,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "cta",
+        "rect": {
+          "x": 0.065,
+          "y": 0.862,
+          "width": 0.363,
+          "height": 0.04
+        },
+        "spec": {
+          "text": "Book Your Luxury Comfort",
+          "x": 83.2,
+          "y": 1379.0079999999998,
+          "width": 464.48640000000006,
+          "height": 64.512,
+          "fontSize": 26.880000000000003,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "shape": "underline",
+          "fill": "#1a1a1a",
+          "textFill": "#ffffff"
+        }
+      },
+      {
+        "kind": "text",
+        "role": "secondaryInfo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.926,
+          "width": 0.7,
+          "height": 0.022
+        },
+        "spec": {
+          "lines": [
+            "50% off all Korean food"
+          ],
+          "x": 83.2,
+          "y": 1506.5599999999997,
+          "fontSize": 25.6,
+          "lineHeight": 33.28,
+          "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+          "fill": "#ffffff",
+          "align": "left",
+          "opacity": 0.75,
+          "letterSpacing": 1,
+          "shadow": true
+        }
+      },
+      {
+        "kind": "logo",
+        "rect": {
+          "x": 0.065,
+          "y": 0.036,
+          "width": 0.08,
+          "height": 0.064
+        },
+        "opacity": 1
+      },
+      {
+        "kind": "divider",
+        "rect": {
+          "x": 0.065,
+          "y": 0.506,
+          "width": 0.28,
+          "height": 0.002
+        },
+        "stroke": "#ffffff",
+        "opacity": 0.7
+      }
+    ],
+    "structure": "full-bleed/asymmetric/no-footer/logo:corner/type:serif-editorial"
+  }
+}

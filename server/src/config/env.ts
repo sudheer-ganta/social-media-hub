@@ -160,7 +160,17 @@ export const env = {
   // Flash Image ("nano banana"), not Imagen: it's the only Gemini image model
   // that accepts reference images (a product photo, a logo) alongside the
   // prompt and preserves what it's shown — see ai/providers/gemini-image.provider.ts.
-  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
+  GEMINI_IMAGE_MODEL: process.env.IMAGE_MODEL || process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
+
+  // ── Creative-pipeline model tiers ──────────────────────────────────────────
+  // The creative pipeline splits its text work by value: intent extraction,
+  // research synthesis, concept generation and QC run on the fast model; only
+  // the creative direction (the brief the image is generated from) earns the
+  // reasoning model. Both are env-overridable per deployment; IMAGE_MODEL
+  // above overrides GEMINI_IMAGE_MODEL the same way.
+  FAST_TEXT_MODEL: process.env.FAST_TEXT_MODEL || 'gemini-3.6-flash',
+  CREATIVE_TEXT_MODEL:
+    process.env.CREATIVE_TEXT_MODEL || process.env.GEMINI_MARKETING_MODEL || 'gemini-3.1-pro-preview',
 
   // ── Creative research (Gemini + Google Search grounding) ───────────────────
   //

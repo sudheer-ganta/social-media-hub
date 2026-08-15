@@ -328,3 +328,5 @@ export const geminiCaptionProvider = new GeminiProvider(env.GEMINI_API_KEY, env.
 export const geminiVisionProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_VISION_MODEL);
 export const geminiMarketingProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MARKETING_MODEL);
 export const geminiLightProvider = new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_LIGHT_MODEL);
+export const geminiFastProvider = new GeminiProvider(env.GEMINI_API_KEY, env.FAST_TEXT_MODEL);
+export const geminiCreativeProvider = new GeminiProvider(env.GEMINI_API_KEY, env.CREATIVE_TEXT_MODEL);

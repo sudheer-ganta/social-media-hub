@@ -352,6 +352,55 @@ describe('generateCreativeDirection — retry', () => {
 
     expect(provider.generateJson).toHaveBeenCalledTimes(1);
   });
+
+  it('makes at most TWO model calls even when the brief is both uncommunicative and drops a requirement', async () => {
+    // Both defect classes at once used to earn a retry each (three calls).
+    // The repair is consolidated: one call naming every problem together.
+    const doubleDefect = { ...RAW_PAYLOAD, headline: '', copyTreatment: 'none' };
+    const generateJson = vi.fn().mockResolvedValue(doubleDefect);
+    const provider: AiTextProvider = {
+      id: 'mock',
+      model: 'mock-model',
+      supportsVision: false,
+      isConfigured: () => true,
+      generateJson,
+    };
+
+    const { direction, meta } = await generateCreativeDirection({
+      provider,
+      request: 'BTS comeback — 50% off Korean food.',
+      goal: 'sales',
+      funnelStage: 'BOFU',
+      platforms: [],
+      hasAssets: false,
+      brand: resolveBrandProfile(),
+      creativeDna: resolveCreativeDna(),
+      concept: SAMPLE_CONCEPT,
+      mode: 'EDITORIAL',
+      intent: {
+        extracted: true,
+        event: '',
+        culturalContext: '',
+        productCategory: '',
+        offer: '50% off',
+        promotionType: '',
+        venueType: '',
+        audience: '',
+        requiredClaims: ['50% off'],
+        optionalDetails: [],
+        confidence: {},
+      },
+    });
+
+    expect(generateJson).toHaveBeenCalledTimes(2);
+    expect(meta.attempts).toBe(2);
+    // The single repair prompt named BOTH problems.
+    const repairPrompt = generateJson.mock.calls[1][0].prompt as string;
+    expect(repairPrompt).toContain('no headline and no brand message');
+    expect(repairPrompt).toContain('"50% off"');
+    // The deterministic repair still guarantees the claim ships.
+    expect(JSON.stringify(direction)).toContain('50% off');
+  });
 });
 
 describe('summariseCreativeDirection', () => {
@@ -381,5 +430,154 @@ describe('summariseCreativeDirection', () => {
     expect(summary).toContain('Aura');
     expect(summary).toContain('instagram, linkedin');
     expect(summary).toContain('Quiet. Bold. Yours.');
+  });
+});
+
+// ── Intent fidelity (spec §1.4) ─────────────────────────────────────────────
+//
+// The copy this stage authors is the only place a hard requirement can be
+// legible — the visual is wordless. A direction that drops one is repaired
+// before a single pixel is paid for.
+
+describe('generateCreativeDirection — hard requirements', () => {
+  const INTENT = {
+    extracted: true,
+    event: 'BTS comeback',
+    culturalContext: 'K-pop',
+    productCategory: 'Korean food',
+    offer: '50% off',
+    promotionType: 'event promotion',
+    venueType: 'restaurant',
+    audience: 'BTS fans',
+    requiredClaims: ['BTS comeback', 'Korean food', '50% off'],
+    optionalDetails: [],
+    confidence: {},
+  } as const;
+
+  /** A provider that answers differently on each call, for retry assertions. */
+  function sequenceProvider(payloads: Record<string, unknown>[]): AiTextProvider {
+    let call = 0;
+    return {
+      id: 'mock',
+      model: 'mock-model',
+      supportsVision: false,
+      isConfigured: () => true,
+      generateJson: vi.fn(async () => payloads[Math.min(call++, payloads.length - 1)]),
+    };
+  }
+
+  function base(provider: AiTextProvider) {
+    return {
+      provider,
+      request: 'BTS is coming back to our restaurant. 50% off all Korean food.',
+      goal: 'event_promotion' as const,
+      funnelStage: 'BOFU' as const,
+      platforms: ['instagram'],
+      hasAssets: false,
+      brand: resolveBrandProfile(),
+      creativeDna: resolveCreativeDna(),
+      concept: SAMPLE_CONCEPT,
+      mode: 'CULTURAL' as const,
+      artDirectionFamily: 'CULTURAL_EDITORIAL' as const,
+      intent: INTENT,
+    };
+  }
+
+  const COMPLIANT = {
+    ...RAW_PAYLOAD,
+    copyTreatment: 'headline_support',
+    headline: 'The BTS comeback, plated',
+    supportingLine: 'Korean food, cooked the long way.',
+    marketingCreative: { secondaryInfo: ['50% off all week'] },
+  };
+
+  it('accepts a direction whose copy already carries every requirement, with no retry', async () => {
+    const provider = sequenceProvider([COMPLIANT]);
+    const { direction } = await generateCreativeDirection(base(provider));
+
+    expect(vi.mocked(provider.generateJson)).toHaveBeenCalledTimes(1);
+    expect(direction.headline).toBe('The BTS comeback, plated');
+  });
+
+  it('retries once, naming exactly what was dropped', async () => {
+    const provider = sequenceProvider([
+      { ...RAW_PAYLOAD, headline: 'Perfectly Synchronized Flavors' },
+      COMPLIANT,
+    ]);
+
+    const { direction } = await generateCreativeDirection(base(provider));
+
+    const retry = vi.mocked(provider.generateJson).mock.calls[1][0];
+    expect(retry.prompt).toContain('"BTS comeback"');
+    expect(retry.prompt).toContain('"50% off"');
+    expect(direction.headline).toBe('The BTS comeback, plated');
+  });
+
+  it('repairs deterministically when the model drops a requirement twice — never ships without it', async () => {
+    const stubborn = { ...RAW_PAYLOAD, headline: 'Perfectly Synchronized Flavors' };
+    const provider = sequenceProvider([stubborn, stubborn]);
+
+    const { direction } = await generateCreativeDirection(base(provider));
+
+    // A less pretty creative that says "50% off" beats a beautiful one that
+    // doesn't. The claims land in the footer rather than being lost.
+    const footer = direction.marketingCreative?.secondaryInfo ?? [];
+    expect(footer).toContain('50% off');
+    expect(footer).toContain('Korean food');
+    expect(footer).toContain('BTS comeback');
+  });
+
+  it('never leaves copyTreatment at "none" when there are requirements to typeset', async () => {
+    const wordless = { ...RAW_PAYLOAD, copyTreatment: 'none', headline: '' };
+    const provider = sequenceProvider([wordless, wordless]);
+
+    const { direction } = await generateCreativeDirection(base(provider));
+
+    expect(direction.copyTreatment).not.toBe('none');
+    expect(direction.headline.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the better of the two attempts when the retry fixes one thing and loses another', async () => {
+    const provider = sequenceProvider([
+      { ...RAW_PAYLOAD, headline: 'Korean food, 50% off' },
+      { ...RAW_PAYLOAD, headline: 'BTS is back' },
+    ]);
+
+    const { direction } = await generateCreativeDirection(base(provider));
+
+    // The first attempt carried two of three; the retry carries one. Keeping
+    // the retry would be a regression dressed up as a fix.
+    expect(direction.headline).toContain('Korean food');
+  });
+
+  it('gates a refinement too — an edit can never quietly drop the offer', async () => {
+    const provider = sequenceProvider([
+      { ...RAW_PAYLOAD, headline: 'Darker, moodier' },
+      COMPLIANT,
+    ]);
+
+    await generateCreativeDirection({
+      ...base(provider),
+      concept: undefined,
+      refinementOf: {
+        priorDirection: { ...COMPLIANT, mode: 'CULTURAL', artDirectionFamily: 'CULTURAL_EDITORIAL' } as never,
+        instruction: 'make it darker',
+      },
+    });
+
+    const retry = vi.mocked(provider.generateJson).mock.calls[1][0];
+    expect(retry.prompt).toContain('Keep the refinement instruction');
+  });
+
+  it('does nothing when the member stated no requirements', async () => {
+    const provider = sequenceProvider([{ ...RAW_PAYLOAD, headline: 'Anything at all' }]);
+
+    const { direction } = await generateCreativeDirection({
+      ...base(provider),
+      intent: undefined,
+    });
+
+    expect(vi.mocked(provider.generateJson)).toHaveBeenCalledTimes(1);
+    expect(direction.headline).toBe('Anything at all');
   });
 });

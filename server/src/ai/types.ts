@@ -1101,6 +1101,10 @@ export type CopyTreatment = 'none' | 'headline' | 'headline_support' | 'interact
 export interface MarketingCreative {
   /** Why this brand specifically, distinct from the headline's hook — e.g. "Cooked in silence, served with love." */
   brandMessage?: string;
+  /** The offer as a short display fragment ("50% OFF ALL KOREAN FOOD") — rendered as the campaign's star graphic device, not body copy. */
+  offerText?: string;
+  /** A 2–4 word event label ("BTS COMEBACK EVENT") rendered as a small badge/ribbon device. */
+  eventBadge?: string;
   /** Practical/location detail that finishes the creative — e.g. "Prism Mall, Gachibowli". */
   secondaryInfo?: string[];
   /** How the logo/wordmark participates in this specific shot, if it needs a call beyond the brand's default mark. */
@@ -1176,7 +1180,8 @@ export interface CreativeDirection {
 /** What stage one hands the image call: the direction, and its provenance. */
 export interface CreativeDirectionOutcome {
   direction: CreativeDirection;
-  meta: { provider: string; model: string; durationMs: number };
+  /** `attempts` counts model calls made (1 normal + at most 1 repair) — the latency log reads it. */
+  meta: { provider: string; model: string; durationMs: number; attempts?: number };
 }
 
 /** What the direction model is asked for, before we normalise it. */
@@ -1203,6 +1208,8 @@ export interface RawCreativeDirectionPayload {
   interactionInstructions?: unknown;
   marketingCreative?: {
     brandMessage?: unknown;
+    offerText?: unknown;
+    eventBadge?: unknown;
     secondaryInfo?: unknown;
     logoTreatment?: unknown;
     requiredElements?: unknown;
@@ -1253,6 +1260,30 @@ export interface CreativeConcept {
   whyItWouldStopTheScroll?: string;
 }
 
+/**
+ * The mechanism FAMILY an idea belongs to — the axis concept-set diversity is
+ * measured on. Three concepts in one set should come from three different
+ * families: "calendar metaphor / calendar composition / calendar
+ * transformation" is one idea styled three ways, not three ideas. A planning
+ * vocabulary, never a visible recipe — no set is forced to any fixed trio.
+ */
+export type MechanismFamily =
+  | 'VISUAL_METAPHOR'
+  | 'HUMAN_OBSERVATIONAL'
+  | 'INTERACTIVE_PUZZLE'
+  | 'TYPOGRAPHY_WORDPLAY'
+  | 'SURPRISING_SCALE'
+  | 'JUXTAPOSITION'
+  | 'BEFORE_AFTER'
+  | 'TRANSFORMATION'
+  | 'STORYTELLING'
+  | 'OBJECT_INTERACTION'
+  | 'CULTURAL_OBSERVATION'
+  | 'ABSURD_SURREAL'
+  | 'PRODUCT_AS_METAPHOR'
+  | 'DOCUMENTARY_MOMENT'
+  | 'COLLAGE_GRAPHIC';
+
 /** The quality gate a concept clears before it reaches the user — spec §18. 0–100 each. */
 export interface CreativeConceptScores {
   conceptStrength: number;
@@ -1264,13 +1295,21 @@ export interface CreativeConceptScores {
   socialInteractionPotential: number;
   /** Higher = closer to a generic AI-ad default. Lower is better. */
   templateRisk: number;
+  /** How far this mechanism sits from the obvious first idea for the brief. Higher is better. */
+  mechanismNovelty: number;
+  /** Self-reported closeness to the OTHER concepts in the same set. Lower is better; high values fail the diversity gate. */
+  similarityToOtherConcepts: number;
 }
 
 export interface ScoredCreativeConcept extends CreativeConcept {
   mode: CreativeMode;
   /** The medium/technique this idea's mechanism calls for — see ArtDirectionFamily. Chosen per concept, not defaulted. */
   artDirectionFamily: ArtDirectionFamily;
+  /** The mechanism family this idea belongs to — the diversity gate compares these across the set. */
+  mechanismFamily: MechanismFamily;
   scores: CreativeConceptScores;
+  /** How well this idea carries the member's hard requirements. Absent when no intent brief was extracted. */
+  intentFidelity?: IntentFidelity;
 }
 
 export interface RawCreativeConceptPayload {
@@ -1286,6 +1325,7 @@ export interface RawCreativeConceptPayload {
   whyItWouldStopTheScroll?: unknown;
   mode?: unknown;
   artDirectionFamily?: unknown;
+  mechanismFamily?: unknown;
   scores?: {
     conceptStrength?: unknown;
     brandSpecificity?: unknown;
@@ -1295,6 +1335,8 @@ export interface RawCreativeConceptPayload {
     messageClarity?: unknown;
     socialInteractionPotential?: unknown;
     templateRisk?: unknown;
+    mechanismNovelty?: unknown;
+    similarityToOtherConcepts?: unknown;
   };
 }
 
@@ -1302,9 +1344,87 @@ export interface CreativeConceptsOutcome {
   concepts: ScoredCreativeConcept[];
   /** How many the model proposed before the quality gate filtered any out. */
   proposedCount: number;
-  meta: { provider: string; model: string; durationMs: number };
+  /** `attempts` counts model calls made (1 normal + bounded retries) — the latency log reads it. */
+  meta: { provider: string; model: string; durationMs: number; attempts?: number };
   /** Present whenever references were analysed (fresh upload or a reused saved profile) — the "FlowPost understood your style" transparency step reads this. */
   referenceStyle?: ReferenceStyleProfile;
+}
+
+// ─── Creative intent — the user's own requirements, before any creativity ────
+//
+// The first stage of the pipeline, ahead of research and concepts. A member
+// who says "BTS is coming back to our restaurant, 50% off all Korean food"
+// has stated three facts that the finished creative MUST carry; a clever
+// concept that drops the offer is a product failure, not a creative choice.
+// Extraction never invents: an offer the member didn't state stays empty.
+
+/**
+ * The member's request, normalised into HARD REQUIREMENTS (facts they
+ * supplied) and context. `requiredClaims` is the contract the rest of the
+ * pipeline is validated against — see `ai/intent/claim-match.ts`.
+ */
+export interface CreativeIntentBrief {
+  /** False when extraction was skipped or failed — the raw request is then all that's known. */
+  extracted: boolean;
+  event: string;
+  culturalContext: string;
+  productCategory: string;
+  offer: string;
+  promotionType: string;
+  venueType: string;
+  audience: string;
+  /** Facts explicitly supplied by the member. The final creative must communicate every one. */
+  requiredClaims: string[];
+  /** Nice-to-haves the member mentioned that the creative may drop. */
+  optionalDetails: string[];
+  /** 0–100 per field name, for fields the model was less than sure about. */
+  confidence: Record<string, number>;
+}
+
+/** How completely one artifact (a concept, a direction's copy) carries the hard requirements. */
+export interface IntentFidelity {
+  /** 0–100. 100 = every required claim is present. */
+  score: number;
+  requiredElementsPresent: string[];
+  missingRequirements: string[];
+}
+
+export interface RawCreativeIntentPayload {
+  event?: unknown;
+  culturalContext?: unknown;
+  productCategory?: unknown;
+  offer?: unknown;
+  promotionType?: unknown;
+  venueType?: unknown;
+  audience?: unknown;
+  requiredClaims?: unknown;
+  optionalDetails?: unknown;
+  confidence?: unknown;
+}
+
+/**
+ * Everything a refinement needs to re-execute its parent faithfully, persisted
+ * on the asset row alongside the brief.
+ *
+ * Without this, `refine()` had nothing but the prior `CreativeDirection` and
+ * rebuilt brand/DNA/reference style from empty — which silently dropped the
+ * real logo, the brand palette and the reference design recipe, so a "make it
+ * darker" came back as a differently-designed creative. See spec §4.1.
+ */
+export interface CreativeRenderContext {
+  brand: BrandProfile;
+  creativeDna: ResolvedCreativeDna;
+  referenceStyle?: ReferenceStyleProfile;
+  intent?: CreativeIntentBrief;
+  goal: MarketingGoal;
+  funnelStage: FunnelStage;
+  platforms: string[];
+  /**
+   * The wordless visual the campaign was designed over. Internal, never shown:
+   * a refinement re-executes from THIS rather than from the finished creative,
+   * so an image model is never handed back typography it then has to redraw.
+   */
+  visualImageUrl?: string;
 }
 
 /** The request behind `POST /api/ai/creative/direction` and `/generate`. */
@@ -1347,6 +1467,13 @@ export interface CreativeGenerationRequest {
    * one, so a caller that skips the picker still gets a real generation.
    */
   selectedConcept?: ScoredCreativeConcept;
+  /**
+   * The intent brief `/concepts` already extracted, handed back so generation
+   * validates against exactly the requirements the concept was gated on —
+   * same round-trip pattern as `selectedConcept` and `referenceStyleProfile`.
+   * Absent, the service extracts it itself.
+   */
+  intent?: CreativeIntentBrief;
 }
 
 /** The request behind `POST /api/ai/creative/refine`. */
