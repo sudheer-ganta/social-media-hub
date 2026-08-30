@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface PageContainerProps {
-  title?: string;
+  title?: React.ReactNode;
   description?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -39,7 +39,11 @@ export function PageContainer({
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             {title && (
-              <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
+              typeof title === "string" ? (
+                <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
+              ) : (
+                title
+              )
             )}
             {description && (
               <p className="mt-1 text-sm text-muted-foreground">{description}</p>

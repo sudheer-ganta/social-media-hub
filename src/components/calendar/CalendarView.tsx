@@ -12,8 +12,6 @@ import {
   Plus,
   Filter,
   Calendar as CalendarIcon,
-  ArrowRight,
-  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -122,67 +120,6 @@ function getStats(posts: Post[]) {
   };
 }
 
-// ── Flow Rail ─────────────────────────────────────────────────────────────────
-
-interface FlowRailProps {
-  stats: ReturnType<typeof getStats>;
-}
-
-function FlowRail({ stats }: FlowRailProps) {
-  const steps = [
-    { label: "Draft", count: stats.drafts, color: "text-muted-foreground" },
-    {
-      label: "Scheduled",
-      count: stats.scheduled,
-      color: "text-warning",
-      highlight: true,
-    },
-    { label: "Publishing", count: stats.publishing, color: "text-primary" },
-    { label: "Published", count: stats.published, color: "text-success" },
-  ];
-
-  const allDone =
-    stats.drafts === 0 &&
-    stats.scheduled === 0 &&
-    stats.publishing === 0 &&
-    stats.published > 0;
-
-  return (
-    <div className="border-t bg-card/80 px-4 py-3 sm:px-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold text-foreground">Flow Rail</p>
-          <p className="text-[11px] text-muted-foreground">
-            Your content journey this month
-          </p>
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-          {steps.map((step, i) => (
-            <div key={step.label} className="flex items-center gap-2">
-              <div className="flex min-w-[60px] flex-col items-center rounded-lg border bg-muted/40 px-3 py-2">
-                <span className={cn("text-lg font-bold tabular-nums", step.color)}>
-                  {step.count}
-                </span>
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  {step.label}
-                </span>
-              </div>
-              {i < steps.length - 1 && (
-                <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
-              )}
-            </div>
-          ))}
-          {allDone && (
-            <div className="ml-2 flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1.5">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <span className="text-xs font-medium text-success">All done!</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Right panel ───────────────────────────────────────────────────────────────
 
@@ -517,10 +454,7 @@ export function CalendarView({ posts, month, onMonthChange }: CalendarViewProps)
         <RightPanel posts={posts} stats={stats} />
       </div>
 
-      {/* Flow Rail */}
-      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <FlowRail stats={stats} />
-      </div>
+
 
       {/* Day detail dialog */}
       <Dialog

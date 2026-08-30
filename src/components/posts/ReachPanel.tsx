@@ -2,13 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, RefreshCw, Sparkles, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+// Card imports removed for flat layout in sidebar
 import { Skeleton } from "@/components/ui/skeleton";
 import { PlatformIcon } from "@/components/shared/PlatformIcon";
 import { useCaptionAnalysis } from "@/hooks/useCaptionAnalysis";
@@ -462,17 +456,17 @@ export function ReachPanel({
   };
 
   return (
-    <Card>
-      <CardHeader className="flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0 p-4 pb-3">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 space-y-0 pb-3 border-b border-border/40">
         <div className="min-w-0 space-y-1">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <TrendingUp className="h-4 w-4 shrink-0 text-primary" />
             Reach &amp; Visibility
-          </CardTitle>
-          <CardDescription className="text-xs">
+          </h3>
+          <p className="text-xs text-muted-foreground">
             Optional. Ask what is working in this post and what could be
             stronger before you publish.
-          </CardDescription>
+          </p>
         </div>
 
         <Button
@@ -492,11 +486,9 @@ export function ReachPanel({
           {analysis ? <RefreshCw /> : <TrendingUp />}
           {analysis ? "Check again" : "Check this post"}
         </Button>
-      </CardHeader>
+      </div>
 
-      {/* Never taller than what there is to show: one line before the first
-          run, a short skeleton while it runs, the reading once it exists. */}
-      <CardContent className="space-y-3 p-4 pt-0">
+      <div className="space-y-3">
         {error && !isAnalysing && (
           <div
             role="alert"
@@ -539,26 +531,26 @@ export function ReachPanel({
         )}
 
         {analysis && (
-            <Report
-              analysis={analysis}
-              caption={caption}
-              analysedCaption={analysedCaption ?? ""}
-              rechecking={isAnalysing}
-              platforms={platforms}
-              hasImage={hasImage}
-              music={music}
-              stale={stale}
-              proposals={proposals}
-              onRegenerate={regenerate}
-              onDismissProposal={(dimension) =>
-                setProposals((current) => ({ ...current, [dimension]: undefined }))
-              }
-              onApply={applyAndVerify}
-              {...(suggestedTime && { suggestedTime })}
-            />
+          <Report
+            analysis={analysis}
+            caption={caption}
+            analysedCaption={analysedCaption ?? ""}
+            rechecking={isAnalysing}
+            platforms={platforms}
+            hasImage={hasImage}
+            music={music}
+            stale={stale}
+            proposals={proposals}
+            onRegenerate={regenerate}
+            onDismissProposal={(dimension) =>
+              setProposals((current) => ({ ...current, [dimension]: undefined }))
+            }
+            onApply={applyAndVerify}
+            {...(suggestedTime && { suggestedTime })}
+          />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

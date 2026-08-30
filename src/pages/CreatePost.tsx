@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeftRight, Building2, Plus, User } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CreatePostForm } from "@/components/posts/CreatePostForm";
+import { ContextSwitcher } from "@/components/posts/ContextSwitcher";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePost } from "@/hooks/usePosts";
 import { useBrands } from "@/hooks/useBrands";
@@ -14,52 +14,163 @@ import {
   brandContext,
   type AccountContext,
 } from "@/constants/integrations";
-import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import type { Brand } from "@/types";
 
 /**
  * Content Studio. Personal and Brand are two separate publishing contexts —
- * different connected accounts, different fields, different analytics — so
- * the first thing a new post asks is which one it belongs to. The choice
- * lives in the URL (`?context=brand&brand=…`), which makes it linkable and
- * survives a refresh; an existing post's context comes from its row and is
- * never asked again.
+ * different connected accounts, different fields, different analytics.
+ * The active publishing context is shown as a switcher dropdown in the header,
+ * defaulting to the last used context or falling back to Personal context.
+ * Edit mode locks the context of the loaded post.
  */
 export default function CreatePost() {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: post, isLoading } = usePost(id);
+  const navigate = useNavigate();
+  const { data: post, isLoading: postLoading } = usePost(id);
   const { brands, isLoading: brandsLoading } = useBrands();
 
   const editing = Boolean(id);
+  const isLoading = (editing && postLoading) || (!editing && brandsLoading);
 
-  // The post row wins in edit mode; the URL decides for a new post.
-  const urlContext = searchParams.get("context");
-  const urlBrand = searchParams.get("brand");
-  const context: AccountContext | null = editing
-    ? post
-      ? post.context_type === "brand" && post.brand_id
-        ? brandContext(post.brand_id)
-        : PERSONAL_CONTEXT
-      : null
-    : urlContext === "personal"
-      ? PERSONAL_CONTEXT
-      : urlContext === "brand" && urlBrand
-        ? brandContext(urlBrand)
-        : null;
+  // 1. Resolve context based on editing state or fallback rules
+  const resolvedContext = useMemo<AccountContext>(() => {
+    if (editing) {
+      if (post) {
+        return post.context_type === "brand" && post.brand_id
+          ? brandContext(post.brand_id)
+          : PERSONAL_CONTEXT;
+      }
+      return PERSONAL_CONTEXT;
+    }
 
-  const brand: Brand | null = context?.brandId
-    ? (brands.find((b) => b.id === context.brandId) ?? null)
-    : null;
+    // 1. Explicit URL context
+    const urlContext = searchParams.get("context");
+    const urlBrand = searchParams.get("brand");
 
-  // A brand id pointing at nothing (deleted brand, foreign link) falls back
-  // to the chooser rather than composing into a context that cannot publish.
-  const brandMissing =
-    context?.contextType === "brand" && !brandsLoading && !brand;
+    if (urlContext === "personal") {
+      return PERSONAL_CONTEXT;
+    }
+    if (urlContext === "brand" && urlBrand) {
+      const exists = brands.some((b) => b.id === urlBrand);
+      if (exists) {
+        return brandContext(urlBrand);
+      }
+    }
 
-  if (editing && isLoading) {
+    // 2. Last-used context from localStorage
+    try {
+      const raw = localStorage.getItem("flowpost_last_context");
+      if (raw) {
+        const last: AccountContext = JSON.parse(raw);
+        if (last.contextType === "personal") {
+          return PERSONAL_CONTEXT;
+        }
+        if (last.contextType === "brand" && last.brandId) {
+          const exists = brands.some((b) => b.id === last.brandId);
+          if (exists) {
+            return brandContext(last.brandId);
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // 3. Final fallback to Personal
+    return PERSONAL_CONTEXT;
+  }, [editing, post, searchParams, brands]);
+
+  // Keep URL parameters in sync with the resolved context for new posts
+  useEffect(() => {
+    if (!editing && !brandsLoading) {
+      const currentUrlContext = searchParams.get("context");
+      const currentUrlBrand = searchParams.get("brand");
+
+      const expectedContextType = resolvedContext.contextType;
+      const expectedBrandId = resolvedContext.brandId;
+
+      if (currentUrlContext !== expectedContextType || currentUrlBrand !== expectedBrandId) {
+        setSearchParams(
+          expectedContextType === "brand" && expectedBrandId
+            ? { context: "brand", brand: expectedBrandId }
+            : { context: "personal" },
+          { replace: true }
+        );
+      }
+    }
+  }, [editing, brandsLoading, resolvedContext, searchParams, setSearchParams]);
+
+  // Save the resolved context to localStorage as the last-used context
+  useEffect(() => {
+    if (!brandsLoading) {
+      localStorage.setItem("flowpost_last_context", JSON.stringify(resolvedContext));
+    }
+  }, [resolvedContext, brandsLoading]);
+
+  // Form dirty state & save triggers from the CreatePostForm child
+  const [isFormDirty, setIsFormDirty] = useState(false);
+  const saveDraftRef = useRef<(() => Promise<any>) | null>(null);
+
+  const [pendingContext, setPendingContext] = useState<AccountContext | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleContextSelect = (nextContext: AccountContext) => {
+    if (
+      nextContext.contextType === resolvedContext.contextType &&
+      nextContext.brandId === resolvedContext.brandId
+    ) {
+      return;
+    }
+
+    if (isFormDirty) {
+      setPendingContext(nextContext);
+      setIsConfirmOpen(true);
+    } else {
+      performSwitch(nextContext);
+    }
+  };
+
+  const performSwitch = (nextContext: AccountContext) => {
+    setSearchParams(
+      nextContext.contextType === "brand" && nextContext.brandId
+        ? { context: "brand", brand: nextContext.brandId }
+        : { context: "personal" },
+      { replace: true }
+    );
+  };
+
+  const handleSaveAndSwitch = async () => {
+    if (saveDraftRef.current) {
+      setIsSaving(true);
+      try {
+        await saveDraftRef.current();
+        toast.success("Draft saved");
+        if (pendingContext) {
+          performSwitch(pendingContext);
+        }
+      } catch (err) {
+        console.error("Save & Switch failed", err);
+      } finally {
+        setIsSaving(false);
+        setIsConfirmOpen(false);
+        setPendingContext(null);
+      }
+    }
+  };
+
+  if (isLoading) {
     return (
-      <PageContainer title="Content Studio">
+      <PageContainer title={editing ? "Edit Post" : "New Post"}>
         <div className="grid gap-6 lg:grid-cols-2">
           <Skeleton className="h-96 w-full rounded-lg" />
           <Skeleton className="h-96 w-full rounded-lg" />
@@ -68,180 +179,85 @@ export default function CreatePost() {
     );
   }
 
-  if (!context || (brandMissing && !editing)) {
-    return (
-      <PageContainer
-        title="Content Studio"
-        description="Where is this post going?"
-      >
-        <ContextChooser
-          onPick={(next) =>
-            setSearchParams(
-              next.contextType === "brand" && next.brandId
-                ? { context: "brand", brand: next.brandId }
-                : { context: "personal" },
-              { replace: true },
-            )
-          }
-        />
-      </PageContainer>
-    );
-  }
+  const brand: Brand | null = resolvedContext.brandId
+    ? (brands.find((b) => b.id === resolvedContext.brandId) ?? null)
+    : null;
 
-  const isBrand = context.contextType === "brand";
-  const title = editing
-    ? "Edit Post"
-    : isBrand
-      ? `Brand Post${brand ? ` — ${brand.name}` : ""}`
-      : "Personal Post";
+  const titleNode = editing ? (
+    "Edit Post"
+  ) : (
+    <div className="flex items-center gap-3">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+        onClick={() => navigate("/posts")}
+        aria-label="Back"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </Button>
+      <span>New Post</span>
+    </div>
+  );
+
   const description = editing
     ? "Refine your post and reschedule if needed."
-    : isBrand
+    : resolvedContext.contextType === "brand"
       ? `Create content for ${brand?.name ?? "your brand"}.`
       : "Create content for your personal audience.";
 
   return (
-    <PageContainer
-      title={title}
-      description={description}
-      className="pb-0 sm:pb-0 lg:pb-0"
-      actions={
-        !editing ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setSearchParams({}, { replace: true })}
-          >
-            <ArrowLeftRight />
-            Switch context
-          </Button>
-        ) : undefined
-      }
-    >
-      <CreatePostForm
-        key={`${post?.id ?? "new"}:${context.contextType}:${context.brandId ?? ""}`}
-        post={post}
-        context={context}
-        brand={brand}
-      />
-    </PageContainer>
-  );
-}
+    <>
+      <PageContainer
+        title={titleNode}
+        description={description}
+        className="pb-0 sm:pb-0 lg:pb-0"
+        actions={
+          <ContextSwitcher
+            currentContext={resolvedContext}
+            brands={brands}
+            onSelect={handleContextSelect}
+            disabled={editing}
+          />
+        }
+      >
+        <CreatePostForm
+          key={`${post?.id ?? "new"}:${resolvedContext.contextType}:${resolvedContext.brandId ?? ""}`}
+          post={post}
+          context={resolvedContext}
+          brand={brand}
+          onDirtyChange={setIsFormDirty}
+          saveDraftRef={saveDraftRef}
+        />
+      </PageContainer>
 
-/** The Personal / Brand fork, plus brand selection and first-brand creation. */
-function ContextChooser({
-  onPick,
-}: {
-  onPick: (context: AccountContext) => void;
-}) {
-  const { brands, isLoading, createBrand, isCreating } = useBrands();
-  const [pickingBrand, setPickingBrand] = useState(false);
-  const [newBrandName, setNewBrandName] = useState("");
-
-  const handleCreateBrand = async () => {
-    const name = newBrandName.trim();
-    if (!name) return;
-    const created = await createBrand({
-      name,
-      description: "",
-      website: "",
-    }).catch(() => null);
-    if (created) onPick(brandContext(created.id));
-  };
-
-  return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => onPick(PERSONAL_CONTEXT)}
-          className="rounded-xl border bg-card p-6 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-elevated"
-        >
-          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <User className="h-5 w-5" />
-          </span>
-          <h3 className="mt-4 text-lg font-semibold">Personal</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create content for your personal audience
-          </p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setPickingBrand((open) => !open)}
-          className={cn(
-            "rounded-xl border bg-card p-6 text-left shadow-soft transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-elevated",
-            pickingBrand && "border-primary/60 ring-1 ring-primary/40",
-          )}
-        >
-          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Building2 className="h-5 w-5" />
-          </span>
-          <h3 className="mt-4 text-lg font-semibold">Brand</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create content for your brand
-          </p>
-        </button>
-      </div>
-
-      {pickingBrand && (
-        <Card>
-          <CardContent className="space-y-3 pt-6">
-            {isLoading ? (
-              <Skeleton className="h-10 w-full rounded-md" />
-            ) : (
-              brands.map((b) => (
-                <button
-                  key={b.id}
-                  type="button"
-                  onClick={() => onPick(brandContext(b.id))}
-                  className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:border-primary/60 hover:bg-accent"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-sm font-semibold text-primary">
-                    {b.name.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {b.name}
-                    </span>
-                    {b.description && (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {b.description}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              ))
-            )}
-
-            <div className="flex gap-2 border-t pt-3">
-              <Input
-                placeholder={
-                  brands.length ? "New brand name" : "Name your first brand"
-                }
-                value={newBrandName}
-                onChange={(e) => setNewBrandName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void handleCreateBrand();
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                loading={isCreating}
-                disabled={!newBrandName.trim()}
-                onClick={handleCreateBrand}
-              >
-                <Plus />
-                Create
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+      <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Switch context?</DialogTitle>
+            <DialogDescription>
+              Your current changes will be saved as a draft.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setIsConfirmOpen(false);
+                setPendingContext(null);
+              }}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSaveAndSwitch} loading={isSaving}>
+              Save & Switch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
