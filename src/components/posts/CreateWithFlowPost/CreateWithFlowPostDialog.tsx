@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Loader2, Sparkles, Wand2, X } from "lucide-react";
+import { Loader2, Sparkles, Wand2, X, Camera, Palette, Compass, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -23,6 +23,7 @@ import { cloudinaryService } from "@/services";
 import { creativeService } from "@/services/creative.service";
 import { useBrandVoices } from "@/hooks/useBrandVoices";
 import { useCreativeDna } from "@/hooks/useCreativeDna";
+import { useBrands } from "@/hooks/useBrands";
 import { GOAL_META, FUNNEL_META } from "@/ai/prompts/modules";
 import type { FunnelStage, MarketingGoal } from "@/ai/types";
 import type {
@@ -72,6 +73,136 @@ function summariseReferenceStyleTags(profile: ReferenceStyleProfile): string[] {
     .map((tag) => tag.charAt(0).toUpperCase() + tag.slice(1));
 }
 
+function formatArtDirectionFamily(family: string): string {
+  const mapping: Record<string, string> = {
+    EDITORIAL_PHOTOGRAPHY: "Photography",
+    SURREAL_EDITORIAL: "Surreal Photo",
+    INTERACTIVE_GRAPHIC: "Interactive Graphic",
+    TYPOGRAPHY_LED: "Typography Art",
+    PRODUCT_STUDIO: "Studio Product",
+    DOCUMENTARY: "Candid Photo",
+    COLLAGE: "Collage Art",
+    HANDCRAFTED: "Handcrafted Art",
+    CINEMATIC: "Cinematic Still",
+    MINIMAL_ART: "Minimalist Art",
+    PLAYFUL_GRAPHIC: "Playful Graphic",
+    CULTURAL_EDITORIAL: "Cultural Photo",
+    INFORMATIONAL: "Informational Graphic",
+    ILLUSTRATIVE: "Illustration",
+  };
+  return mapping[family] || family.replace(/_/g, " ");
+}
+
+function ArtDirectionPreview({
+  family,
+  brandColors,
+}: {
+  family: string;
+  brandColors: string[];
+}) {
+  const c1 = brandColors[0] || "#3b82f6";
+  const c2 = brandColors[1] || "#8b5cf6";
+
+  const containerStyle = {
+    background: `linear-gradient(135deg, ${c1}10, ${c2}20)`,
+    borderColor: `${c1}25`,
+  };
+
+  return (
+    <div
+      style={containerStyle}
+      className="relative h-16 w-full rounded-md border overflow-hidden flex items-center justify-center select-none"
+    >
+      {family === "EDITORIAL_PHOTOGRAPHY" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="border border-foreground/15 rounded-full h-8 w-8 flex items-center justify-center">
+            <div className="border border-foreground/20 rounded-full h-4 w-4" />
+          </div>
+          <div className="absolute top-1.5 right-2 text-[8px] uppercase tracking-widest text-muted-foreground/60 font-mono">1/125s</div>
+        </div>
+      )}
+      {family === "SURREAL_EDITORIAL" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="relative">
+            <div className="absolute -top-3 -left-3 h-5 w-5 rounded-full bg-foreground/10 blur-sm" />
+            <div className="h-6 w-6 rounded-full border border-dashed border-foreground/30 animate-spin" style={{ animationDuration: "12s" }} />
+          </div>
+        </div>
+      )}
+      {family === "TYPOGRAPHY_LED" && (
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+          <span className="text-3xl font-serif font-bold text-foreground/10 select-none">
+            Aa Bb
+          </span>
+        </div>
+      )}
+      {family === "PRODUCT_STUDIO" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
+          <div className="h-1 w-8 rounded-full bg-foreground/10 blur-[1px]" />
+          <div className="h-3 w-3 rounded-sm bg-foreground/15 border border-foreground/20 rotate-12 -translate-y-0.5" />
+        </div>
+      )}
+      {family === "DOCUMENTARY" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="border border-foreground/15 w-10 h-7 rounded flex items-center justify-center">
+            <div className="h-1.5 w-1.5 rounded-full bg-red-500/50 animate-pulse" />
+          </div>
+        </div>
+      )}
+      {family === "COLLAGE" && (
+        <div className="absolute inset-0 flex items-center justify-center gap-1">
+          <div className="h-6 w-6 rounded bg-foreground/10 border border-foreground/15 rotate-6" />
+          <div className="h-6 w-6 rounded bg-foreground/20 border border-foreground/25 -rotate-12 -translate-x-2" />
+        </div>
+      )}
+      {family === "HANDCRAFTED" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="h-7 w-10 border border-dashed border-foreground/20 rounded bg-foreground/5 flex items-center justify-center">
+            <span className="text-[9px] text-foreground/30 font-medium">Paper</span>
+          </div>
+        </div>
+      )}
+      {family === "CINEMATIC" && (
+        <div className="absolute inset-0 flex flex-col justify-between py-1 bg-black/5">
+          <div className="h-1 bg-black/20 w-full" />
+          <div className="h-[2px] bg-foreground/20 w-3/4 mx-auto blur-[1px]" />
+          <div className="h-1 bg-black/20 w-full" />
+        </div>
+      )}
+      {family === "MINIMAL_ART" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="h-1.5 w-1.5 rounded-full bg-foreground/30" />
+        </div>
+      )}
+      {family === "PLAYFUL_GRAPHIC" && (
+        <div className="absolute inset-0 flex items-center justify-center gap-1.5">
+          <div className="h-3 w-3 rounded-full bg-yellow-500/10 border border-yellow-500/20" />
+          <div className="h-3 w-3 rounded bg-blue-500/10 border border-blue-500/20 rotate-45" />
+        </div>
+      )}
+      {family === "CULTURAL_EDITORIAL" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="border border-foreground/15 rounded-full h-7 w-7 flex items-center justify-center">
+            <div className="h-3 w-3 rounded-full bg-foreground/10" />
+          </div>
+        </div>
+      )}
+      {family === "INFORMATIONAL" && (
+        <div className="absolute inset-0 flex flex-col gap-1 px-4 py-3 justify-center">
+          <div className="h-[2px] bg-foreground/15 rounded w-full" />
+          <div className="h-[2px] bg-foreground/15 rounded w-5/6" />
+          <div className="h-[2px] bg-foreground/15 rounded w-2/3" />
+        </div>
+      )}
+      {family === "ILLUSTRATIVE" && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="h-5 w-7 rounded-tr-md rounded-bl-md bg-foreground/10 border border-foreground/20 transform skew-x-3" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface CreateWithFlowPostDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -106,11 +237,23 @@ export function CreateWithFlowPostDialog({
   const logoInputRef = useRef<HTMLInputElement>(null);
   const generatingLabelTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
-  // The member's saved identity. Neither of these used to be sent at all,
-  // which is why brand mode produced creatives with no logo and none of the
-  // brand's own voice — the backend was resolving both from nothing.
-  const { defaultProfile: brandVoiceProfile } = useBrandVoices();
-  const { defaultProfile: creativeDnaProfile } = useCreativeDna();
+  // The member's saved identity. Dynamically resolved based on active brandId
+  // when in brand context; otherwise falling back to default profiles.
+  const { profiles: brandVoiceProfiles, defaultProfile: defaultBrandVoiceProfile } = useBrandVoices();
+  const { profiles: creativeDnaProfiles, defaultProfile: defaultCreativeDnaProfile } = useCreativeDna();
+  const { brands } = useBrands();
+
+  const activeBrand = contextType === "brand" && brandId
+    ? (brands.find((b) => b.id === brandId) ?? null)
+    : null;
+
+  const brandVoiceProfile = activeBrand
+    ? (brandVoiceProfiles.find((p) => p.name.toLowerCase().replace(/\s+/g, "") === activeBrand.name.toLowerCase().replace(/\s+/g, "")) ?? defaultBrandVoiceProfile)
+    : defaultBrandVoiceProfile;
+
+  const creativeDnaProfile = activeBrand
+    ? (creativeDnaProfiles.find((p) => p.name.toLowerCase().replace(/\s+/g, "") === activeBrand.name.toLowerCase().replace(/\s+/g, "")) ?? defaultCreativeDnaProfile)
+    : defaultCreativeDnaProfile;
 
   // A logo uploaded in this dialog overrides the saved one for this creative.
   const [logoOverride, setLogoOverride] = useState<string | null>(null);
@@ -147,7 +290,12 @@ export function CreateWithFlowPostDialog({
       funnelStage,
       platforms: [],
       assetUrls: assets.map((a) => a.url),
-      ...(brandVoiceProfile && { brandVoice: brandVoiceProfile.voice as unknown as Record<string, unknown> }),
+      ...(brandVoiceProfile && {
+        brandVoice: {
+          ...(brandVoiceProfile.voice as unknown as Record<string, unknown>),
+          name: brandVoiceProfile.name,
+        },
+      }),
       ...(Object.keys(dna).length > 0 && { creativeDna: dna }),
       ...(referenceImages.length > 0 && {
         referenceImageUrls: referenceImages.map((r) => r.url),
@@ -303,7 +451,7 @@ export function CreateWithFlowPostDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto scrollbar-thin">
           {(step === "input" || step === "discovering") && (
             <>
               <div className="space-y-1.5">
@@ -474,28 +622,77 @@ export function CreateWithFlowPostDialog({
                   <p className="mt-1 text-[11px] text-muted-foreground">Creating something original from this direction.</p>
                 </div>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {concepts.map((concept) => (
-                  <div key={concept.conceptName} className="flex flex-col gap-2 rounded-lg border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-semibold leading-tight">{concept.conceptName}</p>
-                      <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {concept.visualMechanism}
-                      </span>
+                  <div
+                    key={concept.conceptName}
+                    style={{
+                      borderTop: `2px solid ${creativeDnaProfile?.dna.brandColors?.[0] || '#3b82f6'}`
+                    }}
+                    className="flex flex-col gap-3 rounded-lg border bg-card/45 backdrop-blur-sm p-3.5 justify-between shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01] hover:border-muted-foreground/20"
+                  >
+                    <div className="space-y-2.5">
+                      {/* Visual Style Preview */}
+                      <ArtDirectionPreview
+                        family={concept.artDirectionFamily}
+                        brandColors={creativeDnaProfile?.dna.brandColors || []}
+                      />
+
+                      {/* Header Badges */}
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="rounded bg-secondary/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {concept.visualMechanism}
+                        </span>
+                        <span className="rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                          {concept.artDirectionFamily.includes("PHOTO") || concept.artDirectionFamily === "DOCUMENTARY" || concept.artDirectionFamily === "CINEMATIC" ? (
+                            <Camera className="h-2.5 w-2.5" />
+                          ) : (
+                            <Palette className="h-2.5 w-2.5" />
+                          )}
+                          {formatArtDirectionFamily(concept.artDirectionFamily)}
+                        </span>
+                        <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                          <Compass className="h-2.5 w-2.5" />
+                          {concept.mode}
+                        </span>
+                      </div>
+
+                      {/* Concept Title */}
+                      <p className="text-sm font-bold leading-snug text-foreground">{concept.conceptName}</p>
+
+                      {/* Big Idea Description */}
+                      <p className="text-xs text-muted-foreground leading-relaxed">{concept.bigIdea}</p>
+
+                      {/* Why it works visual callout */}
+                      {concept.whyItWouldStopTheScroll && (
+                        <div className="rounded bg-primary/5 border border-primary/10 p-2 text-[10px] leading-relaxed text-muted-foreground">
+                          <span className="font-semibold text-primary flex items-center gap-1 mb-0.5">
+                            <Lightbulb className="h-3 w-3" /> Why this works:
+                          </span>
+                          {concept.whyItWouldStopTheScroll}
+                        </div>
+                      )}
+
+                      {/* Brand connection */}
+                      {concept.brandConnection && (
+                        <p className="text-[10px] text-muted-foreground/80 italic pl-1.5 border-l border-muted">
+                          {concept.brandConnection}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{concept.bigIdea}</p>
-                    {concept.brandConnection && (
-                      <p className="text-[11px] text-muted-foreground italic">{concept.brandConnection}</p>
-                    )}
+
                     <Button
                       size="sm"
-                      variant="outline"
-                      className="mt-1 self-start"
+                      className="mt-2 w-full flex items-center justify-center gap-1.5 shadow-sm"
                       disabled={busy || logoMissing}
                       onClick={() => handleCreateConcept(concept)}
                     >
-                      {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                      Create this
+                      {busy ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      )}
+                      Create this creative
                     </Button>
                   </div>
                 ))}

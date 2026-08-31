@@ -54,13 +54,32 @@ export const brandVoicesRepository = {
 
   /** Insert, or overwrite the existing profile with the same name. */
   async upsertByName(input: BrandVoiceProfileInsert): Promise<BrandVoiceProfile> {
-    const { data, error } = await getSupabase()
+    const supabase = getSupabase();
+    const { data: existing, error: findError } = await supabase
       .from(TABLE)
-      .upsert(input, { onConflict: "created_by,name" })
-      .select()
-      .single();
-    if (error) throw new Error(error.message);
-    return mapRow(data);
+      .select("id")
+      .eq("name", input.name);
+
+    if (findError) throw new Error(findError.message);
+
+    if (existing && existing.length > 0) {
+      const { data, error } = await supabase
+        .from(TABLE)
+        .update({ voice: input.voice, is_default: input.is_default })
+        .eq("id", existing[0].id)
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return mapRow(data);
+    } else {
+      const { data, error } = await supabase
+        .from(TABLE)
+        .insert(input)
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      return mapRow(data);
+    }
   },
 
   async remove(id: string): Promise<void> {

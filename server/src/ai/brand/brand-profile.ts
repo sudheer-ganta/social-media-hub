@@ -46,6 +46,7 @@ const SCORED_FIELDS = [
   'usp',
   'ctaStyle',
   'wordsToAvoid',
+  'services',
 ] as const;
 
 const MAX_LIST_ITEMS = 12;
@@ -164,6 +165,7 @@ export function resolveBrandProfile({
     wordsToUse: list(b.wordsToUse),
     wordsToAvoid: list(b.wordsToAvoid),
     brandColors: colors,
+    services: list(b.services),
   };
 
   // Anything the user typed directly is 'brand'; the four fields above have
@@ -220,6 +222,8 @@ export function renderBrandSection(
     profile.industry && `- Industry: ${profile.industry}${inferred('industry')}`,
     profile.products.length &&
       `- Sells: ${profile.products.join('; ')}${inferred('products')}`,
+    profile.services && profile.services.length &&
+      `- Services: ${profile.services.join('; ')}`,
     profile.usp && `- Why people choose it over rivals: ${profile.usp}`,
     profile.competitors.length && `- Up against: ${profile.competitors.join(', ')}`,
     profile.audience && `- Audience: ${profile.audience}${inferred('audience')}`,

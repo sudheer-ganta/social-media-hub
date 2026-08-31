@@ -1,29 +1,33 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
 import { AppLayout } from "@/app/AppLayout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import Login from "@/pages/auth/Login";
-import Register from "@/pages/auth/Register";
-import ForgotPassword from "@/pages/auth/ForgotPassword";
-import ResetPassword from "@/pages/auth/ResetPassword";
-import Dashboard from "@/pages/Dashboard";
-import Posts from "@/pages/Posts";
-import CreatePost from "@/pages/CreatePost";
-import Calendar from "@/pages/Calendar";
-import Scheduled from "@/pages/Scheduled";
-import Analytics from "@/pages/Analytics";
-import Integrations from "@/pages/Integrations";
-import Settings from "@/pages/Settings";
-import StudioPreview from "@/pages/dev/StudioPreview";
-import AnalyticsPreview from "@/pages/dev/AnalyticsPreview";
-import Privacy from "@/pages/Privacy";
-import Terms from "@/pages/Terms";
-import DataDeletion from "@/pages/DataDeletion";
+import { RouteLoader } from "@/components/shared/RouteLoader";
+
+const Login = lazy(() => import("@/pages/auth/Login"));
+const Register = lazy(() => import("@/pages/auth/Register"));
+const ForgotPassword = lazy(() => import("@/pages/auth/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/auth/ResetPassword"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Posts = lazy(() => import("@/pages/Posts"));
+const CreatePost = lazy(() => import("@/pages/CreatePost"));
+const Calendar = lazy(() => import("@/pages/Calendar"));
+const Scheduled = lazy(() => import("@/pages/Scheduled"));
+const Analytics = lazy(() => import("@/pages/Analytics"));
+const Integrations = lazy(() => import("@/pages/Integrations"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const StudioPreview = lazy(() => import("@/pages/dev/StudioPreview"));
+const AnalyticsPreview = lazy(() => import("@/pages/dev/AnalyticsPreview"));
+const Privacy = lazy(() => import("@/pages/Privacy"));
+const Terms = lazy(() => import("@/pages/Terms"));
+const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
 
 export default function App() {
   return (
     <AppProviders>
       <BrowserRouter>
+        <Suspense fallback={<RouteLoader />}>
         <Routes>
           {/* Public auth & legal routes */}
           <Route path="/login" element={<Login />} />
@@ -72,7 +76,8 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </BrowserRouter>
-    </AppProviders>
+      </Suspense>
+    </BrowserRouter>
+  </AppProviders>
   );
 }

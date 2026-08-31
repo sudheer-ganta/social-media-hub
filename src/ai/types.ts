@@ -112,6 +112,8 @@ export interface BrandVoice {
   competitors?: string[];
   /** Hex codes. Compared against the palette the image actually contains. */
   brandColors?: string[];
+  /** Services the brand provides. */
+  services?: string[];
 }
 
 export const EMPTY_BRAND_VOICE: BrandVoice = {
@@ -126,6 +128,7 @@ export const EMPTY_BRAND_VOICE: BrandVoice = {
   ctaStyle: "None" as any,
   targetAudience: "",
   personality: "" as any,
+  services: [],
 };
 
 export const DEFAULT_BRAND_VOICE: BrandVoice = {
@@ -140,6 +143,7 @@ export const DEFAULT_BRAND_VOICE: BrandVoice = {
   ctaStyle: "Soft",
   targetAudience: "",
   personality: "Professional",
+  services: [],
   industry: "",
   products: [],
   usp: "",

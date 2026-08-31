@@ -264,12 +264,21 @@ export function renderBadge(
   fontFamily: string,
   fill: string,
   textFill: string,
+  shapeLanguage?: 'organic' | 'geometric' | 'editorial-rules' | 'none',
 ): string {
   const padX = fontSize * 0.9;
   const w = text.length * fontSize * 0.62 + padX * 2;
   const h = fontSize * 2;
+  
+  let bgShape = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>`;
+  if (shapeLanguage === 'geometric') {
+    bgShape = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="${fill}"/>`;
+  } else if (shapeLanguage === 'editorial-rules') {
+    bgShape = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="0" fill="none" stroke="${textFill}" stroke-width="1.5"/>`;
+  }
+  
   return (
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>` +
+    bgShape +
     `<text x="${x + w / 2}" y="${y + h / 2 + fontSize * 0.35}" font-family="${fontFamily}" font-weight="600" font-size="${fontSize}" fill="${textFill}" text-anchor="middle" letter-spacing="1">${esc(text.toUpperCase())}</text>`
   );
 }

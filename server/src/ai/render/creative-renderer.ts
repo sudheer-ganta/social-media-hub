@@ -87,6 +87,7 @@ export function buildContent(direction: CreativeDirection, hasLogo: boolean): Co
       secondaryInfo: secondaryInfo.join(' · '),
     }),
     ...(direction.cta && { cta: direction.cta }),
+    ...(direction.marketingCreative?.eventBadge && { eventBadge: direction.marketingCreative.eventBadge }),
     hasLogo,
   };
 }
@@ -116,7 +117,10 @@ function renderBlock(block: PlannedBlock, plan: LayoutPlan): string {
       return renderTextBlock(block.spec);
     case 'badge': {
       const r = px(block.rect, w, h);
-      return renderBadge(block.text, r.x, r.y, block.fontSize, block.fontFamily, block.fill, block.textFill);
+      if (block.text === '') {
+        return `<circle cx="${r.x + r.width / 2}" cy="${r.y + r.height / 2}" r="${r.width / 2}" fill="${block.fill}"/>`;
+      }
+      return renderBadge(block.text, r.x, r.y, block.fontSize, block.fontFamily, block.fill, block.textFill, block.shapeLanguage);
     }
     case 'cta':
       return renderCta(block.spec);
@@ -126,6 +130,9 @@ function renderBlock(block: PlannedBlock, plan: LayoutPlan): string {
     }
     case 'divider': {
       const r = px(block.rect, w, h);
+      if (block.rect.width < block.rect.height) {
+        return `<line x1="${r.x}" y1="${r.y}" x2="${r.x}" y2="${r.y + r.height}" stroke="${block.stroke}" stroke-width="2" opacity="${block.opacity}"/>`;
+      }
       return renderDivider(r.x, r.y, r.width, block.stroke, 3, block.opacity);
     }
     case 'border': {

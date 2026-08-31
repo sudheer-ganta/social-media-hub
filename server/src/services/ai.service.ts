@@ -272,11 +272,12 @@ export function readBrandVoice(value: unknown): CaptionRequest['brandVoice'] {
     products: readStringArray(voice.products, 15),
     competitors: readStringArray(voice.competitors, 10),
     brandColors: readColors(voice.brandColors),
+    services: readStringArray(voice.services, 15),
   };
 
   // An object of nothing but empty arrays is not a brand; sending it would put
   // an empty "## Brand" heading in front of the model.
-  const listKeys = ['wordsToUse', 'wordsToAvoid', 'products', 'competitors', 'brandColors'] as const;
+  const listKeys = ['wordsToUse', 'wordsToAvoid', 'products', 'competitors', 'brandColors', 'services'] as const;
   const meaningful =
     Object.keys(brandVoice).length > listKeys.length ||
     listKeys.some((key) => (brandVoice[key]?.length ?? 0) > 0);

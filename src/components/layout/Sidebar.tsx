@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3,
   Calendar,
+  CalendarClock,
   ChevronsLeft,
   FileText,
   LayoutDashboard,
@@ -41,6 +42,7 @@ import type { Theme } from "@/types";
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/calendar", label: "Plan", icon: Calendar },
+  { to: "/scheduled", label: "Schedule", icon: CalendarClock },
   { to: "/posts", label: "Library", icon: FileText },
   { to: "/analytics", label: "Insights", icon: BarChart3 },
   { to: "/integrations", label: "Accounts", icon: Plug },

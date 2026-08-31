@@ -37,6 +37,7 @@ export interface ContentInput {
   secondaryInfo?: string;
   cta?: string;
   hasLogo: boolean;
+  eventBadge?: string;
 }
 
 export type TextRole = 'headline' | 'support' | 'brandMessage' | 'secondaryInfo';
@@ -45,7 +46,7 @@ export type PlannedBlock =
   | { kind: 'scrim'; rect: Rect; direction: 'up' | 'down'; maxOpacity: number; color: string }
   | { kind: 'footer'; rect: Rect; style: 'torn-paper' | 'solid-band' | 'hairline'; fill: string }
   | { kind: 'text'; role: TextRole; rect: Rect; spec: TextBlockSpec }
-  | { kind: 'badge'; rect: Rect; text: string; fontSize: number; fontFamily: string; fill: string; textFill: string }
+  | { kind: 'badge'; rect: Rect; text: string; fontSize: number; fontFamily: string; fill: string; textFill: string; shapeLanguage?: 'organic' | 'geometric' | 'editorial-rules' | 'none' }
   | { kind: 'cta'; rect: Rect; spec: CtaSpec }
   | { kind: 'logo'; rect: Rect; opacity: number }
   | { kind: 'underline'; rect: Rect; stroke: string; strokeWidth: number }
@@ -64,12 +65,88 @@ export interface LayoutPlan {
   structure: string;
 }
 
+// ─── Design System Defaults ──────────────────────────────────────────────────
+
+export const DESIGN_SYSTEM_DEFAULTS = {
+  fontBodyStack: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+  inkColor: '#1a1a1a',
+  paperColor: '#f7f4ee',
+  accentColor: '#1a1a1a',
+  lightScrimColor: '#ffffff',
+  darkScrimColor: '#000000',
+  lightBackdrop: '#f2f2f2',
+  darkBackdrop: '#222222',
+  fallbackDarkText: '#1c1917',
+  fallbackLightText: '#ffffff',
+  bodyCharWidth: 0.52,
+  wcagTargetRatio: 4.5,
+  luminanceThreshold: 0.45,
+  inkMaxLuminance: 0.22,
+  paperMinLuminance: 0.60,
+  accentMinContrast: 0.14,
+};
+
+export const LAYOUT_CONFIG = {
+  spacing: {
+    tight: 0.05,
+    normal: 0.065,
+    airy: 0.085,
+    gapMultiplier: 0.45,
+  },
+  density: {
+    minimal: 1.06,
+    normal: 1.0,
+    dense: 0.9,
+  },
+  headlineScale: {
+    oversized: 1.15,
+    normal: 1.0,
+    restrained: 0.88,
+    maxHeightRatio: 0.28,
+  },
+  headlineBaseSize: {
+    fullBleedCentered: 0.072,
+    fullBleedLeft: 0.064,
+    framedOrInset: 0.058,
+  },
+  textSizes: {
+    supportMultiplier: 0.026,
+    brandMessageMultiplier: 0.025,
+    secondaryInfoMultiplier: 0.02,
+    ctaFontSizeMultiplier: 0.021,
+    ctaHeightMultiplier: 2.4,
+  },
+  footer: {
+    paddingMultiplier: 0.55,
+    logoSlotHeightRatio: 0.11,
+    minHeightRatio: 0.13,
+    maxHeightRatio: 0.26,
+  },
+  logo: {
+    cornerSizeRatio: 0.08,
+    watermarkSizeRatio: 0.06,
+    watermarkOpacity: 0.5,
+  },
+  badge: {
+    fontSizeMultiplier: 0.016,
+    heightFontSizeRatio: 2.0,
+    paddingCharRatio: 0.9,
+  },
+  scrim: {
+    lightOpacity: 0.45,
+    darkOpacity: 0.58,
+  },
+  collisionThreshold: 0.0005,
+};
+
 // ─── Typography resolution ──────────────────────────────────────────────────
 
 interface FontStack {
   headline: string;
   body: string;
   headlineCharWidth: number;
+  lineHeightMult: number;
+  letterSpacing?: number;
 }
 
 /**
@@ -77,20 +154,170 @@ interface FontStack {
  * host has installed, so each stack leads with a distinctive family and falls
  * back to one that ships with every OS.
  */
-const BODY_STACK = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+const BODY_STACK = `'Instrument Sans', ${DESIGN_SYSTEM_DEFAULTS.fontBodyStack}`;
 const FAMILY_STACKS: Record<RecipeTypographyFamily, FontStack> = {
   'serif-editorial': {
-    headline: "'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
+    headline: "'Instrument Serif', 'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
     body: BODY_STACK,
     headlineCharWidth: 0.54,
+    lineHeightMult: 1.15,
+    letterSpacing: 0.5,
   },
-  'sans-modern': { headline: "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif", body: BODY_STACK, headlineCharWidth: 0.56 },
-  'condensed-display': { headline: "'Oswald', 'Arial Narrow', Impact, sans-serif", body: BODY_STACK, headlineCharWidth: 0.44 },
-  'geometric-sans': { headline: "'Poppins', 'Century Gothic', 'Segoe UI', Arial, sans-serif", body: BODY_STACK, headlineCharWidth: 0.6 },
-  mixed: { headline: "'Playfair Display', Georgia, 'Times New Roman', serif", body: BODY_STACK, headlineCharWidth: 0.54 },
+  'sans-modern': {
+    headline: "'Instrument Sans', 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+    body: BODY_STACK,
+    headlineCharWidth: 0.56,
+    lineHeightMult: 1.1,
+    letterSpacing: -0.2,
+  },
+  'condensed-display': {
+    headline: "'Instrument Sans', 'Oswald', 'Arial Narrow', Impact, sans-serif",
+    body: BODY_STACK,
+    headlineCharWidth: 0.44,
+    lineHeightMult: 1.0,
+    letterSpacing: -0.8,
+  },
+  'geometric-sans': {
+    headline: "'Instrument Sans', 'Poppins', 'Century Gothic', 'Segoe UI', Arial, sans-serif",
+    body: BODY_STACK,
+    headlineCharWidth: 0.6,
+    lineHeightMult: 1.2,
+    letterSpacing: 1.2,
+  },
+  mixed: {
+    headline: "'Instrument Serif', 'Playfair Display', Georgia, 'Times New Roman', serif",
+    body: BODY_STACK,
+    headlineCharWidth: 0.54,
+    lineHeightMult: 1.15,
+    letterSpacing: 0.5,
+  },
 };
 
-const BODY_CHAR_WIDTH = 0.52;
+const BODY_CHAR_WIDTH = DESIGN_SYSTEM_DEFAULTS.bodyCharWidth;
+
+// ─── Color Helpers & Dynamic Contrast Engine ───────────────────────────────
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace('#', '');
+  const num = parseInt(clean, 16);
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  };
+}
+
+function rgbToHsl(r: number, g: number, b: number) {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = (g - b) / d + (g < b ? 6 : 0);
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      case b:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h /= 6;
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100;
+  l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+
+  if (0 <= h && h < 60) {
+    r = c; g = x; b = 0;
+  } else if (60 <= h && h < 120) {
+    r = x; g = c; b = 0;
+  } else if (120 <= h && h < 180) {
+    r = 0; g = c; b = x;
+  } else if (180 <= h && h < 240) {
+    r = 0; g = x; b = c;
+  } else if (240 <= h && h < 300) {
+    r = x; g = 0; b = c;
+  } else if (300 <= h && h < 360) {
+    r = c; g = 0; b = x;
+  }
+
+  const toHex = (val: number) => {
+    const hex = Math.round((val + m) * 255).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  };
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function contrastRatio(colorA: string, colorB: string): number {
+  const l1 = luminance(colorA);
+  const l2 = luminance(colorB);
+  const max = Math.max(l1, l2);
+  const min = Math.min(l1, l2);
+  return (max + 0.05) / (min + 0.05);
+}
+
+/**
+ * Dynamically adjusts a textColor's lightness to guarantee it meets WCAG contrast requirements
+ * against a background color, preserving the color's hue and saturation.
+ */
+export function adjustContrast(textColor: string, bgColor: string, targetRatio = DESIGN_SYSTEM_DEFAULTS.wcagTargetRatio): string {
+  if (!/^#[0-9a-f]{6}$/i.test(textColor) || !/^#[0-9a-f]{6}$/i.test(bgColor)) {
+    return textColor;
+  }
+  const ratio = contrastRatio(textColor, bgColor);
+  if (ratio >= targetRatio) return textColor;
+
+  const bgLum = luminance(bgColor);
+  const isBgLight = bgLum > DESIGN_SYSTEM_DEFAULTS.luminanceThreshold;
+
+  const { r, g, b } = hexToRgb(textColor);
+  const { h, s, l } = rgbToHsl(r, g, b);
+
+  let currentL = l;
+  let bestColor = textColor;
+
+  if (isBgLight) {
+    // Darken text color for light backgrounds
+    for (let step = 1; step <= 25; step++) {
+      currentL = Math.max(0, l - step * (l / 25));
+      const testColor = hslToHex(h, s, currentL);
+      if (contrastRatio(testColor, bgColor) >= targetRatio) {
+        return testColor;
+      }
+      bestColor = testColor;
+    }
+  } else {
+    // Lighten text color for dark backgrounds
+    for (let step = 1; step <= 25; step++) {
+      currentL = Math.min(100, l + step * ((100 - l) / 25));
+      const testColor = hslToHex(h, s, currentL);
+      if (contrastRatio(testColor, bgColor) >= targetRatio) {
+        return testColor;
+      }
+      bestColor = testColor;
+    }
+  }
+
+  // Fallback if HSL shift wasn't enough
+  return isBgLight ? DESIGN_SYSTEM_DEFAULTS.fallbackDarkText : DESIGN_SYSTEM_DEFAULTS.fallbackLightText;
+}
 
 // ─── Palette resolution ─────────────────────────────────────────────────────
 
@@ -102,7 +329,7 @@ function luminance(hex: string): number {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
-const NEUTRAL: BrandPalette = { ink: '#1a1a1a', paper: '#f7f4ee', accent: '#1a1a1a' };
+const NEUTRAL: BrandPalette = { ink: DESIGN_SYSTEM_DEFAULTS.inkColor, paper: DESIGN_SYSTEM_DEFAULTS.paperColor, accent: DESIGN_SYSTEM_DEFAULTS.accentColor };
 
 function saturation(hex: string): number {
   const clean = hex.replace('#', '');
@@ -134,8 +361,9 @@ export function resolvePalette(
     const valid = colors.filter((c) => /^#[0-9a-f]{6}$/i.test(c.trim()));
     if (valid.length === 0) return null;
     const sorted = [...valid].sort((a, b) => luminance(a) - luminance(b));
-    const ink = luminance(sorted[0]) < 0.4 ? sorted[0] : NEUTRAL.ink;
-    const paper = luminance(sorted[sorted.length - 1]) > 0.6 ? sorted[sorted.length - 1] : NEUTRAL.paper;
+    // Strict ink luminance constraint to avoid low contrast body colors
+    const ink = luminance(sorted[0]) < DESIGN_SYSTEM_DEFAULTS.inkMaxLuminance ? sorted[0] : NEUTRAL.ink;
+    const paper = luminance(sorted[sorted.length - 1]) > DESIGN_SYSTEM_DEFAULTS.paperMinLuminance ? sorted[sorted.length - 1] : NEUTRAL.paper;
     const accent = accentBySaturation ? [...valid].sort((a, b) => saturation(b) - saturation(a))[0] : valid[0];
     return { ink, paper, accent };
   };
@@ -144,12 +372,43 @@ export function resolvePalette(
 
 /** An accent that would vanish against this fill falls back to ink — a CTA must never be invisible. */
 function visibleAccent(palette: BrandPalette, against: string): string {
-  return Math.abs(luminance(palette.accent) - luminance(against)) < 0.14 ? palette.ink : palette.accent;
+  return Math.abs(luminance(palette.accent) - luminance(against)) < DESIGN_SYSTEM_DEFAULTS.accentMinContrast ? palette.ink : palette.accent;
 }
 
 /** Legible text colour on a given fill. */
 function onColor(fill: string, palette: BrandPalette): string {
-  return luminance(fill) > 0.45 ? palette.ink : '#ffffff';
+  return luminance(fill) > DESIGN_SYSTEM_DEFAULTS.luminanceThreshold ? palette.ink : DESIGN_SYSTEM_DEFAULTS.fallbackLightText;
+}
+
+/**
+ * Dynamically parses the typography prose from the design recipe (e.g. "tight leading", "wide tracking")
+ * and returns customized multipliers/offsets for line-height and letter-spacing.
+ */
+function parseTypographyAdjustments(
+  prose: string,
+  baseLineHeight: number,
+  baseLetterSpacing = 0,
+): { lineHeightMult: number; letterSpacing?: number } {
+  let lineHeightMult = baseLineHeight;
+  let letterSpacing = baseLetterSpacing;
+
+  const clean = prose.toLowerCase();
+
+  // Dynamic Line Height Adjustment
+  if (/\b(tight|condensed|compressed) (leading|line-?height)\b/.test(clean)) {
+    lineHeightMult = Math.max(0.9, baseLineHeight * 0.88);
+  } else if (/\b(loose|airy|spacious|generous) (leading|line-?height)\b/.test(clean)) {
+    lineHeightMult = Math.min(1.45, baseLineHeight * 1.15);
+  }
+
+  // Dynamic Letter Spacing (Tracking) Adjustment
+  if (/\b(wide|airy|generous|loose) (tracking|letter-?spacing|spacing)\b/.test(clean)) {
+    letterSpacing = baseLetterSpacing ? baseLetterSpacing + 1.2 : 1.5;
+  } else if (/\b(tight|compressed|condensed) (tracking|letter-?spacing|spacing)\b/.test(clean)) {
+    letterSpacing = baseLetterSpacing ? baseLetterSpacing - 0.6 : -0.8;
+  }
+
+  return { lineHeightMult, letterSpacing };
 }
 
 // ─── Plan building ──────────────────────────────────────────────────────────
@@ -188,10 +447,32 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
     height: round(bh / h),
   });
 
-  const fonts = FAMILY_STACKS[recipe.typographyFamily];
-  const spacingScale = recipe.spacingBehaviour === 'tight' ? 0.05 : recipe.spacingBehaviour === 'airy' ? 0.085 : 0.065;
+  const baseFonts = FAMILY_STACKS[recipe.typographyFamily];
+  const headlineTypography = parseTypographyAdjustments(
+    recipe.headlineCharacter,
+    baseFonts.lineHeightMult,
+    baseFonts.letterSpacing || 0
+  );
+  const supportTypography = parseTypographyAdjustments(
+    recipe.supportingTypography,
+    1.35,
+    0
+  );
+  const fonts = {
+    ...baseFonts,
+    headlineLineHeight: headlineTypography.lineHeightMult,
+    headlineLetterSpacing: headlineTypography.letterSpacing,
+    supportLineHeight: supportTypography.lineHeightMult,
+    supportLetterSpacing: supportTypography.letterSpacing,
+  };
+  const spacingScale =
+    recipe.spacingBehaviour === 'tight'
+      ? LAYOUT_CONFIG.spacing.tight
+      : recipe.spacingBehaviour === 'airy'
+        ? LAYOUT_CONFIG.spacing.airy
+        : LAYOUT_CONFIG.spacing.normal;
   const m = w * spacingScale;
-  const gap = m * 0.45;
+  const gap = m * LAYOUT_CONFIG.spacing.gapMultiplier;
   // Vertical platforms keep the bottom clearer — platform UI overlays live there.
   const bottomSafe = input.aspectRatio.trim() === '9:16' ? h * 0.05 : 0;
 
@@ -205,18 +486,35 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   const supportUpper = /\b(caps|uppercase)\b/i.test(recipe.supportingTypography);
 
   // ── Font sizing ── large-and-few for minimal, restrained for dense.
-  const characterScale = /large|expressive|oversized|big|bold|dominant/i.test(recipe.headlineCharacter) ? 1.15 : /restrained|small|quiet|modest/i.test(recipe.headlineCharacter) ? 0.88 : 1;
-  const densityScale = recipe.visualDensity === 'minimal' ? 1.06 : recipe.visualDensity === 'dense' ? 0.9 : 1;
+  const characterScale = /large|expressive|oversized|big|bold|dominant/i.test(recipe.headlineCharacter)
+    ? LAYOUT_CONFIG.headlineScale.oversized
+    : /restrained|small|quiet|modest/i.test(recipe.headlineCharacter)
+      ? LAYOUT_CONFIG.headlineScale.restrained
+      : LAYOUT_CONFIG.headlineScale.normal;
+  const densityScale =
+    recipe.visualDensity === 'minimal'
+      ? LAYOUT_CONFIG.density.minimal
+      : recipe.visualDensity === 'dense'
+        ? LAYOUT_CONFIG.density.dense
+        : LAYOUT_CONFIG.density.normal;
   const treatment = recipe.imageTreatment;
-  const headlineBase = (treatment === 'full-bleed' ? (centered ? 0.072 : 0.064) : 0.058) * w;
+  const headlineBase =
+    (treatment === 'full-bleed'
+      ? centered
+        ? LAYOUT_CONFIG.headlineBaseSize.fullBleedCentered
+        : LAYOUT_CONFIG.headlineBaseSize.fullBleedLeft
+      : LAYOUT_CONFIG.headlineBaseSize.framedOrInset) * w;
   const headlineMaxLines = centered ? 2 : 3;
   // Hard cap: the headline never eats more than ~28% of the canvas height.
-  const headlineSize = Math.min(headlineBase * characterScale * densityScale, (h * 0.28) / (headlineMaxLines * 1.12));
-  const supportSize = w * 0.026 * (supportUpper ? 0.85 : 1);
-  const brandMsgSize = w * 0.025;
-  const secondarySize = w * 0.02;
-  const ctaFontSize = w * 0.021;
-  const ctaH = ctaFontSize * 2.4;
+  const headlineSize = Math.min(
+    headlineBase * characterScale * densityScale,
+    (h * LAYOUT_CONFIG.headlineScale.maxHeightRatio) / (headlineMaxLines * 1.12),
+  );
+  const supportSize = w * LAYOUT_CONFIG.textSizes.supportMultiplier * (supportUpper ? 0.85 : 1);
+  const brandMsgSize = w * LAYOUT_CONFIG.textSizes.brandMessageMultiplier;
+  const secondarySize = w * LAYOUT_CONFIG.textSizes.secondaryInfoMultiplier;
+  const ctaFontSize = w * LAYOUT_CONFIG.textSizes.ctaFontSizeMultiplier;
+  const ctaH = ctaFontSize * LAYOUT_CONFIG.textSizes.ctaHeightMultiplier;
 
   // ── Footer ── a real treatment (torn paper / band / hairline), only when the
   // recipe asks for one AND there is content that belongs in it.
@@ -227,10 +525,10 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   // it above the band would collide with the bottom-anchored body copy.
   const logoInFooter = content.hasLogo && wantsFooter && (recipe.logoTreatment === 'footer' || recipe.logoTreatment === 'watermark');
 
-  const footerPad = m * 0.55;
+  const footerPad = m * LAYOUT_CONFIG.footer.paddingMultiplier;
   let footerY = h; // top edge of the footer band; h = no footer
   if (wantsFooter) {
-    const logoSlotW = logoInFooter ? h * 0.11 + gap : 0;
+    const logoSlotW = logoInFooter ? h * LAYOUT_CONFIG.footer.logoSlotHeightRatio + gap : 0;
     const rowAvail = w - m * 2 - logoSlotW;
     const msgFit = content.brandMessage
       ? fitText(content.brandMessage, rowAvail, brandMsgSize, 2, fonts.headlineCharWidth)
@@ -239,7 +537,10 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
     const hasBottomRow = Boolean(content.secondaryInfo || content.cta);
     const bottomRowH = hasBottomRow ? Math.max(secondarySize * 1.4, content.cta ? ctaH : 0) : 0;
     const contentH = msgH + (msgH && bottomRowH ? gap * 0.9 : 0) + bottomRowH;
-    const footerH = Math.max(h * 0.13, Math.min(h * 0.26, contentH + footerPad * 2 + bottomSafe));
+    const footerH = Math.max(
+      h * LAYOUT_CONFIG.footer.minHeightRatio,
+      Math.min(h * LAYOUT_CONFIG.footer.maxHeightRatio, contentH + footerPad * 2 + bottomSafe),
+    );
     footerY = h - footerH;
 
     blocks.push({
@@ -297,23 +598,83 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
         rightEdge = ctaX - gap;
       }
       if (content.secondaryInfo) {
-        const fit = fitText(content.secondaryInfo, rightEdge - m, secondarySize, 1, BODY_CHAR_WIDTH);
-        blocks.push({
-          kind: 'text',
-          role: 'secondaryInfo',
-          rect: norm(m, rowY + ctaH * 0.5 - fit.fontSize * 0.7, rightEdge - m, fit.fontSize * 1.4),
-          spec: {
-            lines: fit.lines,
-            x: m,
-            y: rowY + ctaH * 0.5 + fit.fontSize * 0.35,
-            fontSize: fit.fontSize,
-            lineHeight: fit.fontSize * 1.3,
-            fontFamily: fonts.body,
-            fill: palette.ink,
-            opacity: 0.75,
-            letterSpacing: 1,
-          },
-        });
+        const items = content.secondaryInfo.split(' · ').map(s => s.trim()).filter(Boolean);
+        if (items.length > 1) {
+          const itemGap = gap * 1.2;
+          const totalAvailW = rightEdge - m;
+          const targetItemW = (totalAvailW - (items.length - 1) * itemGap) / items.length;
+          
+          let currentX = m;
+          items.forEach((item, idx) => {
+            const fit = fitText(item, targetItemW, secondarySize * 0.95, 1, BODY_CHAR_WIDTH);
+            const itemW = fit.lines[0].length * fit.fontSize * BODY_CHAR_WIDTH;
+            
+            // Draw a tiny circular indicator badge (organic shape) before the text
+            const bulletSize = fit.fontSize * 0.35;
+            blocks.push({
+              kind: 'badge',
+              rect: norm(currentX, rowY + ctaH * 0.5 - bulletSize / 2, bulletSize, bulletSize),
+              text: '',
+              fontSize: 0,
+              fontFamily: fonts.body,
+              fill: palette.accent,
+              textFill: palette.accent,
+            });
+            
+            const textX = currentX + bulletSize + gap * 0.35;
+            const textW = targetItemW - (bulletSize + gap * 0.35);
+            blocks.push({
+              kind: 'text',
+              role: 'secondaryInfo',
+              rect: norm(textX, rowY + ctaH * 0.5 - fit.fontSize * 0.7, textW, fit.fontSize * 1.4),
+              spec: {
+                lines: fit.lines,
+                x: textX,
+                y: rowY + ctaH * 0.5 + fit.fontSize * 0.35,
+                fontSize: fit.fontSize,
+                lineHeight: fit.fontSize * 1.3,
+                fontFamily: fonts.body,
+                fill: palette.ink,
+                opacity: 0.85,
+                letterSpacing: 0.5,
+              },
+            });
+            
+            currentX += targetItemW;
+            
+            // Draw a vertical divider line between columns
+            if (idx < items.length - 1) {
+              const dividerX = currentX + itemGap / 2;
+              blocks.push({
+                kind: 'divider',
+                rect: norm(dividerX, rowY + ctaH * 0.25, 1, ctaH * 0.5),
+                stroke: palette.ink,
+                opacity: 0.25,
+              });
+              currentX += itemGap;
+            }
+          });
+        } else {
+          const fit = fitText(content.secondaryInfo, rightEdge - m, secondarySize, 1, BODY_CHAR_WIDTH);
+          const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+          const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+          blocks.push({
+            kind: 'text',
+            role: 'secondaryInfo',
+            rect: norm(m, rowY + ctaH * 0.5 - fit.fontSize * 0.7, Math.min(rightEdge - m, actualW), fit.fontSize * 1.4),
+            spec: {
+              lines: fit.lines,
+              x: m,
+              y: rowY + ctaH * 0.5 + fit.fontSize * 0.35,
+              fontSize: fit.fontSize,
+              lineHeight: fit.fontSize * 1.3,
+              fontFamily: fonts.body,
+              fill: palette.ink,
+              opacity: 0.75,
+              letterSpacing: 1,
+            },
+          });
+        }
       }
     }
     if (logoInFooter) {
@@ -365,9 +726,10 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   const bodyColW = centered ? w - m * 2 : Math.min(w - m * 2, w * (bodyOnPaper ? 0.86 : 0.7));
   const bodyX = centered ? w / 2 : m;
   const lightPhoto = !bodyOnPaper && tone === 'light';
-  const textFill = bodyOnPaper ? palette.ink : lightPhoto ? palette.ink : '#ffffff';
   /** What copy over the photo contrasts against — the scrim, effectively. */
-  const photoBackdrop = lightPhoto ? '#f2f2f2' : '#222222';
+  const photoBackdrop = lightPhoto ? DESIGN_SYSTEM_DEFAULTS.lightBackdrop : DESIGN_SYSTEM_DEFAULTS.darkBackdrop;
+  const baseTextFill = bodyOnPaper ? palette.ink : lightPhoto ? palette.ink : DESIGN_SYSTEM_DEFAULTS.fallbackLightText;
+  const textFill = adjustContrast(baseTextFill, bodyOnPaper ? palette.paper : photoBackdrop, DESIGN_SYSTEM_DEFAULTS.wcagTargetRatio);
   const textShadow = !bodyOnPaper && !lightPhoto;
   const stack: StackItem[] = [];
 
@@ -385,7 +747,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   if (content.headline) {
     const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
     const fit = fitText(text, bodyColW, headlineSize, headlineMaxLines, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
-    const lineHeight = fit.fontSize * 1.08;
+    const lineHeight = fit.fontSize * fonts.headlineLineHeight;
     const blockH = fit.lines.length * lineHeight;
     const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
     const underlineW = Math.min(widestLine * fit.fontSize * fonts.headlineCharWidth * 0.55, bodyColW * 0.5);
@@ -396,10 +758,11 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
       height: blockH + (wantsUnderline ? gap * 0.8 : 0),
       gapAfter: gap,
       place: (topY) => {
+        const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
         blocks.push({
           kind: 'text',
           role: 'headline',
-          rect: norm(centered ? m : bodyX, topY, bodyColW, blockH),
+          rect: norm(centered ? w / 2 - actualW / 2 : bodyX, topY, Math.min(bodyColW, actualW), blockH),
           spec: {
             lines: fit.lines,
             x: bodyX,
@@ -412,7 +775,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
             align,
             ...(headlineRotation !== 0 && { rotationDeg: headlineRotation }),
             ...(textShadow && { shadow: true }),
-            ...(headlineUpper && { letterSpacing: 1.5 }),
+            letterSpacing: fonts.headlineLetterSpacing || (headlineUpper ? 1.5 : undefined),
           },
         });
         if (wantsUnderline) {
@@ -434,6 +797,8 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
       const badgeFont = supportSize * 0.85;
       const badgeW = content.support.length * badgeFont * 0.62 + badgeFont * 1.8;
       const badgeH = badgeFont * 2;
+      const badgeFill = visibleAccent(palette, bodyOnPaper ? palette.paper : photoBackdrop);
+      const badgeTextFill = adjustContrast(onColor(badgeFill, palette), badgeFill, 4.5);
       stack.push({
         height: badgeH,
         gapAfter: gap,
@@ -444,23 +809,26 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
             text: content.support as string,
             fontSize: badgeFont,
             fontFamily: fonts.body,
-            fill: visibleAccent(palette, bodyOnPaper ? palette.paper : photoBackdrop),
-            textFill: onColor(visibleAccent(palette, bodyOnPaper ? palette.paper : photoBackdrop), palette),
+            fill: badgeFill,
+            textFill: badgeTextFill,
+            shapeLanguage: recipe.shapeLanguage,
           }),
       });
     } else {
       const text = supportUpper ? content.support.toUpperCase() : content.support;
       const fit = fitText(text, bodyColW, supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
-      const lineHeight = fit.fontSize * 1.35;
+      const lineHeight = fit.fontSize * fonts.supportLineHeight;
       const blockH = fit.lines.length * lineHeight;
       stack.push({
         height: blockH,
         gapAfter: gap,
-        place: (topY) =>
+        place: (topY) => {
+          const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+          const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
           blocks.push({
             kind: 'text',
             role: 'support',
-            rect: norm(centered ? m : bodyX, topY, bodyColW, blockH),
+            rect: norm(centered ? w / 2 - actualW / 2 : bodyX, topY, Math.min(bodyColW, actualW), blockH),
             spec: {
               lines: fit.lines,
               x: bodyX,
@@ -471,11 +839,12 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
               fill: textFill,
               align,
               ...(content.supportIsInteraction && { italic: true }),
-              ...(supportUpper && { letterSpacing: 1.5 }),
+              letterSpacing: fonts.supportLetterSpacing || (supportUpper ? 1.5 : undefined),
               ...(textShadow && { shadow: true }),
               opacity: bodyOnPaper ? 0.85 : 0.95,
             },
-          }),
+          });
+        },
       });
     }
   }
@@ -487,11 +856,13 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
     stack.push({
       height: blockH,
       gapAfter: gap,
-      place: (topY) =>
+      place: (topY) => {
+        const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+        const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
         blocks.push({
           kind: 'text',
           role: 'brandMessage',
-          rect: norm(centered ? m : bodyX, topY, bodyColW, blockH),
+          rect: norm(centered ? w / 2 - actualW / 2 : bodyX, topY, Math.min(bodyColW, actualW), blockH),
           spec: {
             lines: fit.lines,
             x: bodyX,
@@ -505,7 +876,8 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
             opacity: 0.9,
             ...(textShadow && { shadow: true }),
           },
-        }),
+        });
+      },
     });
   }
 
@@ -546,11 +918,13 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
     stack.push({
       height: blockH,
       gapAfter: 0,
-      place: (topY) =>
+      place: (topY) => {
+        const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+        const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
         blocks.push({
           kind: 'text',
           role: 'secondaryInfo',
-          rect: norm(centered ? m : bodyX, topY, bodyColW, blockH),
+          rect: norm(centered ? w / 2 - actualW / 2 : bodyX, topY, Math.min(bodyColW, actualW), blockH),
           spec: {
             lines: fit.lines,
             x: bodyX,
@@ -564,7 +938,8 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
             letterSpacing: 1,
             ...(textShadow && { shadow: true }),
           },
-        }),
+        });
+      },
     });
   }
 
@@ -585,8 +960,8 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
       direction: 'up',
       // Pale scrims stay sheer — ink-on-bright already contrasts, and a heavy
       // white wash veils the subject (a ghosted product kills appetite appeal).
-      maxOpacity: lightPhoto ? 0.45 : 0.58,
-      color: lightPhoto ? '#ffffff' : '#000000',
+      maxOpacity: lightPhoto ? LAYOUT_CONFIG.scrim.lightOpacity : LAYOUT_CONFIG.scrim.darkOpacity,
+      color: lightPhoto ? DESIGN_SYSTEM_DEFAULTS.lightScrimColor : DESIGN_SYSTEM_DEFAULTS.darkScrimColor,
     });
   }
 
@@ -601,7 +976,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   const footerLogoStranded = recipe.logoTreatment === 'footer' && !wantsFooter;
   if (content.hasLogo && !logoInFooter && (recipe.logoTreatment === 'corner' || recipe.logoTreatment === 'watermark' || footerLogoStranded)) {
     const watermark = recipe.logoTreatment === 'watermark';
-    const size = w * (watermark ? 0.06 : 0.08);
+    const size = w * (watermark ? LAYOUT_CONFIG.logo.watermarkSizeRatio : LAYOUT_CONFIG.logo.cornerSizeRatio);
     const bottomY = Math.min(h - bottomSafe, footerY) - m * 0.6 - size;
     const topLeft = { x: m, y: m * 0.7 };
     const topRight = { x: w - m - size, y: m * 0.7 };
@@ -614,14 +989,54 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
         ? [topCenter, topLeft, topRight, bottomLeft]
         : anchorTop
           ? [topRight, bottomRight, bottomLeft, topLeft]
-          : [topLeft, topRight, bottomRight, bottomLeft];
+          : [topRight, topLeft, bottomRight, bottomLeft];
     const occupied = blocks.filter((b): b is Extract<PlannedBlock, { rect: Rect }> => 'rect' in b && SOLID_KINDS.has(b.kind));
     const spot =
       candidates.find((c) => {
         const rect = norm(c.x, c.y, size, size);
-        return occupied.every((b) => overlapArea(rect, b.rect) <= 0.0005);
+        return occupied.every((b) => overlapArea(rect, b.rect) <= LAYOUT_CONFIG.collisionThreshold);
       }) ?? candidates[0];
-    blocks.push({ kind: 'logo', rect: norm(spot.x, spot.y, size, size), opacity: watermark ? 0.5 : 1 });
+    blocks.push({ kind: 'logo', rect: norm(spot.x, spot.y, size, size), opacity: watermark ? LAYOUT_CONFIG.logo.watermarkOpacity : 1 });
+  }
+
+  // ── Event Badge ── collision-aware corner placement
+  if (content.eventBadge) {
+    const badgeFont = w * LAYOUT_CONFIG.badge.fontSizeMultiplier;
+    const padX = badgeFont * LAYOUT_CONFIG.badge.paddingCharRatio;
+    const badgeW = content.eventBadge.length * badgeFont * 0.62 + padX * 2;
+    const badgeH = badgeFont * LAYOUT_CONFIG.badge.heightFontSizeRatio;
+    const bottomY = Math.min(h - bottomSafe, footerY) - m * 0.6 - badgeH;
+    const topLeft = { x: m, y: m * 0.7 };
+    const topRight = { x: w - m - badgeW, y: m * 0.7 };
+    const topCenter = { x: w / 2 - badgeW / 2, y: m * 0.7 };
+    const bottomRight = { x: w - m - badgeW, y: bottomY };
+    const bottomLeft = { x: m, y: bottomY };
+    const candidates = centered
+      ? [topRight, topLeft, bottomRight, bottomLeft]
+      : anchorTop
+        ? [bottomRight, bottomLeft, topRight, topLeft]
+        : [topRight, topLeft, bottomRight, bottomLeft];
+
+    const occupied = blocks.filter((b): b is Extract<PlannedBlock, { rect: Rect }> => 'rect' in b && SOLID_KINDS.has(b.kind));
+    const spot =
+      candidates.find((c) => {
+        const rect = norm(c.x, c.y, badgeW, badgeH);
+        return occupied.every((b) => overlapArea(rect, b.rect) <= LAYOUT_CONFIG.collisionThreshold);
+      }) ?? candidates[0];
+
+    const badgeFill = visibleAccent(palette, bodyOnPaper ? palette.paper : photoBackdrop);
+    const badgeTextColor = adjustContrast(onColor(badgeFill, palette), badgeFill, DESIGN_SYSTEM_DEFAULTS.wcagTargetRatio);
+
+    blocks.push({
+      kind: 'badge',
+      rect: norm(spot.x, spot.y, badgeW, badgeH),
+      text: content.eventBadge,
+      fontSize: badgeFont,
+      fontFamily: fonts.body,
+      fill: badgeFill,
+      textFill: badgeTextColor,
+      shapeLanguage: recipe.shapeLanguage,
+    });
   }
 
   // ── Decoration ── editorial rules, border, texture.
@@ -631,7 +1046,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
       blocks.push({
         kind: 'divider',
         rect: norm(centered ? m : bodyX, ruleY, centered ? w - m * 2 : bodyColW * 0.4, 3),
-        stroke: bodyOnPaper || lightPhoto ? palette.ink : '#ffffff',
+        stroke: bodyOnPaper || lightPhoto ? palette.ink : DESIGN_SYSTEM_DEFAULTS.fallbackLightText,
         opacity: 0.7,
       });
     }
@@ -640,7 +1055,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
     blocks.push({
       kind: 'border',
       style: recipe.borderStyle as 'hairline' | 'thick' | 'inset-frame',
-      stroke: bodyOnPaper || lightPhoto ? palette.ink : '#ffffff',
+      stroke: bodyOnPaper || lightPhoto ? palette.ink : DESIGN_SYSTEM_DEFAULTS.fallbackLightText,
     });
   }
   if (recipe.texture !== 'none') {

@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { env } from '../config/env';
+import { prisma } from '../config/prisma';
 import {
   AiProviderError,
   activeImageProvider,
@@ -475,18 +476,88 @@ async function resolveIdentity(request: CreativeGenerationRequest) {
   const visionProvider = providerForRole('vision');
   const firstAsset = request.assetUrls[0];
 
+  let brandName = request.brandVoice?.name || '';
+  let dbBrandDescription = '';
+  let voicePayloadFromDb: Record<string, any> | null = null;
+
+  if (request.contextType === 'brand' && request.brandId) {
+    try {
+      const activeBrandRow = await prisma.brand.findFirst({
+        where: { id: request.brandId, created_by: request.userId },
+      });
+      if (activeBrandRow) {
+        if (!brandName) brandName = activeBrandRow.name;
+        dbBrandDescription = activeBrandRow.description;
+      }
+    } catch (e) {
+      console.warn('[creative] failed to read active brand row', e);
+    }
+  }
+
+  // If we have a brandName, find any other Brand or BrandVoice matching this name case-insensitively
+  if (brandName) {
+    try {
+      // Find another brand with same name to get description if not present
+      if (!dbBrandDescription) {
+        const matchingBrand = await prisma.brand.findFirst({
+          where: {
+            created_by: request.userId,
+            name: { equals: brandName, mode: 'insensitive' },
+          },
+        });
+        if (matchingBrand) {
+          dbBrandDescription = matchingBrand.description;
+        }
+      }
+
+      // Find any saved BrandVoice matching the name
+      const matchingVoice = await prisma.brandVoice.findFirst({
+        where: {
+          created_by: request.userId,
+          name: { equals: brandName, mode: 'insensitive' },
+        },
+      });
+      if (matchingVoice && matchingVoice.voice && typeof matchingVoice.voice === 'object') {
+        voicePayloadFromDb = matchingVoice.voice as Record<string, any>;
+      }
+    } catch (e) {
+      console.warn('[creative] failed to load duplicate-name brand contexts', e);
+    }
+  }
+
+  // Construct a merged brand input
+  const mergedBrandVoice: BrandProfileInput = {
+    name: brandName,
+    description: request.brandVoice?.description || dbBrandDescription || '',
+    mission: request.brandVoice?.mission || (voicePayloadFromDb?.mission as string) || '',
+    industry: request.brandVoice?.industry || (voicePayloadFromDb?.industry as string) || '',
+    targetAudience: request.brandVoice?.targetAudience || (voicePayloadFromDb?.targetAudience as string) || (voicePayloadFromDb?.audience as string) || '',
+    tone: request.brandVoice?.tone || (voicePayloadFromDb?.tone as string) || '',
+    writingStyle: request.brandVoice?.writingStyle || (voicePayloadFromDb?.writingStyle as string) || '',
+    personality: request.brandVoice?.personality || (voicePayloadFromDb?.personality as string) || '',
+    products: request.brandVoice?.products?.length ? request.brandVoice.products : ((voicePayloadFromDb?.products as string[]) || []),
+    competitors: request.brandVoice?.competitors?.length ? request.brandVoice.competitors : ((voicePayloadFromDb?.competitors as string[]) || []),
+    brandColors: request.brandVoice?.brandColors?.length ? request.brandVoice.brandColors : ((voicePayloadFromDb?.brandColors as string[]) || []),
+    wordsToUse: request.brandVoice?.wordsToUse?.length ? request.brandVoice.wordsToUse : ((voicePayloadFromDb?.wordsToUse as string[]) || []),
+    wordsToAvoid: request.brandVoice?.wordsToAvoid?.length ? request.brandVoice.wordsToAvoid : ((voicePayloadFromDb?.wordsToAvoid as string[]) || []),
+    services: request.brandVoice?.services?.length ? request.brandVoice.services : ((voicePayloadFromDb?.services as string[]) || []),
+    ctaStyle: request.brandVoice?.ctaStyle || (voicePayloadFromDb?.ctaStyle as string) || '',
+    emojiStyle: request.brandVoice?.emojiStyle || (voicePayloadFromDb?.emojiStyle as string) || '',
+    usp: request.brandVoice?.usp || (voicePayloadFromDb?.usp as string) || '',
+  };
+
   const outcome = firstAsset
     ? await analyseImage({
         imageUrl: firstAsset,
         provider: visionProvider,
         topic: request.prompt,
-        brandName: request.brandVoice?.name,
-        brandDescription: request.brandVoice?.description,
+        brandName: mergedBrandVoice.name,
+        brandDescription: mergedBrandVoice.description,
       })
     : null;
 
   const brand = resolveBrandProfile({
-    brand: request.brandVoice,
+    brand: mergedBrandVoice,
     imageAnalysis: outcome?.analysis ?? null,
   });
   const creativeDna = resolveCreativeDna({
@@ -627,12 +698,13 @@ function buildImagePrompt(direction: CreativeDirection, hasAssets: boolean, hasL
     layout?.safeAreas && `Keep completely clear of any graphics: ${layout.safeAreas}`,
     // §8: the visual must SUPPORT the concept — one coherent story, not a
     // prop pile-up or a stock-photo default.
-    'Simplify: prefer ONE clear subject and a coherent scene over an inventory of props — drop anything that does not serve the story. Avoid generic stock-photo defaults: no interchangeable corporate models or suited businesspeople, no fake dramatic lighting effects, no floating disconnected objects, no glossy blue-gradient tech backgrounds, no meaningless visual complexity.',
+    'Simplify: prefer ONE clear subject and a coherent scene over an inventory of props — drop anything that does not serve the story. Avoid generic stock-photo and AI-art hallmarks: no mystical glowing portals, no floating neon/glowing geometric frames, no magical sparkles or floating dust particles, no hyper-saturated artificial lighting, no fantasy digital-art effects. Keep scenes grounded, realistic, and specific-driven, rendering them as clean, premium commercial or lifestyle photography with natural lighting, organic textures, and believable physical spaces.',
     `Do not include: ${[
       ...direction.negativeVisualConstraints,
       'no rendered words, letterforms, numerals, hex codes, typography, or logos',
       'no UI mockups, wireframes, spec diagrams, placeholder boxes, dummy labels, leader/pointer/callout lines, or annotation marks',
       'no transparency checkerboard or alternating grey-and-white grid pattern anywhere — fill the entire canvas edge to edge with the scene itself',
+      'no glowing neon frames, no mystical glowing portals or arches, no fantasy art overlays, no floating digital particles or sparkles',
     ].join(', ')}.`,
   ];
   return lines

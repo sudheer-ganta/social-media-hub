@@ -357,7 +357,7 @@ export function BrandVoicePanel({
                   </p>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Industry</Label>
                     <Input
@@ -368,11 +368,19 @@ export function BrandVoicePanel({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Products / Services</Label>
+                    <Label className="text-xs">Products</Label>
                     <TagInput
                       value={voice.products ?? []}
                       onChange={(tags) => set("products", tags)}
-                      placeholder="Venue hire, planning…"
+                      placeholder="e.g. Candles, dresses..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Services</Label>
+                    <TagInput
+                      value={voice.services ?? []}
+                      onChange={(tags) => set("services", tags)}
+                      placeholder="e.g. Venue hire, planning..."
                     />
                   </div>
                 </div>

@@ -24,7 +24,7 @@ import type {
  * refuses to accept one.
  */
 
-export const CREATIVE_CONCEPTS_PROMPT_VERSION = 3;
+export const CREATIVE_CONCEPTS_PROMPT_VERSION = 4;
 
 /** Mirrors `MechanismFamily` in ai/types.ts — the diversity axis the concept-set gate compares. */
 export const MECHANISM_FAMILIES = [
@@ -50,6 +50,11 @@ const SYSTEM_INSTRUCTION = `You are the creative director at a multi-brand studi
 A concept without a mechanism is not a concept. "A beautiful photo of the product" is not an idea — it is the absence of one. Every concept must say HOW it communicates: through a visual metaphor, an unexpected scale, a puzzle the audience solves, a piece of wordplay, a surreal juxtaposition, a human moment, a before/after, a hidden detail — something with a name you could say out loud.
 
 Rules you never break:
+- SPELLING AND CULTURAL TERMS CORRECTNESS: You must act as a meticulous English professor and professional proofreader. Ensure all concept messages, copy suggestions, and names are spelled 100% correctly. Verify every single word letter-by-letter to ensure there are no typographical errors or character-level hallucinations, especially for complex words, brand keywords, cultural terms, and promotional offers. Do not guess spellings phonetically.
+- PRESERVING USER'S VISUAL PROMPT: If the member's request contains a specific, concrete description of a visual scene, composition, subject, or setting (e.g. "a traveler looking at a sunrise over dream destinations", "an airplane subtly flying", etc.), you MUST center your proposed concepts around this requested visual scene. Do not invent completely unrelated scenes or replace their visual details with stock templates (such as an office lobby or a sedan car). Ground your proposed concepts and mechanisms (visual metaphor, juxtaposition, before/after, etc.) inside the user's requested visual scene rather than throwing it away.
+- HARMONIZING DESIGNER AND USER POV FOR ANY CULTURAL OR HOLIDAY OCCASION: When a campaign centers on any requested cultural moment, holiday, festival, or seasonal event (regardless of the specific occasion):
+  - User POV (Clarity & Context): The visual MUST immediately evoke the requested event. If the user does not provide a reference image, ground the visual story and subject in the most commonly recognized, standard symbols, motifs, colors, or lighting traditionally associated with that occasion (what a normal consumer expects to see; e.g., evergreen elements for winter holidays, traditional lamps/light sources for light-based festivals, specific seasonal foliage, or iconic cultural colors). Under no circumstances should the visual be an overly abstract "high IQ" graphic, a corporate logo mark, or an unrelated stock landscape that completely lacks the holiday's expected context.
+  - Designer POV (Brand & Aesthetic Alignment): Do not propose cheap, generic clip-art style holiday templates. Instead, elevate the occasion's standard, expected motifs using the brand's creative DNA (e.g., if the brand is minimalist, depict a highly stylized, aesthetic close-up of a single branch or traditional element in a serene, warm-lit room rather than a busy cartoon illustration). Brand constraints limit the execution complexity, but they NEVER license the model to erase the occasion's expected visual cues. A holiday campaign must always be instantly recognizable as that holiday to the average consumer.
 - Three inputs, three jobs, in priority order — never let one collapse into another: the brand's confirmed identity CONSTRAINS every concept; the member's request + stated requirements DETERMINE what is being advertised; any reference style INFLUENCES how concepts feel. The same brand must be able to look dramatically different across campaigns, and different brands given the same request must produce dramatically different concept sets — a restaurant, a fashion label, a SaaS tool, a travel company and a beauty brand asking for "a launch campaign" should share nothing but craft. Never reach for a genre default (dark-purple event glow, blue-white SaaS, warm restaurant amber, beige luxury) unless this client's own brand, campaign or references specifically support it.
 - Propose 3–5 concepts that use GENUINELY DIFFERENT mechanisms. Never five variations of the same idea with different colours/backgrounds/props — that is one concept repeated, not five concepts. Draw from a wide mechanism library: visual metaphor, unexpected scale, juxtaposition, transformation, object interaction, puzzle, game, optical illusion, wordplay, double meaning, surreal realism, unexpected environment, human observation, cultural observation, before/after, negative space, object substitution, editorial storytelling, humour, contrast, curiosity gap, hidden detail, perspective trick, pattern interruption.
 - PLAN THE SET BEFORE WRITING IT. Internally (never in the output): list the candidate mechanism families that genuinely fit this brief and this brand, then pick one DIFFERENT family per concept — each concept declares its family in mechanismFamily. No two concepts in one response may share a mechanismFamily, and the families must fit the brand: a luxury label leans editorial metaphor and product story more naturally than a meme; a restaurant can carry food interaction, humour, human observation; a workflow tool can carry process metaphor, transformation, interaction. Which families you pick is decided fresh per brief — never the same fixed trio every time, and never a family forced onto a brand it fights.
@@ -248,8 +253,8 @@ export function buildCreativeConceptsPrompt(context: {
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt,
     responseSchema: CREATIVE_CONCEPTS_RESPONSE_SCHEMA,
-    // High — this is the most genuinely generative step in the pipeline.
-    temperature: 0.95,
+    // Lowered to 0.7 to prevent spelling typos and wild hallucinations while remaining creative.
+    temperature: 0.7,
     version: CREATIVE_CONCEPTS_PROMPT_VERSION,
   };
 }

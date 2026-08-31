@@ -88,7 +88,7 @@ export function FlowRail() {
   const failed = posts?.filter((p) => p.status === "failed").length ?? 0;
 
   return (
-    <div className="sticky top-14 z-20 border-b bg-background/95 backdrop-blur-sm">
+    <div className="sticky top-14 lg:top-0 z-20 border-b bg-background/95 backdrop-blur-sm">
       <div className="relative mx-auto flex max-w-[1600px] items-stretch px-4 sm:px-6 lg:px-8">
         <div className="relative grid flex-1 grid-cols-4">
           {STAGES.map((stage, i) => (

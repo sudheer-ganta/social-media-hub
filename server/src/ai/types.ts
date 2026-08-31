@@ -110,6 +110,7 @@ export interface BrandVoiceInput {
   emojiStyle?: string;
   ctaStyle?: string;
   targetAudience?: string;
+  services?: string[];
 }
 
 /**
@@ -175,6 +176,7 @@ export interface BrandProfile {
   wordsToUse: string[];
   wordsToAvoid: string[];
   brandColors: string[];
+  services: string[];
   /** 0–100. How much of the profile is actually filled in. */
   completeness: number;
   /** Where each resolved field came from. Only keys that have a value appear. */
