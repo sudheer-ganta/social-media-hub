@@ -54,6 +54,8 @@ export const EMPTY_DNA: ResolvedCreativeDna = {
   brandColors: [],
   logoAssetUrl: '',
   referenceAssetUrls: [],
+  headlineFont: '',
+  bodyFont: '',
   completeness: 0,
   provenance: {},
 };
@@ -198,8 +200,11 @@ describe('renderCreative', () => {
       expect(metadata.width).toBe(expected.width);
       expect(metadata.height).toBe(expected.height);
     },
-    // Full-canvas SVG rasterization is slow under parallel suite load.
-    20_000,
+    // Full-canvas SVG rasterization is slow under parallel suite load, and the
+    // real-font rasterizer (text-rasterizer.ts, on top of this) adds genuine
+    // font-file parsing cost per call — worthwhile for guaranteed-correct
+    // typography, but slower than the old host-font fallback.
+    40_000,
   );
 
   it('composites without a logo and without a reference style', async () => {
@@ -233,5 +238,7 @@ describe('renderCreative', () => {
       }),
     });
     expect(tactile.structure).not.toBe(boldGraphic.structure);
-  }, 20_000);
+    // Two sequential real renders (see the timeout note above the PNG-size
+    // tests in this file) — generous under parallel suite load.
+  }, 40_000);
 });

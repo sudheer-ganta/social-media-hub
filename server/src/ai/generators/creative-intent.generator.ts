@@ -91,13 +91,12 @@ export async function generateCreativeIntent({
     ...(industry && { industry }),
   });
 
-  try {
-    const payload = (await provider.generateJson({
+  const payload = (await provider.generateJson({
       systemInstruction: built.systemInstruction,
       prompt: built.prompt,
       responseSchema: built.responseSchema,
       temperature: built.temperature,
-    })) as RawCreativeIntentPayload;
+  })) as RawCreativeIntentPayload;
 
     const intent = normaliseIntent(payload);
     console.info('[creative] intent extracted', {
@@ -107,15 +106,7 @@ export async function generateCreativeIntent({
       offer: intent.offer,
       event: intent.event,
     });
-    return intent;
-  } catch (error) {
-    // Never fatal: a request with no extracted requirements simply has no
-    // requirements to validate against, which is the pre-intent behaviour.
-    console.warn('[creative] intent extraction failed, continuing without hard requirements', {
-      detail: error instanceof Error ? error.message : String(error),
-    });
-    return EMPTY_INTENT;
-  }
+  return intent;
 }
 
 /**

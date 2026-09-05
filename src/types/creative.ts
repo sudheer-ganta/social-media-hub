@@ -114,6 +114,20 @@ export interface IntentFidelity {
 }
 
 export interface ScoredCreativeConcept extends CreativeConcept {
+  conceptId?: string;
+  styleId?: string;
+  promptVersion?: string;
+  styleVersion?: string;
+  contextVersion?: string;
+  generationVersion?: string;
+  generationStatus?: "not_generated" | "generating" | "generated" | "failed";
+  generatedAsset?: GeneratedAsset | null;
+  visualDirection?: string;
+  typographyDirection?: string;
+  colorDirection?: string;
+  lightingDirection?: string;
+  imageryDirection?: string;
+  layoutDirection?: string;
   mode: CreativeMode;
   artDirectionFamily: ArtDirectionFamily;
   /** The mechanism family this idea belongs to — the axis concept-set diversity is judged on. */
@@ -264,7 +278,7 @@ export interface UnderstoodCreative {
 }
 
 export type GeneratedAssetStatus = "PENDING" | "COMPLETED" | "FAILED";
-export type GeneratedAssetSource = "AI_GENERATED" | "AI_REFINED";
+export type GeneratedAssetSource = "AI_GENERATED" | "AI_REFINED" | "AI_REGENERATED";
 
 export interface GeneratedAsset {
   id: string;
@@ -282,9 +296,27 @@ export interface GeneratedAsset {
   format: string | null;
   provider: string;
   model: string;
+  /**
+   * The automatic typography engine's choice — informational only (spec: the
+   * user never selects a font). See CreateWithFlowPostDialog's result step for
+   * the read-only "Typography: X + Y" detail. Null for rows generated before
+   * this existed, or when the renderer fell back to the raw visual.
+   */
+  typography: TypographySelection | null;
   source: GeneratedAssetSource;
   status: GeneratedAssetStatus;
   campaignId: string | null;
   parentAssetId: string | null;
   createdAt: string;
+}
+
+/** Mirrors server/src/ai/typography/font-selector.ts's TypographySelection. */
+export interface TypographySelection {
+  headlineFont: string;
+  bodyFont: string;
+  accentFont?: string;
+  headlineWeight: number;
+  bodyWeight: number;
+  accentWeight?: number;
+  typographyReasoning: string;
 }

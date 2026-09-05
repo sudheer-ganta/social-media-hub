@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { env } from '../config/env';
@@ -17,7 +17,21 @@ import { generateCreativeResearch } from '../ai/generators/creative-research.gen
 import { generateReferenceStyleProfile } from '../ai/generators/reference-style.generator';
 import { normaliseDesignRecipe } from '../ai/render/design-recipe';
 import { renderCreative } from '../ai/render/creative-renderer';
+import type { TypographySelection } from '../ai/typography/font-selector';
 import { detectCheckerboard } from '../ai/render/render-validation';
+import {
+  getStyleDNA,
+  renderStyleDnaInstructions,
+  resolveStyleDNA,
+  styleDnaToRecipe,
+  STYLE_DNA_VERSION,
+  type ResolvedStyleDNA,
+} from '../ai/style-dna/style-dna';
+import { creativeConceptRepository, type ConceptScope, type PersistedConcept } from '../repositories/creative-concept.repository';
+import { designContextService, type DesignContext } from './design-context.service';
+import { brandIntelligenceService, type BrandIntelligenceProfile } from './creative-brand-intelligence.service';
+import { creativeAttributionRepository } from '../repositories/creative-attribution.repository';
+import { aiUsageRepository } from '../repositories/ai-usage.repository';
 import { describePaletteColor } from '../ai/render/palette-words';
 import {
   buildCampaignCreativePrompt,
@@ -280,6 +294,12 @@ function readConcept(value: unknown): ScoredCreativeConcept | undefined {
     conceptName,
     bigIdea,
     visualMechanism,
+    ...(readString(c.conceptId, 64) && { conceptId: readString(c.conceptId, 64) }),
+    ...(readString(c.styleId, 80) && { styleId: readString(c.styleId, 80) }),
+    ...(readString(c.promptVersion, 80) && { promptVersion: readString(c.promptVersion, 80) }),
+    ...(readString(c.styleVersion, 80) && { styleVersion: readString(c.styleVersion, 80) }),
+    ...(readString(c.contextVersion, 80) && { contextVersion: readString(c.contextVersion, 80) }),
+    ...(readString(c.generationVersion, 80) && { generationVersion: readString(c.generationVersion, 80) }),
     ...(readString(c.humanInsight, 300) && { humanInsight: readString(c.humanInsight, 300) }),
     ...(readString(c.visualMetaphor, 300) && { visualMetaphor: readString(c.visualMetaphor, 300) }),
     ...(readString(c.interaction, 300) && { interaction: readString(c.interaction, 300) }),
@@ -336,6 +356,10 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
   const brandVoice = readBrandVoice(input.brandVoice) as BrandProfileInput | undefined;
   const referenceImageUrls = readReferenceImageUrls(input.referenceImageUrls);
   const referenceStyleProfile = readReferenceStyleProfile(input.referenceStyleProfile);
+  const styleId = readString(input.styleId, 80);
+  if (styleId && !getStyleDNA(styleId)) {
+    throw new CreativeError('That creative style is not available.', 422);
+  }
 
   return {
     userId,
@@ -344,6 +368,7 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
       brandId: readString(input.brandId, 64),
     }),
     prompt,
+    ...(styleId && { styleId }),
     goal: readEnum(input.goal, GOALS, 'brand_awareness'),
     funnelStage: readEnum(input.funnelStage, FUNNEL_STAGES, 'TOFU'),
     platforms: readPlatforms(input.platforms),
@@ -355,6 +380,101 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
     ...(referenceStyleProfile && { referenceStyleProfile }),
     ...(readConcept(input.selectedConcept) && { selectedConcept: readConcept(input.selectedConcept) }),
     ...(readIntent(input.intent) && { intent: readIntent(input.intent) }),
+  };
+}
+
+const CONCEPT_VERSION = 'concept-v1';
+const GENERATION_VERSION = 'generation-v1';
+
+function digest(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 24);
+}
+
+function conceptScope(request: CreativeGenerationRequest): ConceptScope {
+  return { userId: request.userId, contextType: request.contextType, brandId: request.contextType === 'brand' ? request.brandId : null };
+}
+
+function contextVersion(request: CreativeGenerationRequest): string {
+  return digest({ mode: request.contextType, brandId: request.brandId ?? null, brandVoice: request.brandVoice ?? null, creativeDna: request.creativeDna ?? null });
+}
+
+function promptVersion(request: CreativeGenerationRequest): string {
+  return digest({ prompt: request.prompt.trim().replace(/\s+/g, ' '), goal: request.goal, funnelStage: request.funnelStage, platforms: request.platforms });
+}
+
+function resolvedStyleFor(request: CreativeGenerationRequest, variationKey?: string, context?: DesignContext): ResolvedStyleDNA | undefined {
+  return resolveStyleDNA({
+    styleId: request.styleId ?? request.selectedConcept?.styleId,
+    prompt: request.prompt,
+    variationKey,
+    preferredStyleId: context?.preferredStyleId,
+  });
+}
+
+function enrichConcept(request: CreativeGenerationRequest, concept: ScoredCreativeConcept, styleDna?: ResolvedStyleDNA): Omit<PersistedConcept, 'generatedAsset' | 'generationStatus'> {
+  const style = styleDna?.style;
+  const pVersion = promptVersion(request);
+  const cVersion = contextVersion(request);
+  const conceptId = digest({ userId: request.userId, contextType: request.contextType, brandId: request.brandId ?? null, pVersion, cVersion, style: style?.id ?? null, version: CONCEPT_VERSION, concept });
+  return {
+    ...concept, conceptId, ...(style && { styleId: style.id }), promptVersion: pVersion,
+    styleVersion: STYLE_DNA_VERSION, contextVersion: cVersion, generationVersion: GENERATION_VERSION,
+    visualDirection: concept.visualMechanism,
+    typographyDirection: style?.typography.displayPersonality.join(', ') ?? '',
+    colorDirection: style?.color.relationships.join('; ') ?? '',
+    lightingDirection: style?.lighting.atmosphere.join(', ') ?? '',
+    imageryDirection: style?.imagery.medium.join(', ') ?? concept.artDirectionFamily,
+    layoutDirection: style?.composition.join('; ') ?? '',
+  };
+}
+
+async function persistConcepts(request: CreativeGenerationRequest, concepts: ScoredCreativeConcept[], styleDna?: ResolvedStyleDNA) {
+  return Promise.all(concepts.map((concept) => creativeConceptRepository.saveDiscovered(conceptScope(request), request.prompt, enrichConcept(request, concept, styleDna))));
+}
+
+/** Official Style DNA uses the renderer's established ReferenceStyleProfile seam instead of creating a parallel layout path. */
+function styleProfileFor(resolved?: ResolvedStyleDNA): ReferenceStyleProfile | undefined {
+  if (!resolved) return undefined;
+  const { style, variant } = resolved;
+  return {
+    analysed: true,
+    referenceCount: 0,
+    visualLanguage: style.visualCharacter.join(', '),
+    compositionPatterns: style.composition,
+    typographyCharacter: style.typography.displayPersonality.join(', '),
+    colorRelationships: style.color.relationships.join('; '),
+    textureAndMaterial: style.texture.join(', '),
+    lightingAndMood: [...style.lighting.atmosphere, ...style.mood].join(', '),
+    photographicOrIllustrative: style.imagery.medium.join(', '),
+    visualDensity: style.layout.density,
+    brandTreatment: style.description,
+    creativeMechanisms: style.graphicElements,
+    imperfectionLevel: style.imperfection.level,
+    interactionPatterns: '',
+    doNotCopy: style.qualityConstraints,
+    dominantDirection: style.description,
+    influence: 'high',
+    designRecipe: styleDnaToRecipe(style, variant),
+  };
+}
+
+function effectiveStyleProfile(referenceStyle: ReferenceStyleProfile | undefined, resolved?: ResolvedStyleDNA, intelligence?: BrandIntelligenceProfile, performanceEvidence: string[] = []) {
+  const base = styleProfileFor(resolved) ?? referenceStyle;
+  if (!base) return base;
+  const preferences = intelligence ? intelligence.explicit.concat(intelligence.learned.filter((p) => p.strength === 'strong')) : [];
+  const positive = preferences.filter((p) => p.polarity === 'positive');
+  const negative = preferences.filter((p) =>
+    p.polarity === 'negative' && !(
+      p.dimension === 'style' && resolved && resolved.source !== 'history' && p.value === resolved.style.id
+    ),
+  );
+  const supportingEvidence = performanceEvidence.filter((line) =>
+    !(intelligence?.explicit ?? []).some((preference) => line.toLowerCase().includes(preference.value.toLowerCase())),
+  );
+  return {
+    ...base,
+    brandTreatment: [base.brandTreatment, ...positive.map((p) => `Prefer ${p.dimension}: ${p.value}`), ...(supportingEvidence.length ? [`Supporting observed performance evidence (not causality): ${supportingEvidence.join('; ')}`] : [])].filter(Boolean).join('; '),
+    doNotCopy: [...base.doNotCopy, ...negative.map((p) => `Avoid ${p.dimension}: ${p.value}`)],
   };
 }
 
@@ -465,8 +585,6 @@ async function resolveIntent(
     generateCreativeIntent({
       provider: providerForRole('fast'),
       request: request.prompt,
-      ...(request.brandVoice?.description && { brandDescription: request.brandVoice.description }),
-      ...(request.brandVoice?.industry && { industry: request.brandVoice.industry }),
     }),
   );
 }
@@ -476,7 +594,7 @@ async function resolveIdentity(request: CreativeGenerationRequest) {
   const visionProvider = providerForRole('vision');
   const firstAsset = request.assetUrls[0];
 
-  let brandName = request.brandVoice?.name || '';
+  let brandName = '';
   let dbBrandDescription = '';
   let voicePayloadFromDb: Record<string, any> | null = null;
 
@@ -485,65 +603,71 @@ async function resolveIdentity(request: CreativeGenerationRequest) {
       const activeBrandRow = await prisma.brand.findFirst({
         where: { id: request.brandId, created_by: request.userId },
       });
-      if (activeBrandRow) {
-        if (!brandName) brandName = activeBrandRow.name;
-        dbBrandDescription = activeBrandRow.description;
-      }
+      if (!activeBrandRow) throw new CreativeError('That brand is not available.', 404);
+      brandName = activeBrandRow.name;
+      dbBrandDescription = activeBrandRow.description;
     } catch (e) {
+      if (e instanceof CreativeError) throw e;
       console.warn('[creative] failed to read active brand row', e);
+      throw new CreativeError('Brand context could not be loaded.', 503);
     }
   }
 
-  // If we have a brandName, find any other Brand or BrandVoice matching this name case-insensitively
-  if (brandName) {
+  // A brand voice belongs to one brand. Names are presentation only and must
+  // never cause cross-brand context inheritance.
+  if (request.contextType === 'brand' && request.brandId) {
     try {
-      // Find another brand with same name to get description if not present
-      if (!dbBrandDescription) {
-        const matchingBrand = await prisma.brand.findFirst({
-          where: {
-            created_by: request.userId,
-            name: { equals: brandName, mode: 'insensitive' },
-          },
-        });
-        if (matchingBrand) {
-          dbBrandDescription = matchingBrand.description;
-        }
-      }
-
-      // Find any saved BrandVoice matching the name
       const matchingVoice = await prisma.brandVoice.findFirst({
         where: {
           created_by: request.userId,
-          name: { equals: brandName, mode: 'insensitive' },
+          brand_id: request.brandId,
         },
       });
       if (matchingVoice && matchingVoice.voice && typeof matchingVoice.voice === 'object') {
         voicePayloadFromDb = matchingVoice.voice as Record<string, any>;
       }
     } catch (e) {
-      console.warn('[creative] failed to load duplicate-name brand contexts', e);
+      console.warn('[creative] failed to load brand voice context', e);
+      throw new CreativeError('Brand voice context could not be loaded.', 503);
+    }
+  }
+
+  // Personal creation has a dedicated persisted context and never falls back
+  // to any brand row, brand voice, brand DNA, or brand-scoped history.
+  if (request.contextType === 'personal') {
+    try {
+      const personalProfile = await prisma.creationProfile.findUnique({
+        where: { userId: request.userId },
+        select: { personalContext: true },
+      });
+      if (personalProfile?.personalContext && typeof personalProfile.personalContext === 'object') {
+        voicePayloadFromDb = personalProfile.personalContext as Record<string, any>;
+      }
+    } catch (e) {
+      console.warn('[creative] failed to load personal creation context', e);
+      throw new CreativeError('Personal context could not be loaded.', 503);
     }
   }
 
   // Construct a merged brand input
   const mergedBrandVoice: BrandProfileInput = {
     name: brandName,
-    description: request.brandVoice?.description || dbBrandDescription || '',
-    mission: request.brandVoice?.mission || (voicePayloadFromDb?.mission as string) || '',
-    industry: request.brandVoice?.industry || (voicePayloadFromDb?.industry as string) || '',
-    targetAudience: request.brandVoice?.targetAudience || (voicePayloadFromDb?.targetAudience as string) || (voicePayloadFromDb?.audience as string) || '',
-    tone: request.brandVoice?.tone || (voicePayloadFromDb?.tone as string) || '',
-    writingStyle: request.brandVoice?.writingStyle || (voicePayloadFromDb?.writingStyle as string) || '',
-    personality: request.brandVoice?.personality || (voicePayloadFromDb?.personality as string) || '',
-    products: request.brandVoice?.products?.length ? request.brandVoice.products : ((voicePayloadFromDb?.products as string[]) || []),
-    competitors: request.brandVoice?.competitors?.length ? request.brandVoice.competitors : ((voicePayloadFromDb?.competitors as string[]) || []),
-    brandColors: request.brandVoice?.brandColors?.length ? request.brandVoice.brandColors : ((voicePayloadFromDb?.brandColors as string[]) || []),
-    wordsToUse: request.brandVoice?.wordsToUse?.length ? request.brandVoice.wordsToUse : ((voicePayloadFromDb?.wordsToUse as string[]) || []),
-    wordsToAvoid: request.brandVoice?.wordsToAvoid?.length ? request.brandVoice.wordsToAvoid : ((voicePayloadFromDb?.wordsToAvoid as string[]) || []),
-    services: request.brandVoice?.services?.length ? request.brandVoice.services : ((voicePayloadFromDb?.services as string[]) || []),
-    ctaStyle: request.brandVoice?.ctaStyle || (voicePayloadFromDb?.ctaStyle as string) || '',
-    emojiStyle: request.brandVoice?.emojiStyle || (voicePayloadFromDb?.emojiStyle as string) || '',
-    usp: request.brandVoice?.usp || (voicePayloadFromDb?.usp as string) || '',
+    description: dbBrandDescription || (voicePayloadFromDb?.description as string) || '',
+    mission: (voicePayloadFromDb?.mission as string) || '',
+    industry: (voicePayloadFromDb?.industry as string) || '',
+    targetAudience: (voicePayloadFromDb?.targetAudience as string) || (voicePayloadFromDb?.audience as string) || '',
+    tone: (voicePayloadFromDb?.tone as string) || '',
+    writingStyle: (voicePayloadFromDb?.writingStyle as string) || '',
+    personality: (voicePayloadFromDb?.personality as string) || '',
+    products: (voicePayloadFromDb?.products as string[]) || [],
+    competitors: (voicePayloadFromDb?.competitors as string[]) || [],
+    brandColors: (voicePayloadFromDb?.brandColors as string[]) || [],
+    wordsToUse: (voicePayloadFromDb?.wordsToUse as string[]) || [],
+    wordsToAvoid: (voicePayloadFromDb?.wordsToAvoid as string[]) || [],
+    services: (voicePayloadFromDb?.services as string[]) || [],
+    ctaStyle: (voicePayloadFromDb?.ctaStyle as string) || '',
+    emojiStyle: (voicePayloadFromDb?.emojiStyle as string) || '',
+    usp: (voicePayloadFromDb?.usp as string) || '',
   };
 
   const outcome = firstAsset
@@ -643,11 +767,12 @@ async function resolveReferenceStyle(
  * call — deterministic assembly, the same way `renderBrandSection` turns a
  * resolved profile into prompt text rather than asking a model to.
  */
-function buildImagePrompt(direction: CreativeDirection, hasAssets: boolean, hasLogo: boolean): string {
+function buildImagePrompt(direction: CreativeDirection, hasAssets: boolean, hasLogo: boolean, styleDna?: ResolvedStyleDNA): string {
   const layout = direction.layoutDirection;
   const needsClearSpace = direction.copyTreatment !== 'none' || Boolean(direction.marketingCreative?.brandMessage);
   const lines = [
     `${direction.concept}. ${direction.visualStory}`,
+    renderStyleDnaInstructions(styleDna),
     // Stated immediately, before any other instruction, so it isn't
     // outweighed by later lines like "concept: anatomy of X" — a concept
     // FRAMED as a diagram/explainer/anatomy still needs to render as a
@@ -857,6 +982,7 @@ interface RunGenerationOptions {
   /** Computed once per request/campaign and reused across variations. Absent when a concept was already selected — the research that shaped it already ran in `discoverConcepts`. */
   research?: CreativeResearch;
   referenceStyle?: ReferenceStyleProfile;
+  styleDna?: ResolvedStyleDNA;
   /** The member's hard requirements — validated through direction and carried into the campaign pass. */
   intent?: CreativeIntentBrief;
   /**
@@ -872,6 +998,8 @@ interface RunGenerationOptions {
   requestId?: string;
   /** The request's latency/spend ledger — shared across variations of one campaign. */
   metrics?: CreativeMetrics;
+  /** Discovered concept whose canonical image is completed in the same transaction. */
+  canonicalConceptId?: string;
 }
 
 /**
@@ -891,13 +1019,15 @@ async function runGeneration({
   artDirectionFamily,
   research,
   referenceStyle,
+  styleDna,
   intent,
-  withCampaignStage = true,
+  withCampaignStage = false,
   variationLabel,
   campaignId,
   parentAssetId,
   requestId,
   metrics,
+  canonicalConceptId,
 }: RunGenerationOptions): Promise<StoredGeneratedAsset> {
   const hasAssets = request.assetUrls.length > 0;
 
@@ -927,7 +1057,7 @@ async function runGeneration({
       mode,
       artDirectionFamily,
       research,
-      referenceStyle,
+      referenceStyle: effectiveStyleProfile(referenceStyle, styleDna),
       intent,
       brand,
       creativeDna,
@@ -942,6 +1072,7 @@ async function runGeneration({
     brand,
     creativeDna,
     ...(referenceStyle && { referenceStyle }),
+    ...(styleDna && { styleDna: { id: styleDna.style.id, variant: styleDna.variant, source: styleDna.source } }),
     ...(intent && { intent }),
     goal: request.goal,
     funnelStage: request.funnelStage,
@@ -973,7 +1104,8 @@ async function runGeneration({
     logoAssetUrl: creativeDna.logoAssetUrl || undefined,
     variationLabel,
     creativeDna,
-    referenceStyle,
+    referenceStyle: effectiveStyleProfile(referenceStyle, styleDna),
+    styleDna,
     renderContext,
     ...(withCampaignStage && {
       campaign: {
@@ -985,6 +1117,7 @@ async function runGeneration({
     }),
     requestId,
     metrics,
+    canonicalConceptId,
   });
 }
 
@@ -1013,6 +1146,7 @@ interface FinishGenerationOptions {
   variationLabel?: string;
   creativeDna: ResolvedCreativeDna;
   referenceStyle?: ReferenceStyleProfile;
+  styleDna?: ResolvedStyleDNA;
   /** Persisted on the row so a later refinement re-executes this creative faithfully. */
   renderContext?: CreativeRenderContext;
   /** Present for a normal generation — runs the automatic campaign pass on top of the visual. */
@@ -1021,6 +1155,7 @@ interface FinishGenerationOptions {
   requestId?: string;
   /** The request's latency/spend ledger. */
   metrics?: CreativeMetrics;
+  canonicalConceptId?: string;
 }
 
 /**
@@ -1057,10 +1192,12 @@ async function finishGeneration({
   variationLabel,
   creativeDna,
   referenceStyle,
+  styleDna,
   renderContext,
   campaign,
   requestId,
   metrics,
+  canonicalConceptId,
 }: FinishGenerationOptions): Promise<StoredGeneratedAsset> {
   let visual: { mimeType: string; data: string };
   let logoImage: { mimeType: string; data: string } | undefined;
@@ -1113,7 +1250,7 @@ async function finishGeneration({
       );
     }
 
-    const imagePrompt = buildImagePrompt(direction, hasAssets, Boolean(logoImage));
+    const imagePrompt = buildImagePrompt(direction, hasAssets, Boolean(logoImage), styleDna);
     enterStage('image-generation');
     console.info('[creative] image generation started', {
       requestId,
@@ -1167,6 +1304,7 @@ async function finishGeneration({
 
   let image: { mimeType: string; data: string };
   let structure: string;
+  let typography: TypographySelection | undefined;
   try {
     enterStage('renderer');
     console.info('[creative] renderer started', { requestId, assetId: asset.id });
@@ -1175,32 +1313,33 @@ async function finishGeneration({
       direction,
       creativeDna,
       referenceStyle,
+      styleDna: styleDna?.style,
       logoImage,
     });
     image = { mimeType: rendered.mimeType, data: rendered.data };
     structure = rendered.structure;
+    typography = rendered.typography;
     console.info('[creative] renderer completed', {
       requestId,
       assetId: asset.id,
       durationMs: Date.now() - stageStartedAt,
       structure: rendered.structure,
+      typography: rendered.typography && { headline: rendered.typography.headlineFont, body: rendered.typography.bodyFont, accent: rendered.typography.accentFont },
       byteLength: Buffer.from(rendered.data, 'base64').length,
     });
     dumpDebugArtifacts(asset.id, {
       '1-visual.png': Buffer.from(visual.data, 'base64'),
       '2-final.png': Buffer.from(rendered.data, 'base64'),
       'plan.json': JSON.stringify(
-        { structure: rendered.structure, designRecipe: referenceStyle?.designRecipe ?? 'derived-fallback', plan: rendered.plan },
+        { structure: rendered.structure, designRecipe: referenceStyle?.designRecipe ?? 'derived-fallback', plan: rendered.plan, typography: rendered.typography },
         null,
         2,
       ),
     });
   } catch (error) {
-    // Gemini already succeeded — fall back to the raw visual rather than
-    // losing the generation to a compositing bug.
-    console.warn('[creative] renderer failed, falling back to the raw visual', stageFailureLog(error));
-    image = visual;
-    structure = 'none';
+    console.error('[creative] renderer/validation failed; invalid output rejected', stageFailureLog(error));
+    await generatedAssetRepository.markFailed(asset.id);
+    throw new CreativeError('FlowPost could not produce a valid design. Please try again.', 422, error instanceof Error ? error.message : String(error));
   }
 
   // ── Stage B before storage (§1/§13) ───────────────────────────────────────
@@ -1408,14 +1547,18 @@ async function finishGeneration({
     });
 
     enterStage('asset-persistence');
-    const completed = await generatedAssetRepository.markCompleted(asset.id, {
+    const completion = {
       imageUrl: uploaded.url,
       cloudinaryPublicId: uploaded.publicId,
       ...(uploaded.width !== undefined && { width: uploaded.width }),
       ...(uploaded.height !== undefined && { height: uploaded.height }),
       ...(uploaded.format !== undefined && { format: uploaded.format }),
       ...(renderContext && { renderContext: { ...renderContext, ...(visualImageUrl && { visualImageUrl }) } }),
-    });
+      ...(typography && { typography }),
+    };
+    const completed = canonicalConceptId
+      ? await generatedAssetRepository.markCompletedAndAttachConcept(asset.id, canonicalConceptId, userId, completion)
+      : await generatedAssetRepository.markCompleted(asset.id, completion);
 
     console.info('[creative] generation complete', {
       requestId,
@@ -1533,6 +1676,10 @@ export const creativeGenerationService = {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
     }
 
+    // Deterministic, scope-isolated history read. It runs beside the existing
+    // context preparation and never costs an AI call.
+    const designContextPromise = designContextService.loadDesignContext(conceptScope(request));
+
     // Identity (vision), intent extraction, the repetition memory and the
     // reference-style analysis are mutually independent — one round of
     // parallel context prep (§2). Research needs only the resolved brand, so
@@ -1540,7 +1687,7 @@ export const creativeGenerationService = {
     // analysis are still in flight; concepts follow because they read
     // everything.
     const identityPromise = resolveIdentity(request);
-    const [{ brand, creativeDna }, intent, recentSignatures, referenceStyle, research] = await Promise.all([
+    const [{ brand, creativeDna }, intent, recentSignatures, referenceStyle, research, designContext] = await Promise.all([
       identityPromise,
       resolveIntent(request),
       fetchRecentSignatures(request),
@@ -1551,7 +1698,9 @@ export const creativeGenerationService = {
           context: buildResearchContext(request, identity.brand),
         }),
       ),
+      designContextPromise,
     ]);
+    const styleDna = resolvedStyleFor(request, undefined, designContext);
 
     const outcome = await generateCreativeConcepts({
       provider: providerForRole('fast'),
@@ -1564,13 +1713,18 @@ export const creativeGenerationService = {
       creativeDna,
       research,
       recentSignatures,
-      referenceStyle,
+      referenceStyle: effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence),
       intent,
     });
 
     // The brief travels back to the browser so `/generate` validates against
     // exactly the requirements these concepts were gated on.
-    return { ...outcome, intent, ...(referenceStyle && { referenceStyle }) };
+    const concepts = await persistConcepts(request, outcome.concepts, styleDna);
+    const scope = conceptScope(request);
+    await Promise.all(concepts.map((concept) => creativeAttributionRepository.appendEvent(scope, {
+      eventType: 'CONCEPT_VIEWED', conceptId: concept.conceptId,
+    })));
+    return { ...outcome, concepts, intent, ...(referenceStyle && { referenceStyle }), ...(styleDna && { resolvedStyleId: styleDna.style.id }) };
   },
 
   /**
@@ -1581,6 +1735,8 @@ export const creativeGenerationService = {
    */
   async understand(userId: string, body: unknown) {
     const request = parseRequest(body, { userId });
+    const designContext = await designContextService.loadDesignContext(conceptScope(request));
+    const styleDna = resolvedStyleFor(request, undefined, designContext);
     const textProvider = providerForRole('creative');
     if (!textProvider.isConfigured()) {
       throw new CreativeError('AI generation is not set up on this server yet.', 503);
@@ -1611,7 +1767,7 @@ export const creativeGenerationService = {
       creativeDna,
       research,
       recentSignatures,
-      referenceStyle,
+      referenceStyle: effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence),
       intent,
     });
     const concept = pickTopConcept(concepts);
@@ -1629,7 +1785,7 @@ export const creativeGenerationService = {
       mode: concept.mode,
       artDirectionFamily: concept.artDirectionFamily,
       research,
-      referenceStyle,
+      referenceStyle: effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence),
       intent,
     });
 
@@ -1651,17 +1807,42 @@ export const creativeGenerationService = {
   /** Runs the full pipeline and returns the persisted, completed asset. */
   async generate(userId: string, body: unknown, requestId?: string): Promise<StoredGeneratedAsset> {
     const request = parseRequest(body, { userId });
+    const scope = conceptScope(request);
+    const conceptId = request.selectedConcept?.conceptId;
+    let claimedConceptId: string | undefined;
+
+    // This lookup deliberately precedes provider/storage/logo checks: reopening
+    // a completed concept is a database read, not a generation attempt.
+    if (conceptId) {
+      const persisted = await creativeConceptRepository.findOwned(conceptId, scope);
+      if (!persisted) throw new CreativeError('That concept could not be found in this creation context.', 404);
+      if (persisted.generatedAsset?.status === 'COMPLETED' && persisted.generatedAsset.imageUrl) {
+        await creativeConceptRepository.recordReopen(conceptId, scope);
+        await creativeAttributionRepository.recordAssetEvent(userId, persisted.generatedAsset.id, 'CONCEPT_SELECTED', requestId ? `${requestId}:selected:${conceptId}` : undefined).catch(() => undefined);
+        console.info('[creative] cache hit — returning existing concept image', { requestId, conceptId, assetId: persisted.generatedAsset.id });
+        await aiUsageRepository.recordAiUsage({ ownerId: userId, action: 'generate', provider: persisted.generatedAsset.provider, model: persisted.generatedAsset.model, contextType: persisted.generatedAsset.contextType, ...(persisted.generatedAsset.brandId && { brandId: persisted.generatedAsset.brandId }), ...(requestId && { requestId }), cacheHit: true, success: true, durationMs: 0 });
+        return persisted.generatedAsset;
+      }
+      const claimed = await creativeConceptRepository.claimGeneration(conceptId, scope);
+      if (!claimed) throw new CreativeError('That concept is already being generated. Please wait a moment.', 409);
+      claimedConceptId = conceptId;
+      request.selectedConcept = persisted;
+      request.styleId = persisted.styleId;
+    }
+
+    const designContext = await designContextService.loadDesignContext(scope);
+    const styleDna = resolvedStyleFor(request, undefined, designContext);
     const textProvider = providerForRole('creative');
     const imageProvider = activeImageProvider();
 
-    if (!textProvider.isConfigured() || !imageProvider.isConfigured()) {
-      throw new CreativeError('AI generation is not set up on this server yet.', 503);
-    }
-    assertStorageConfigured();
-    assertBrandLogo(request);
-
     const metrics = newMetrics();
+    let generationSucceeded = false;
     try {
+      if (!textProvider.isConfigured() || !imageProvider.isConfigured()) {
+        throw new CreativeError('AI generation is not set up on this server yet.', 503);
+      }
+      assertStorageConfigured();
+      assertBrandLogo(request);
       // Identity (vision), intent and reference style are independent — one
       // round of parallel context prep (§2). A concept picked from /concepts
       // skips research entirely; the intent brief handed back skips a second
@@ -1671,17 +1852,31 @@ export const creativeGenerationService = {
         resolveIntent(request, metrics),
         resolveReferenceStyle(request),
       ]);
+      const intelligentStyle = effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence);
       const { concept, research } = await resolveConceptAndResearch(
-        request, brand, creativeDna, intent, referenceStyle, metrics,
+        request, brand, creativeDna, intent, intelligentStyle, metrics,
       );
 
-      return await runGeneration({
+      if (claimedConceptId && request.contextType === 'brand' && request.brandId) {
+        await brandIntelligenceService.recordConceptSignal(userId, request.brandId, concept as unknown as Record<string, any>, 'selected')
+          .catch((error) => console.warn('[creative] intelligence signal skipped', error));
+      }
+
+      const asset = await runGeneration({
         userId, request, textProvider, imageProvider, brand, creativeDna, concept,
-        mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle, intent,
-        requestId, metrics,
+        mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle: intelligentStyle, styleDna, intent,
+        requestId, metrics, canonicalConceptId: claimedConceptId,
       });
+      await creativeAttributionRepository.recordAssetEvent(userId, asset.id, 'ASSET_GENERATED', requestId ? `${requestId}:generated:${asset.id}` : undefined).catch(() => undefined);
+      await creativeAttributionRepository.recordAssetEvent(userId, asset.id, 'CONCEPT_SELECTED', requestId ? `${requestId}:selected:${asset.id}` : undefined).catch(() => undefined);
+      generationSucceeded = true;
+      return asset;
+    } catch (error) {
+      if (claimedConceptId) await creativeConceptRepository.markFailed(claimedConceptId, scope);
+      throw error;
     } finally {
       logMetrics(metrics, requestId);
+      await aiUsageRepository.recordAiUsage({ ownerId: userId, action: 'generate', provider: imageProvider.id, model: imageProvider.model, contextType: request.contextType, ...(request.brandId && { brandId: request.brandId }), ...(requestId && { requestId }), imageCalls: metrics.imageCalls, retryCount: Math.max(0, metrics.imageCalls - 2), success: generationSucceeded, durationMs: Date.now() - metrics.startedAt });
     }
   },
 
@@ -1717,6 +1912,7 @@ export const creativeGenerationService = {
         request, brand, creativeDna, intent, referenceStyle, metrics,
       );
       const campaignId = randomUUID();
+      const baseStyleDna = resolvedStyleFor(request, labels[0]);
 
       const first = await runGeneration({
         userId,
@@ -1730,6 +1926,7 @@ export const creativeGenerationService = {
         artDirectionFamily: concept.artDirectionFamily,
         research,
         referenceStyle,
+        styleDna: baseStyleDna,
         intent,
         // Each labelled variation is already a finished creative in its own
         // right; running the campaign pass over every one would just produce a
@@ -1756,6 +1953,7 @@ export const creativeGenerationService = {
             artDirectionFamily: concept.artDirectionFamily,
             research,
             referenceStyle,
+            styleDna: resolvedStyleFor(request, label),
             intent,
             withCampaignStage: false,
             variationLabel: label,
@@ -1794,7 +1992,10 @@ export const creativeGenerationService = {
     }
     const input = body as Record<string, unknown>;
     const assetId = readString(input.assetId, 64);
-    const instruction = readString(input.instruction, MAX_REFINEMENT_LENGTH);
+    const regeneration = input.regeneration === true;
+    const instruction = regeneration
+      ? 'Create a fresh visual variation of this concept while preserving its intent, brand constraints and Style DNA.'
+      : readString(input.instruction, MAX_REFINEMENT_LENGTH);
 
     if (!assetId) throw new CreativeError('Which creative should be refined?');
     if (!instruction) throw new CreativeError('Say what should change — a sentence is enough.', 422);
@@ -1818,6 +2019,10 @@ export const creativeGenerationService = {
     const goal = inherited?.goal ?? 'brand_awareness';
     const funnelStage = inherited?.funnelStage ?? 'TOFU';
     const platforms = inherited?.platforms ?? [];
+    const inheritedStyle = inherited?.styleDna && getStyleDNA(inherited.styleDna.id);
+    const styleDna: ResolvedStyleDNA | undefined = inheritedStyle && inherited?.styleDna
+      ? { style: inheritedStyle, source: inherited.styleDna.source, variant: inherited.styleDna.variant }
+      : resolveStyleDNA({ prompt: parent.prompt });
 
     console.info('[creative] refine started', {
       requestId,
@@ -1840,7 +2045,7 @@ export const creativeGenerationService = {
         hasAssets: parent.sourceAssetUrls.length > 0,
         brand,
         creativeDna,
-        referenceStyle,
+        referenceStyle: effectiveStyleProfile(referenceStyle, styleDna),
         // Carried so an edit can never quietly drop the offer or the event on
         // its way through — the same gate a fresh generation passes.
         intent,
@@ -1862,6 +2067,7 @@ export const creativeGenerationService = {
       goal,
       funnelStage,
       platforms,
+      ...(styleDna && { styleDna: { id: styleDna.style.id, variant: styleDna.variant, source: styleDna.source } }),
     };
 
     const child = await generatedAssetRepository.create({
@@ -1874,7 +2080,7 @@ export const creativeGenerationService = {
       sourceAssetUrls: parent.sourceAssetUrls,
       provider: imageProvider.id,
       model: imageProvider.model,
-      source: 'AI_REFINED',
+      source: regeneration ? 'AI_REGENERATED' : 'AI_REFINED',
       parentAssetId: parent.id,
       campaignId: parent.campaignId,
     });
@@ -1889,7 +2095,7 @@ export const creativeGenerationService = {
     // previous successful creative stays in history exactly as it was and
     // the UI can keep showing it if this fails.
     try {
-      return await finishGeneration({
+      const completed = await finishGeneration({
         userId,
         asset: child,
         direction,
@@ -1899,19 +2105,51 @@ export const creativeGenerationService = {
         logoAssetUrl: creativeDna.logoAssetUrl || undefined,
         creativeDna,
         referenceStyle,
+        styleDna,
         renderContext,
-        campaign: {
-          brand,
-          ...(intent && { intent }),
-          goal,
-          platforms,
-        },
         requestId,
         metrics,
       });
+      await creativeAttributionRepository.recordAssetEvent(userId, completed.id, regeneration ? 'ASSET_REGENERATED' : 'ASSET_REFINED', requestId ? `${requestId}:${regeneration ? 'regenerated' : 'refined'}:${completed.id}` : undefined).catch(() => undefined);
+      return completed;
     } finally {
       logMetrics(metrics, requestId);
     }
+  },
+
+  /** Explicitly asks for a new variation. Unlike reopening a concept, this intentionally crosses the generation boundary. */
+  async regenerate(userId: string, body: unknown, requestId?: string): Promise<StoredGeneratedAsset> {
+    if (!body || typeof body !== 'object') throw new CreativeError('Send a JSON body naming the asset.');
+    const asset = await creativeGenerationService.refine(userId, { assetId: (body as Record<string, unknown>).assetId, regeneration: true }, requestId);
+    await brandIntelligenceService.recordAssetSignal(userId, asset.id, 'regenerated').catch((error) => console.warn('[creative] intelligence signal skipped', error));
+    return asset;
+  },
+
+  async recordSignal(userId: string, body: unknown): Promise<{ recorded: boolean }> {
+    if (!body || typeof body !== 'object') throw new CreativeError('Send a creative signal.');
+    const input = body as Record<string, unknown>;
+    const assetId = readString(input.assetId, 64);
+    const signal = input.signal === 'saved' || input.signal === 'reused' ? input.signal : undefined;
+    if (assetId && signal) {
+      const recorded = await creativeConceptRepository.recordAssetSignal(assetId, userId, signal);
+      if (recorded) {
+        await brandIntelligenceService.recordAssetSignal(userId, assetId, signal)
+          .catch((error) => console.warn('[creative] intelligence signal skipped', error));
+        await creativeAttributionRepository.recordAssetEvent(userId, assetId, signal === 'saved' ? 'ASSET_SAVED' : 'ASSET_ATTACHED').catch(() => undefined);
+      }
+      return { recorded };
+    }
+    if (input.signal === 'rejected') {
+      const conceptId = readString(input.conceptId, 80);
+      const brandId = readString(input.brandId, 64);
+      if (!conceptId || !brandId) throw new CreativeError('Choose a brand concept to reject.', 422);
+      const concept = await creativeConceptRepository.findOwned(conceptId, { userId, contextType: 'brand', brandId });
+      if (!concept) throw new CreativeError('That concept could not be found.', 404);
+      await brandIntelligenceService.recordConceptSignal(userId, brandId, concept as unknown as Record<string, any>, 'rejected');
+      await creativeAttributionRepository.appendEvent({ userId, contextType: 'brand', brandId }, { eventType: 'CONCEPT_REJECTED', conceptId }).catch(() => undefined);
+      return { recorded: true };
+    }
+    throw new CreativeError('Choose a creative and a valid signal.', 422);
   },
 
   async history(userId: string, query: { contextType?: string; brandId?: string }) {

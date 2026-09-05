@@ -4,6 +4,9 @@ import { requireAuth } from '../middleware/auth.middleware';
 import { AiProviderError } from '../ai';
 import { creativeGenerationService, CreativeError } from '../services/creative-generation.service';
 import { CloudinaryUploadError } from '../services/cloudinary.service';
+import { publicStyleLibrary } from '../ai/style-dna/style-dna';
+import { brandIntelligenceService } from '../services/creative-brand-intelligence.service';
+import { creativeIdempotencyService, IdempotencyInProgressError } from '../services/creative-idempotency.service';
 
 /**
  * FlowPost's brand-native creative engine. Mounted at `/api/ai/creative`.
@@ -22,6 +25,10 @@ import { CloudinaryUploadError } from '../services/cloudinary.service';
  * file only turns a request into a call and a result into JSON.
  */
 const router = Router();
+
+router.get('/styles', requireAuth, (_req, res) => {
+  res.json({ styles: publicStyleLibrary() });
+});
 
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
   return async (req: Request, res: Response) => {
@@ -52,6 +59,7 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
         res.status(status).json({ error: error.message });
         return;
       }
+      if (error instanceof IdempotencyInProgressError) { res.status(409).json({ error: error.message }); return; }
 
       console.error('[creative] request failed', {
         requestId,
@@ -69,8 +77,8 @@ router.post(
   '/concepts',
   requireAuth,
   handle(async (req, res) => {
-    const result = await creativeGenerationService.discoverConcepts(req.user.id, req.body);
-    res.json(result);
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'concepts', req.header('Idempotency-Key'), () => creativeGenerationService.discoverConcepts(req.user.id, req.body));
+    res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
   }),
 );
 
@@ -87,8 +95,8 @@ router.post(
   '/generate',
   requireAuth,
   handle(async (req, res) => {
-    const asset = await creativeGenerationService.generate(req.user.id, req.body, res.locals.creativeRequestId);
-    res.json(asset);
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'generate', req.header('Idempotency-Key'), () => creativeGenerationService.generate(req.user.id, req.body, res.locals.creativeRequestId));
+    res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
   }),
 );
 
@@ -105,10 +113,31 @@ router.post(
   '/refine',
   requireAuth,
   handle(async (req, res) => {
-    const asset = await creativeGenerationService.refine(req.user.id, req.body, res.locals.creativeRequestId);
-    res.json(asset);
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'refine', req.header('Idempotency-Key'), () => creativeGenerationService.refine(req.user.id, req.body, res.locals.creativeRequestId));
+    res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
   }),
 );
+
+router.post(
+  '/regenerate',
+  requireAuth,
+  handle(async (req, res) => {
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'regenerate', req.header('Idempotency-Key'), () => creativeGenerationService.regenerate(req.user.id, req.body, res.locals.creativeRequestId));
+    res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
+  }),
+);
+
+router.post('/signal', requireAuth, handle(async (req, res) => {
+  res.json(await creativeGenerationService.recordSignal(req.user.id, req.body));
+}));
+
+router.get('/brand-intelligence/:brandId', requireAuth, handle(async (req, res) => {
+  res.json(await brandIntelligenceService.resolveBrandIntelligence(req.user.id, String(req.params.brandId)));
+}));
+
+router.post('/brand-intelligence/:brandId/preferences', requireAuth, handle(async (req, res) => {
+  res.json(await brandIntelligenceService.setExplicitPreference(req.user.id, String(req.params.brandId), req.body ?? {}));
+}));
 
 router.get(
   '/history',

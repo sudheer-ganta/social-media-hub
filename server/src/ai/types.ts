@@ -1015,6 +1015,18 @@ export interface CreativeDnaInput {
   brandColors?: string[];
   logoAssetUrl?: string;
   referenceAssetUrls?: string[];
+  /**
+   * An explicit brand typeface — a Google Fonts family name from FlowPost's
+   * curated catalog (server/src/ai/typography/font-catalog.ts). Optional and
+   * rare: FlowPost picks typography automatically (spec: the user never
+   * selects a font), but a brand that already has a locked typeface gets it
+   * honoured as the strongest signal into that choice — see
+   * server/src/ai/typography/font-selector.ts. Never surfaced as a picker;
+   * only settable the same way the rest of Creative DNA is (a brand kit
+   * import, or a future "lock our typeface" toggle), never a required field.
+   */
+  headlineFont?: string;
+  bodyFont?: string;
 }
 
 /** Resolved Creative DNA: user-set fields plus whatever Vision filled in. */
@@ -1033,6 +1045,9 @@ export interface ResolvedCreativeDna {
   brandColors: string[];
   logoAssetUrl: string;
   referenceAssetUrls: string[];
+  /** Brand-locked typeface, if the member set one — see CreativeDnaInput.headlineFont. */
+  headlineFont: string;
+  bodyFont: string;
   /** 0–100. How much of the profile is actually filled in. */
   completeness: number;
   provenance: Record<string, BrandFactSource>;
@@ -1304,6 +1319,21 @@ export interface CreativeConceptScores {
 }
 
 export interface ScoredCreativeConcept extends CreativeConcept {
+  /** Stable, scope/version-aware identity assigned when concepts are persisted. */
+  conceptId?: string;
+  styleId?: string;
+  promptVersion?: string;
+  styleVersion?: string;
+  contextVersion?: string;
+  generationVersion?: string;
+  generationStatus?: 'not_generated' | 'generating' | 'generated' | 'failed';
+  generatedAsset?: unknown;
+  visualDirection?: string;
+  typographyDirection?: string;
+  colorDirection?: string;
+  lightingDirection?: string;
+  imageryDirection?: string;
+  layoutDirection?: string;
   mode: CreativeMode;
   /** The medium/technique this idea's mechanism calls for — see ArtDirectionFamily. Chosen per concept, not defaulted. */
   artDirectionFamily: ArtDirectionFamily;
@@ -1421,6 +1451,8 @@ export interface CreativeRenderContext {
   goal: MarketingGoal;
   funnelStage: FunnelStage;
   platforms: string[];
+  /** Official Style DNA selection and deterministic variant used for this render. */
+  styleDna?: { id: string; variant: number; source: 'explicit' | 'prompt' | 'history' };
   /**
    * The wordless visual the campaign was designed over. Internal, never shown:
    * a refinement re-executes from THIS rather than from the finished creative,
@@ -1436,6 +1468,8 @@ export interface CreativeGenerationRequest {
   brandId?: string;
   /** The member's natural-language request, verbatim. */
   prompt: string;
+  /** Stable official style id. Omitted to resolve style language from the prompt. */
+  styleId?: string;
   goal: MarketingGoal;
   funnelStage: FunnelStage;
   platforms: string[];

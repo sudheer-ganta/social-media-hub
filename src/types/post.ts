@@ -26,6 +26,8 @@ export type { PlatformCrop, PlatformMedia } from "@/utils/crop";
 export interface PostMediaItem {
   /** Stable across reorders, crops and reloads. Identifies the item, not its place. */
   id: string;
+  /** Explicit provenance for FlowPost-generated media; absent on normal uploads. */
+  generatedAssetId?: string;
   /** The stored Cloudinary asset. Never rewritten — crops are delivery settings. */
   url: string;
   /**

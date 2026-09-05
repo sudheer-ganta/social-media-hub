@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Wand2, X, Camera, Palette, Compass, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { cloudinaryService } from "@/services";
-import { creativeService } from "@/services/creative.service";
+import { creativeService, type CreativeStyleSummary } from "@/services/creative.service";
 import { useBrandVoices } from "@/hooks/useBrandVoices";
 import { useCreativeDna } from "@/hooks/useCreativeDna";
 import { useBrands } from "@/hooks/useBrands";
@@ -222,6 +222,8 @@ export function CreateWithFlowPostDialog({
   const [prompt, setPrompt] = useState("");
   const [goal, setGoal] = useState<MarketingGoal>("brand_awareness");
   const [funnelStage, setFunnelStage] = useState<FunnelStage>("TOFU");
+  const [styleId, setStyleId] = useState("auto");
+  const [styles, setStyles] = useState<CreativeStyleSummary[]>([]);
   const [assets, setAssets] = useState<ReferenceAsset[]>([]);
   const [uploading, setUploading] = useState(false);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
@@ -248,8 +250,8 @@ export function CreateWithFlowPostDialog({
     : null;
 
   const brandVoiceProfile = activeBrand
-    ? (brandVoiceProfiles.find((p) => p.name.toLowerCase().replace(/\s+/g, "") === activeBrand.name.toLowerCase().replace(/\s+/g, "")) ?? defaultBrandVoiceProfile)
-    : defaultBrandVoiceProfile;
+    ? (brandVoiceProfiles.find((p) => p.brand_id === activeBrand.id) ?? null)
+    : defaultBrandVoiceProfile?.brand_id ? null : defaultBrandVoiceProfile;
 
   const creativeDnaProfile = activeBrand
     ? (creativeDnaProfiles.find((p) => p.name.toLowerCase().replace(/\s+/g, "") === activeBrand.name.toLowerCase().replace(/\s+/g, "")) ?? defaultCreativeDnaProfile)
@@ -263,9 +265,19 @@ export function CreateWithFlowPostDialog({
   // one, and a branded creative carrying a made-up mark is worse than none.
   const logoMissing = contextType === "brand" && !logoAssetUrl;
 
+  useEffect(() => {
+    if (!open || styles.length > 0) return;
+    let active = true;
+    void creativeService.fetchCreativeStyles()
+      .then((items) => { if (active) setStyles(items); })
+      .catch(() => { /* Style auto-detection remains available if catalog loading fails. */ });
+    return () => { active = false; };
+  }, [open, styles.length]);
+
   function reset() {
     setStep("input");
     setPrompt("");
+    setStyleId("auto");
     setAssets([]);
     setReferenceImages([]);
     setReferenceStyle(null);
@@ -284,6 +296,7 @@ export function CreateWithFlowPostDialog({
     };
     return {
       prompt,
+      ...(styleId !== "auto" && { styleId }),
       contextType,
       ...(contextType === "brand" && brandId && { brandId }),
       goal,
@@ -367,6 +380,15 @@ export function CreateWithFlowPostDialog({
       setStep("input");
       return;
     }
+    if (concept.generationStatus === "generated" && concept.generatedAsset?.imageUrl) {
+      // Instant local reopen. The cheap background request lets the backend
+      // record this explicit selection and re-validates scope, but its cache
+      // lookup returns before any provider/config checks and never calls Gemini.
+      setAsset(concept.generatedAsset);
+      setStep("result");
+      void creativeService.generateCreative(buildRequest(concept)).then(setAsset).catch(() => undefined);
+      return;
+    }
     setStep("generating");
     setError(null);
     // No backend progress stream for a single request/response call — this
@@ -382,6 +404,9 @@ export function CreateWithFlowPostDialog({
     try {
       const result = await creativeService.generateCreative(buildRequest(concept));
       setAsset(result);
+      setConcepts((current) => current.map((item) => item.conceptId === concept.conceptId
+        ? { ...item, generationStatus: "generated", generatedAsset: result }
+        : item));
       setStep("result");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -413,10 +438,39 @@ export function CreateWithFlowPostDialog({
     }
   }
 
+  async function handleRejectConcept(concept: ScoredCreativeConcept) {
+    if (contextType !== "brand" || !activeBrand?.id || !concept.conceptId) return;
+    try {
+      await creativeService.rejectCreativeConcept(concept.conceptId, activeBrand.id);
+      setConcepts((items) => items.filter((item) => item.conceptId !== concept.conceptId));
+      toast.success("FlowPost will learn from that choice.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Could not record that preference.");
+    }
+  }
+
+  async function handleRegenerate() {
+    if (!asset) return;
+    setRefining(true);
+    try {
+      const result = await creativeService.regenerateCreative(asset.id);
+      setAsset(result);
+      toast.success("Created a new variation. Your previous creative remains in history.");
+    } catch (err) {
+      toast.error("Regeneration failed. Your previous creative is unchanged.", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setRefining(false);
+    }
+  }
+
   function handleUseInPost() {
     if (!asset?.imageUrl) return;
+    void creativeService.recordCreativeSignal(asset.id, "reused").catch(() => undefined);
     onUseInPost({
       id: asset.id,
+      generatedAssetId: asset.id,
       url: asset.imageUrl,
       type: "image",
       width: asset.width ?? 0,
@@ -426,6 +480,13 @@ export function CreateWithFlowPostDialog({
     toast.success("Added to your post");
     onOpenChange(false);
     reset();
+  }
+
+  function handleSaveCreative() {
+    if (!asset) return;
+    void creativeService.recordCreativeSignal(asset.id, "saved")
+      .then(() => toast.success("Saved to your generation history"))
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Could not save that choice."));
   }
 
   const busy = step === "discovering" || step === "generating";
@@ -491,6 +552,22 @@ export function CreateWithFlowPostDialog({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Creative style</Label>
+                <Select value={styleId} onValueChange={setStyleId} disabled={busy}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto-detect from my brief</SelectItem>
+                    {styles.map((style) => (
+                      <SelectItem key={style.id} value={style.id}>{style.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  FlowPost uses this as a creative system—layout, image language, color behavior and typography—not a fixed template.
+                </p>
               </div>
 
               {contextType === "brand" && (
@@ -625,13 +702,18 @@ export function CreateWithFlowPostDialog({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {concepts.map((concept) => (
                   <div
-                    key={concept.conceptName}
+                    key={concept.conceptId ?? concept.conceptName}
                     style={{
                       borderTop: `2px solid ${creativeDnaProfile?.dna.brandColors?.[0] || '#3b82f6'}`
                     }}
                     className="flex flex-col gap-3 rounded-lg border bg-card/45 backdrop-blur-sm p-3.5 justify-between shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01] hover:border-muted-foreground/20"
                   >
                     <div className="space-y-2.5">
+                      {concept.generationStatus === "generated" && (
+                        <span className="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                          Generated
+                        </span>
+                      )}
                       {/* Visual Style Preview */}
                       <ArtDirectionPreview
                         family={concept.artDirectionFamily}
@@ -681,9 +763,10 @@ export function CreateWithFlowPostDialog({
                       )}
                     </div>
 
+                    <div className="mt-2 flex gap-2">
                     <Button
                       size="sm"
-                      className="mt-2 w-full flex items-center justify-center gap-1.5 shadow-sm"
+                      className="w-full flex items-center justify-center gap-1.5 shadow-sm"
                       disabled={busy || logoMissing}
                       onClick={() => handleCreateConcept(concept)}
                     >
@@ -692,8 +775,14 @@ export function CreateWithFlowPostDialog({
                       ) : (
                         <Sparkles className="h-3.5 w-3.5" />
                       )}
-                      Create this creative
+                      {concept.generationStatus === "generated" ? "Show creative" : "Create this creative"}
                     </Button>
+                    {contextType === "brand" && concept.generationStatus !== "generated" && (
+                      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => handleRejectConcept(concept)}>
+                        Not for us
+                      </Button>
+                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -723,6 +812,13 @@ export function CreateWithFlowPostDialog({
                   {asset.creativeBrief.marketingCreative.secondaryInfo.join(' · ')}
                 </p>
               ) : null}
+              {asset.typography && (
+                <p className="text-[11px] text-muted-foreground/70">
+                  Typography — {asset.typography.headlineFont}
+                  {asset.typography.accentFont ? ` + ${asset.typography.accentFont}` : ''}
+                  {asset.typography.bodyFont !== asset.typography.headlineFont ? ` + ${asset.typography.bodyFont}` : ''}
+                </p>
+              )}
 
               <div className="flex items-center gap-2">
                 <Textarea
@@ -771,9 +867,13 @@ export function CreateWithFlowPostDialog({
           {step === "result" && (
             <>
               <Button variant="outline" onClick={() => setStep("concepts")}>Back to concepts</Button>
+              <Button variant="outline" disabled={refining} onClick={handleRegenerate}>
+                {refining ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
+                New variation
+              </Button>
               <Button
                 variant="ghost"
-                onClick={() => toast.success("Saved to your generation history")}
+                onClick={handleSaveCreative}
               >
                 Save Creative
               </Button>

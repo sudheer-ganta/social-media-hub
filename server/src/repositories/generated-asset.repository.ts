@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma';
 import type { CreativeDirection, CreativeRenderContext } from '../ai/types';
+import type { TypographySelection } from '../ai/typography/font-selector';
 
 /**
  * The only module that reads or writes `generated_assets`.
@@ -16,7 +17,7 @@ export interface GeneratedAssetScope {
   brandId?: string | null;
 }
 
-export type GeneratedAssetSource = 'AI_GENERATED' | 'AI_REFINED';
+export type GeneratedAssetSource = 'AI_GENERATED' | 'AI_REFINED' | 'AI_REGENERATED';
 
 export interface CreateGeneratedAssetInput {
   userId: string;
@@ -53,6 +54,8 @@ export interface StoredGeneratedAsset {
   format: string | null;
   provider: string;
   model: string;
+  /** The automatic typography engine's choice — read-only UI detail (spec §9). Null for rows written before this existed, or when the renderer fell back to the raw visual. */
+  typography: TypographySelection | null;
   source: GeneratedAssetSource;
   status: 'PENDING' | 'COMPLETED' | 'FAILED';
   campaignId: string | null;
@@ -77,6 +80,7 @@ function mapRow(row: Record<string, unknown>): StoredGeneratedAsset {
     format: (row.format as string | null) ?? null,
     provider: row.provider as string,
     model: row.model as string,
+    typography: (row.typography as TypographySelection | null) ?? null,
     source: row.source as GeneratedAssetSource,
     status: row.status as StoredGeneratedAsset['status'],
     campaignId: row.campaignId as string | null,
@@ -117,6 +121,8 @@ export async function markCompleted(
     format?: string;
     /** Written here rather than at create() because it carries the visual's own URL, which only exists once the image has been made. */
     renderContext?: CreativeRenderContext;
+    /** The typography engine's choice for this render — see RenderedCreative.typography. Absent when the renderer fell back to the raw visual. */
+    typography?: TypographySelection;
   },
 ): Promise<StoredGeneratedAsset> {
   const row = await prisma.generatedAsset.update({
@@ -129,9 +135,38 @@ export async function markCompleted(
       ...(data.height !== undefined && { height: data.height }),
       ...(data.format !== undefined && { format: data.format }),
       ...(data.renderContext && { renderContext: data.renderContext as unknown as object }),
+      ...(data.typography && { typography: data.typography as unknown as object }),
     },
   });
   return mapRow(row);
+}
+
+/** Failure-atomic completion for a discovered concept's canonical image. */
+export async function markCompletedAndAttachConcept(
+  id: string,
+  conceptId: string,
+  userId: string,
+  data: Parameters<typeof markCompleted>[1],
+): Promise<StoredGeneratedAsset> {
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.generatedAsset.update({
+      where: { id },
+      data: {
+        status: 'COMPLETED', imageUrl: data.imageUrl, cloudinaryPublicId: data.cloudinaryPublicId,
+        ...(data.width !== undefined && { width: data.width }),
+        ...(data.height !== undefined && { height: data.height }),
+        ...(data.format !== undefined && { format: data.format }),
+        ...(data.renderContext && { renderContext: data.renderContext as unknown as object }),
+        ...(data.typography && { typography: data.typography as unknown as object }),
+      },
+    });
+    const attached = await tx.creativeConceptRecord.updateMany({
+      where: { id: conceptId, userId, status: 'GENERATING', generatedAssetId: null },
+      data: { generatedAssetId: id, status: 'GENERATED' },
+    });
+    if (attached.count !== 1) throw new Error('Canonical concept attachment failed');
+    return mapRow(row as unknown as Record<string, unknown>);
+  });
 }
 
 export async function markFailed(id: string): Promise<void> {

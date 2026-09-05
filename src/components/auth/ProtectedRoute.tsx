@@ -1,6 +1,8 @@
 import { Navigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/app/AuthProvider";
+import { creationProfileRepository } from "@/repositories/creation-profile.repository";
 
 function SplashScreen() {
   return (
@@ -16,12 +18,25 @@ function SplashScreen() {
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setOnboardingComplete(null);
+    if (!session) return;
+    creationProfileRepository.get()
+      .then((profile) => setOnboardingComplete(profile?.onboarding_complete ?? false))
+      .catch(() => setOnboardingComplete(false));
+  }, [session, location.pathname]);
 
   if (loading) return <SplashScreen />;
 
   if (!session) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
+
+  if (onboardingComplete === null) return <SplashScreen />;
+  if (!onboardingComplete && location.pathname !== "/onboarding") return <Navigate to="/onboarding" replace />;
+  if (onboardingComplete && location.pathname === "/onboarding") return <Navigate to="/" replace />;
 
   return <>{children}</>;
 }

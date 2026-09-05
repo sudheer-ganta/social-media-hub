@@ -17,6 +17,7 @@ import { PERSONAL_CONTEXT, brandContext } from "@/constants/integrations";
 import { cn } from "@/lib/utils";
 import type { AccountContext } from "@/constants/integrations";
 import type { BrandIntelligenceView } from "@/services/analytics.service";
+import { creativeService } from "@/services/creative.service";
 
 /**
  * What FlowPost has worked out about how this context writes.
@@ -163,6 +164,9 @@ function VoiceMix({ view }: { view: BrandIntelligenceView }) {
 export function BrandIntelligenceSettings() {
   const { brands } = useBrands();
   const [context, setContext] = useState<AccountContext>(PERSONAL_CONTEXT);
+  const [preferenceValue, setPreferenceValue] = useState("");
+  const [preferenceDimension, setPreferenceDimension] = useState("style");
+  const [preferencePolarity, setPreferencePolarity] = useState<"positive" | "negative">("positive");
   const queryClient = useQueryClient();
 
   const key = [
@@ -175,6 +179,18 @@ export function BrandIntelligenceSettings() {
     queryKey: key,
     queryFn: () => analyticsService.fetchBrandIntelligence(context),
     retry: false,
+  });
+  const creativeKey = ["brand-creative-intelligence", context.brandId];
+  const { data: creativeIntelligence } = useQuery({
+    queryKey: creativeKey,
+    queryFn: () => creativeService.fetchBrandCreativeIntelligence(context.brandId!),
+    enabled: context.contextType === "brand" && Boolean(context.brandId),
+    retry: false,
+  });
+  const saveCreativePreference = useMutation({
+    mutationFn: () => creativeService.setBrandCreativePreference(context.brandId!, { dimension: preferenceDimension, value: preferenceValue, polarity: preferencePolarity }),
+    onSuccess: () => { setPreferenceValue(""); void queryClient.invalidateQueries({ queryKey: creativeKey }); toast.success("Creative preference saved"); },
+    onError: (cause) => toast.error(cause instanceof Error ? cause.message : "Could not save preference."),
   });
 
   const reset = useMutation({
@@ -202,6 +218,32 @@ export function BrandIntelligenceSettings() {
         onChange={setContext}
         brands={brands?.map((brand) => ({ id: brand.id, name: brand.name })) ?? []}
       />
+
+      {context.contextType === "brand" && context.brandId && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Creative preferences</CardTitle>
+            <CardDescription>Explicit rules always win. Repeated selections and rejections become guidance only after several observations.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <select className="h-9 rounded-md border bg-background px-2 text-xs" value={preferenceDimension} onChange={(event) => setPreferenceDimension(event.target.value)}>
+                {['style','color','typography','composition','imagery','lighting','texture','density','alignment','headline_length','cta','emoji'].map((dimension) => <option key={dimension} value={dimension}>{dimension.replace('_', ' ')}</option>)}
+              </select>
+              <select className="h-9 rounded-md border bg-background px-2 text-xs" value={preferencePolarity} onChange={(event) => setPreferencePolarity(event.target.value as "positive" | "negative")}>
+                <option value="positive">Prefer</option><option value="negative">Avoid</option>
+              </select>
+              <input className="h-9 min-w-48 flex-1 rounded-md border bg-background px-3 text-xs" value={preferenceValue} onChange={(event) => setPreferenceValue(event.target.value)} placeholder="e.g. black and gold, editorial, serif" />
+              <Button size="sm" disabled={!preferenceValue.trim() || saveCreativePreference.isPending} onClick={() => saveCreativePreference.mutate()}>Save rule</Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {creativeIntelligence?.explicit.map((item) => <Badge key={item.id} variant="secondary">{item.polarity === 'negative' ? 'Avoid' : 'Prefer'} {item.dimension}: {item.value}</Badge>)}
+              {creativeIntelligence?.learned.filter((item) => item.strength === 'strong').map((item) => <Badge key={item.id} variant="outline">Learned: {item.polarity === 'negative' ? 'avoid' : 'prefer'} {item.value}</Badge>)}
+              {!creativeIntelligence?.explicit.length && !creativeIntelligence?.learned.some((item) => item.strength === 'strong') && <p className="text-xs text-muted-foreground">No strong creative preferences yet.</p>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

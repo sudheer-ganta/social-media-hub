@@ -121,8 +121,11 @@ export function useBrandVoice() {
   );
 
   const saveMutation = useMutation({
-    mutationFn: (name: string) =>
-      brandVoicesService.save(name, { ...brandVoice, name }),
+    mutationFn: (name: string) => {
+      const brandId = profiles.find((profile) => profile.id === activeProfileId)?.brand_id;
+      if (!brandId) throw new Error("Select a brand profile before saving its voice.");
+      return brandVoicesService.save(brandId, name, { ...brandVoice, name });
+    },
     onSuccess: (profile: BrandVoiceProfile) => {
       setBrandVoiceState((prev) => ({ ...prev, name: profile.name }));
       setActiveProfileId(profile.id);

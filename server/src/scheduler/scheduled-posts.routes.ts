@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth.middleware';
 import { scheduleService } from './schedule.service';
 import { ScheduleError } from './errors';
 import { PostStatus } from '../generated/prisma/enums';
+import { creativeAttributionRepository } from '../repositories/creative-attribution.repository';
 
 /**
  * The scheduling API. Mounted at `/api/scheduled-posts`.
@@ -96,8 +97,7 @@ router.post(
   handle(async (req, res) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
 
-    res.status(201).json(
-      await scheduleService.createSchedule(req.user.id, {
+    const scheduled = await scheduleService.createSchedule(req.user.id, {
         postId: str(body.postId) ?? '',
         scheduledAt: str(body.scheduledAt) ?? '',
         timezone: str(body.timezone) ?? '',
@@ -105,8 +105,9 @@ router.post(
         ...(stringMap(body.contentTypes) && {
           contentTypes: stringMap(body.contentTypes)!,
         }),
-      }),
-    );
+      });
+    await creativeAttributionRepository.recordPostLifecycle(req.user.id, scheduled.id, 'POST_SCHEDULED', { scheduledAt: scheduled.scheduledAt, providers: scheduled.destinations.map((item) => item.provider) }).catch((cause) => console.warn('[creative] schedule attribution skipped', cause));
+    res.status(201).json(scheduled);
   }),
 );
 

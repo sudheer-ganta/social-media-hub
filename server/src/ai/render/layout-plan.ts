@@ -1,4 +1,5 @@
-import type { RecipeTypographyFamily, ReferenceDesignRecipe } from '../types';
+import type { ReferenceDesignRecipe } from '../types';
+import type { BaseFontStack } from '../typography/font-selector';
 import { fitText, type CtaSpec, type TextBlockSpec } from './primitives';
 
 /**
@@ -68,7 +69,6 @@ export interface LayoutPlan {
 // ─── Design System Defaults ──────────────────────────────────────────────────
 
 export const DESIGN_SYSTEM_DEFAULTS = {
-  fontBodyStack: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
   inkColor: '#1a1a1a',
   paperColor: '#f7f4ee',
   accentColor: '#1a1a1a',
@@ -140,58 +140,13 @@ export const LAYOUT_CONFIG = {
 };
 
 // ─── Typography resolution ──────────────────────────────────────────────────
-
-interface FontStack {
-  headline: string;
-  body: string;
-  headlineCharWidth: number;
-  lineHeightMult: number;
-  letterSpacing?: number;
-}
-
-/**
- * Family NAMES only — text still rasterizes via whatever fonts the render
- * host has installed, so each stack leads with a distinctive family and falls
- * back to one that ships with every OS.
- */
-const BODY_STACK = `'Instrument Sans', ${DESIGN_SYSTEM_DEFAULTS.fontBodyStack}`;
-const FAMILY_STACKS: Record<RecipeTypographyFamily, FontStack> = {
-  'serif-editorial': {
-    headline: "'Instrument Serif', 'Playfair Display', Georgia, 'Palatino Linotype', 'Times New Roman', serif",
-    body: BODY_STACK,
-    headlineCharWidth: 0.54,
-    lineHeightMult: 1.15,
-    letterSpacing: 0.5,
-  },
-  'sans-modern': {
-    headline: "'Instrument Sans', 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-    body: BODY_STACK,
-    headlineCharWidth: 0.56,
-    lineHeightMult: 1.1,
-    letterSpacing: -0.2,
-  },
-  'condensed-display': {
-    headline: "'Instrument Sans', 'Oswald', 'Arial Narrow', Impact, sans-serif",
-    body: BODY_STACK,
-    headlineCharWidth: 0.44,
-    lineHeightMult: 1.0,
-    letterSpacing: -0.8,
-  },
-  'geometric-sans': {
-    headline: "'Instrument Sans', 'Poppins', 'Century Gothic', 'Segoe UI', Arial, sans-serif",
-    body: BODY_STACK,
-    headlineCharWidth: 0.6,
-    lineHeightMult: 1.2,
-    letterSpacing: 1.2,
-  },
-  mixed: {
-    headline: "'Instrument Serif', 'Playfair Display', Georgia, 'Times New Roman', serif",
-    body: BODY_STACK,
-    headlineCharWidth: 0.54,
-    lineHeightMult: 1.15,
-    letterSpacing: 0.5,
-  },
-};
+//
+// The headline/body font stack is no longer a fixed 5-entry table keyed by
+// RecipeTypographyFamily — it comes from the automatic typography engine
+// (server/src/ai/typography/font-selector.ts), which scores FlowPost's
+// curated Google Fonts catalog against the full generation context (style,
+// brand, industry, copy, language) and returns real font-file-backed
+// families instead of CSS fallback-stack names. See `LayoutPlanInput.typography`.
 
 const BODY_CHAR_WIDTH = DESIGN_SYSTEM_DEFAULTS.bodyCharWidth;
 
@@ -377,7 +332,9 @@ function visibleAccent(palette: BrandPalette, against: string): string {
 
 /** Legible text colour on a given fill. */
 function onColor(fill: string, palette: BrandPalette): string {
-  return luminance(fill) > DESIGN_SYSTEM_DEFAULTS.luminanceThreshold ? palette.ink : DESIGN_SYSTEM_DEFAULTS.fallbackLightText;
+  const candidate = [palette.ink, DESIGN_SYSTEM_DEFAULTS.fallbackDarkText, DESIGN_SYSTEM_DEFAULTS.fallbackLightText]
+    .sort((a, b) => contrastRatio(b, fill) - contrastRatio(a, fill))[0];
+  return adjustContrast(candidate, fill, DESIGN_SYSTEM_DEFAULTS.wcagTargetRatio);
 }
 
 /**
@@ -426,6 +383,10 @@ export interface LayoutPlanInput {
    * because a grey wash over a bright photo reads as dirt, not design.
    */
   copyZoneTone?: 'light' | 'dark';
+  /** The automatic typography engine's headline/body stack — see font-selector.ts. */
+  typography: BaseFontStack;
+  /** Accent font for the interactive-support badge, when the style profile offered one. */
+  accentFontFamily?: string;
 }
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
@@ -447,7 +408,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
     height: round(bh / h),
   });
 
-  const baseFonts = FAMILY_STACKS[recipe.typographyFamily];
+  const baseFonts = input.typography;
   const headlineTypography = parseTypographyAdjustments(
     recipe.headlineCharacter,
     baseFonts.lineHeightMult,
@@ -771,7 +732,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
             lineHeight,
             fontFamily: fonts.headline,
             fill: textFill,
-            fontWeight: 700,
+            fontWeight: fonts.headlineWeight,
             align,
             ...(headlineRotation !== 0 && { rotationDeg: headlineRotation }),
             ...(textShadow && { shadow: true }),
@@ -808,7 +769,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
             rect: norm(centered ? w / 2 - badgeW / 2 : m, topY, badgeW, badgeH),
             text: content.support as string,
             fontSize: badgeFont,
-            fontFamily: fonts.body,
+            fontFamily: input.accentFontFamily ?? fonts.body,
             fill: badgeFill,
             textFill: badgeTextFill,
             shapeLanguage: recipe.shapeLanguage,

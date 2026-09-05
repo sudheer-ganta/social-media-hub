@@ -3,12 +3,12 @@ import { resolveDesignRecipe } from './design-recipe';
 import {
   buildLayoutPlan,
   resolvePalette,
-  validateLayoutPlan,
   type ContentInput,
   type LayoutPlan,
   type PlannedBlock,
   type Rect,
 } from './layout-plan';
+import { validateDesign, type DesignValidationResult } from './design-validator';
 import {
   renderBadge,
   renderBandFooter,
@@ -24,7 +24,10 @@ import {
   renderTornFooter,
   wrapText,
 } from './primitives';
+import { rasterizeTextOverlay } from './text-rasterizer';
+import { selectTypography, type TypographySelection } from '../typography/font-selector';
 import type { CreativeDirection, ReferenceStyleProfile, ResolvedCreativeDna } from '../types';
+import type { StyleDNA } from '../style-dna/style-dna';
 
 /**
  * The "FlowPost Creative Renderer" — the deterministic graphic-design layer
@@ -191,6 +194,7 @@ export interface RenderCreativeOptions {
   direction: CreativeDirection;
   creativeDna: ResolvedCreativeDna;
   referenceStyle?: ReferenceStyleProfile;
+  styleDna?: StyleDNA;
   /** Fetched once by the caller and reused here — the actual brand logo file, composited pixel-exact, never redrawn. */
   logoImage?: { mimeType: string; data: string };
 }
@@ -202,6 +206,9 @@ export interface RenderedCreative {
   structure: string;
   /** The full plan, for dogfood scripts and QA — never sent to the browser. */
   plan: LayoutPlan;
+  /** The automatic typography engine's choice for this creative — persisted and shown read-only in the UI (spec §9). */
+  typography: TypographySelection;
+  validation: DesignValidationResult;
 }
 
 export async function renderCreative({
@@ -209,6 +216,7 @@ export async function renderCreative({
   direction,
   creativeDna,
   referenceStyle,
+  styleDna,
   logoImage,
 }: RenderCreativeOptions): Promise<RenderedCreative> {
   const { width, height } = resolveCanvasSize(direction.aspectRatio);
@@ -221,6 +229,11 @@ export async function renderCreative({
       ? await measureCopyZoneTone(Buffer.from(visualImage.data, 'base64'), recipe.layoutBehaviour === 'stacked')
       : 'dark';
 
+  // The automatic typography engine (spec: the user never selects a font) —
+  // scores FlowPost's curated Google Fonts catalog against this generation's
+  // style, brand, industry, copy and language, once, before layout.
+  const typography = selectTypography({ direction, creativeDna, recipe, styleDna });
+
   const plan = buildLayoutPlan({
     width,
     height,
@@ -229,13 +242,19 @@ export async function renderCreative({
     palette,
     aspectRatio: direction.aspectRatio,
     copyZoneTone,
+    typography: typography.baseFontStack,
+    accentFontFamily: typography.accentFont,
   });
 
-  const issues = validateLayoutPlan(plan, content);
-  if (issues.length > 0) throw new RenderValidationError(issues);
+  const validation = validateDesign(plan, content);
+  if (!validation.valid) throw new RenderValidationError(validation.errors.map((issue) => issue.message));
 
   const overlayBody = plan.blocks.map((block) => renderBlock(block, plan)).join('');
   const overlaySvg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${renderDefs()}${overlayBody}</svg>`;
+
+  // Rasterized with the REAL selected font files (spec §6) — never the AI
+  // image model, never whatever fonts happen to be installed on this host.
+  const overlayPng = rasterizeTextOverlay(overlaySvg, typography.facesUsed);
 
   const imagePx = px(plan.imageRect, width, height);
   // Flattened onto paper first: a visual with real transparency must never
@@ -247,7 +266,7 @@ export async function renderCreative({
 
   const composites: OverlayOptions[] = [
     { input: background, top: Math.round(imagePx.y), left: Math.round(imagePx.x) },
-    { input: Buffer.from(overlaySvg), top: 0, left: 0 },
+    { input: overlayPng, top: 0, left: 0 },
   ];
 
   if (logoImage) {
@@ -272,7 +291,7 @@ export async function renderCreative({
     .png()
     .toBuffer();
 
-  return { mimeType: 'image/png', data: output.toString('base64'), structure: plan.structure, plan };
+  return { mimeType: 'image/png', data: output.toString('base64'), structure: plan.structure, plan, typography, validation };
 }
 
 export { wrapText, resolvePalette };

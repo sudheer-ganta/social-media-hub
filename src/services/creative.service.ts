@@ -47,6 +47,7 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
+        ...(init.method === "POST" && { "Idempotency-Key": crypto.randomUUID() }),
         ...init.headers,
         Authorization: `Bearer ${await getAccessToken()}`,
       },
@@ -73,6 +74,7 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
 
 export interface CreativeRequestInput {
   prompt: string;
+  styleId?: string;
   contextType: "personal" | "brand";
   brandId?: string;
   goal: MarketingGoal;
@@ -91,6 +93,33 @@ export interface CreativeRequestInput {
   selectedConcept?: ScoredCreativeConcept;
   /** The brief `discoverConcepts` returned, handed back so generation validates against the same requirements the concepts were gated on. */
   intent?: CreativeIntentBrief;
+}
+
+export async function syncCreativeAttribution(input: { postId: string; contextType: "personal" | "brand"; brandId?: string | null; media: Array<{ id: string; generatedAssetId?: string }>; eventId?: string }) {
+  const response = await fetch(`${API_BASE_URL}/api/creative/attribution/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await getAccessToken()}` },
+    body: JSON.stringify(input),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error ?? "Could not preserve creative attribution.");
+  return body as { attributed: number; removed: number };
+}
+
+export interface CreativeStyleSummary {
+  id: string;
+  name: string;
+  description: string;
+  visualCharacter: string[];
+}
+
+export async function fetchCreativeStyles(): Promise<CreativeStyleSummary[]> {
+  const { styles } = await request<{ styles: CreativeStyleSummary[] }>(
+    "/styles",
+    { method: "GET" },
+    "Could not load the style library.",
+  );
+  return styles;
 }
 
 /**
@@ -133,6 +162,37 @@ export async function refineCreative(assetId: string, instruction: string): Prom
   );
 }
 
+export async function regenerateCreative(assetId: string): Promise<GeneratedAsset> {
+  return request<GeneratedAsset>(
+    "/regenerate",
+    { method: "POST", body: JSON.stringify({ assetId }) },
+    "Could not regenerate this creative. Your existing image is unchanged.",
+  );
+}
+
+export async function recordCreativeSignal(assetId: string, signal: "saved" | "reused"): Promise<void> {
+  await request("/signal", { method: "POST", body: JSON.stringify({ assetId, signal }) }, "Could not record that choice.");
+}
+
+export async function rejectCreativeConcept(conceptId: string, brandId: string): Promise<void> {
+  await request("/signal", { method: "POST", body: JSON.stringify({ conceptId, brandId, signal: "rejected" }) }, "Could not record that preference.");
+}
+
+export interface BrandIntelligencePreference {
+  id: string; dimension: string; value: string; polarity: "positive" | "negative";
+  source: string; occurrenceCount: number; confidence: number; strength: "explicit" | "strong" | "weak";
+}
+export interface BrandCreativeIntelligence {
+  brandId: string; explicit: BrandIntelligencePreference[]; learned: BrandIntelligencePreference[];
+  preferredStyleId?: string; guidance: string[];
+}
+export async function fetchBrandCreativeIntelligence(brandId: string): Promise<BrandCreativeIntelligence> {
+  return request(`/brand-intelligence/${brandId}`, { method: "GET" }, "Could not load creative preferences.");
+}
+export async function setBrandCreativePreference(brandId: string, input: { dimension: string; value: string; polarity: "positive" | "negative" }): Promise<BrandCreativeIntelligence> {
+  return request(`/brand-intelligence/${brandId}/preferences`, { method: "POST", body: JSON.stringify(input) }, "Could not save that creative preference.");
+}
+
 export async function fetchCreativeHistory(scope: {
   contextType: "personal" | "brand";
   brandId?: string;
@@ -152,5 +212,12 @@ export const creativeService = {
   understandCreative,
   generateCreative,
   refineCreative,
+  regenerateCreative,
+  recordCreativeSignal,
+  rejectCreativeConcept,
+  fetchBrandCreativeIntelligence,
+  setBrandCreativePreference,
   fetchCreativeHistory,
+  fetchCreativeStyles,
+  syncCreativeAttribution,
 };

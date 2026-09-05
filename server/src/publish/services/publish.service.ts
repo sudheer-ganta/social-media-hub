@@ -25,6 +25,7 @@ import {
 } from '../../generated/prisma/enums';
 import type { Post } from '../../generated/prisma/client';
 import { PublishError } from './publish-error';
+import { creativeAttributionRepository } from '../../repositories/creative-attribution.repository';
 
 /**
  * Publishing a draft to a social network.
@@ -333,6 +334,7 @@ export async function publishPost(
     await postRepository.updateStatus(postId, PostStatus.PUBLISHED, {
       publishedAt,
     });
+    await creativeAttributionRepository.recordPublication(userId, postId, providerId, true).catch((cause) => console.warn('[creative] publication attribution skipped', cause));
 
     // 11. Audit. Never allowed to fail the publish — the post is already live
     // on LinkedIn, and throwing here would report a failure that did not happen.
@@ -702,6 +704,7 @@ async function recordFailure(
     title: post.title,
     reason: memberFacing.message,
   });
+  await creativeAttributionRepository.recordPublication(userId, post.id, providerId, false).catch((cause) => console.warn('[creative] failed-publication attribution skipped', cause));
 }
 
 /**

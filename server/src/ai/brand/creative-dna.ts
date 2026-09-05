@@ -123,6 +123,8 @@ export function resolveCreativeDna({
     brandColors: colors,
     logoAssetUrl: text(d.logoAssetUrl),
     referenceAssetUrls: list(d.referenceAssetUrls),
+    headlineFont: text(d.headlineFont),
+    bodyFont: text(d.bodyFont),
   };
 
   for (const [key, value] of Object.entries(resolved)) {

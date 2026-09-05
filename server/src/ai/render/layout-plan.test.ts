@@ -18,6 +18,16 @@ const CONTENT: ContentInput = {
   hasLogo: true,
 };
 
+const TEST_TYPOGRAPHY: LayoutPlanInput['typography'] = {
+  headline: 'Playfair Display',
+  body: 'Inter',
+  headlineWeight: 700,
+  bodyWeight: 400,
+  headlineCharWidth: 0.54,
+  lineHeightMult: 1.15,
+  letterSpacing: 0.5,
+};
+
 function planFor(recipe: Partial<ReferenceDesignRecipe>, content: Partial<ContentInput> = {}): ReturnType<typeof buildLayoutPlan> {
   const input: LayoutPlanInput = {
     width: 1280,
@@ -26,6 +36,7 @@ function planFor(recipe: Partial<ReferenceDesignRecipe>, content: Partial<Conten
     content: { ...CONTENT, ...content },
     palette: resolvePalette([], BASE_RECIPE.colorPalette),
     aspectRatio: '4:5',
+    typography: TEST_TYPOGRAPHY,
   };
   return buildLayoutPlan(input);
 }

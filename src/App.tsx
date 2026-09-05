@@ -22,6 +22,8 @@ const AnalyticsPreview = lazy(() => import("@/pages/dev/AnalyticsPreview"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
+const Onboarding = lazy(() => import("@/pages/Onboarding"));
+const CreativeHistory = lazy(() => import("@/pages/CreativeHistory"));
 
 export default function App() {
   return (
@@ -41,6 +43,7 @@ export default function App() {
           <Route path="/privacy/data-deletion" element={<Navigate to="/data-deletion" replace />} />
 
           {/* Protected app routes */}
+          <Route path="onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
           <Route
             element={
               <ProtectedRoute>
@@ -55,6 +58,7 @@ export default function App() {
             <Route path="calendar" element={<Calendar />} />
             <Route path="scheduled" element={<Scheduled />} />
             <Route path="analytics" element={<Analytics />} />
+            <Route path="creatives" element={<CreativeHistory />} />
             <Route path="integrations" element={<Integrations />} />
             <Route path="settings" element={<Settings />} />
             {/* AI Studio is now a mode inside Create Post. Kept so bookmarks

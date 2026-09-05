@@ -120,6 +120,8 @@ model Post {
   // Per-network publish attempts, one row per provider. Supersedes the
   // `platform_results` JSON blob for anything the backend publishes itself.
   post_platforms PostPlatform[]
+  creative_assets PostCreativeAsset[]
+  creative_events CreativeEvent[]
 
   @@index([created_by])
   @@index([status])
@@ -148,10 +150,74 @@ model Brand {
   social_accounts SocialAccount[]
   posts           Post[]
   generated_assets GeneratedAsset[]
+  creative_concepts CreativeConceptRecord[]
+  brand_voices      BrandVoice[]
+  intelligence_signals BrandIntelligenceSignal[]
 
   @@unique([created_by, name])
   @@index([created_by])
   @@map("brands")
+}
+
+/// Deterministically accumulated creative preferences for one owned brand.
+/// Explicit and learned signals remain separate rows so weak behaviour can
+/// never overwrite a rule the member deliberately set.
+model BrandIntelligenceSignal {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  brandId        String   @map("brand_id") @db.Uuid
+  brand          Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  dimension      String
+  value          String
+  polarity       String   @default("positive")
+  source         String
+  occurrenceCount Int     @default(1) @map("occurrence_count")
+  lastObservedAt DateTime @default(now()) @map("last_observed_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([userId, brandId, dimension, value, polarity, source])
+  @@index([userId, brandId])
+  @@map("brand_intelligence_signals")
+}
+
+enum CreativeConceptStatus {
+  DISCOVERED
+  GENERATING
+  GENERATED
+  FAILED
+
+  @@map("creative_concept_status")
+}
+
+/// One versioned concept in one Personal/Brand scope. This is the durable
+/// bridge between concept discovery and its canonical generated image.
+model CreativeConceptRecord {
+  id                String   @id
+  userId            String   @map("user_id") @db.Uuid
+  contextType       String   @map("context_type")
+  brandId           String?  @map("brand_id") @db.Uuid
+  brand             Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  prompt            String
+  promptVersion     String   @map("prompt_version")
+  styleId           String?  @map("style_id")
+  styleVersion      String   @map("style_version")
+  contextVersion    String   @map("context_version")
+  generationVersion String   @map("generation_version")
+  definition        Json
+  selectedAt        DateTime? @map("selected_at") @db.Timestamptz(6)
+  selectionCount    Int      @default(0) @map("selection_count")
+  savedAt           DateTime? @map("saved_at") @db.Timestamptz(6)
+  reuseCount        Int      @default(0) @map("reuse_count")
+  generatedAssetId  String?  @unique @map("generated_asset_id") @db.Uuid
+  generatedAsset    GeneratedAsset? @relation(fields: [generatedAssetId], references: [id], onDelete: SetNull)
+  status            CreativeConceptStatus @default(DISCOVERED)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, contextType, brandId])
+  @@index([styleId])
+  @@map("creative_concepts")
 }
 
 /// Reusable Brand Voice profiles for the AI Marketing Studio. The `voice`
@@ -165,11 +231,29 @@ model BrandVoice {
   created_by String   @default(dbgenerated("auth.uid()")) @db.Uuid
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
+  brand_id   String?  @db.Uuid
+  brand      Brand?   @relation(fields: [brand_id], references: [id], onDelete: Cascade)
 
   @@unique([created_by, name])
   @@index([created_by])
   @@index([created_at(sort: Desc)])
+  @@index([brand_id])
   @@map("brand_voices")
+}
+
+/// Persisted creation-mode onboarding and Personal creative context. Existing
+/// users are backfilled as completed Personal accounts; new auth users receive
+/// an incomplete row from the migration trigger and must choose a context.
+model CreationProfile {
+  userId             String   @id @map("user_id") @db.Uuid
+  defaultContextType String   @default("personal") @map("default_context_type")
+  defaultBrandId     String?  @map("default_brand_id") @db.Uuid
+  personalContext    Json     @default("{}") @map("personal_context")
+  onboardingComplete Boolean  @default(false) @map("onboarding_complete")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("creation_profiles")
 }
 
 /// Reusable Creative DNA profiles — the visual sibling of BrandVoice. Where
@@ -271,6 +355,7 @@ enum GeneratedAssetStatus {
 enum GeneratedAssetSource {
   AI_GENERATED
   AI_REFINED
+  AI_REGENERATED
 
   @@map("generated_asset_source")
 }
@@ -324,6 +409,13 @@ model GeneratedAsset {
   provider String @default("gemini")
   model    String
 
+  /// The automatic typography engine's choice — headline/body/accent font,
+  /// weights and reasoning (TypographySelection, server/src/ai/typography/
+  /// font-selector.ts). Informational only: the renderer already used this
+  /// to draw the real text, so a null/stale value here never affects the
+  /// image, only the read-only "Typography: X + Y" UI detail (spec §9).
+  typography Json? @map("typography")
+
   source GeneratedAssetSource @default(AI_GENERATED)
   status GeneratedAssetStatus @default(PENDING)
 
@@ -334,6 +426,9 @@ model GeneratedAsset {
   parentAssetId String?          @map("parent_asset_id") @db.Uuid
   parentAsset   GeneratedAsset?  @relation("AssetLineage", fields: [parentAssetId], references: [id], onDelete: SetNull)
   children      GeneratedAsset[] @relation("AssetLineage")
+  canonicalConcept CreativeConceptRecord?
+  postAttributions PostCreativeAsset[]
+  creativeEvents CreativeEvent[]
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -341,6 +436,101 @@ model GeneratedAsset {
   @@index([campaignId])
   @@index([parentAssetId])
   @@map("generated_assets")
+}
+
+/// Durable, relational attribution of an immutable generated asset version to
+/// a post. A row survives removal so outcome/history reads never have to infer
+/// provenance from a mutable URL or JSON array position.
+model PostCreativeAsset {
+  id               String         @id @default(uuid()) @db.Uuid
+  ownerId          String         @map("owner_id") @db.Uuid
+  contextType      String         @map("context_type")
+  brandId          String?        @map("brand_id") @db.Uuid
+  generatedAssetId String         @map("generated_asset_id") @db.Uuid
+  generatedAsset   GeneratedAsset @relation(fields: [generatedAssetId], references: [id], onDelete: Restrict)
+  postId           String         @map("post_id") @db.Uuid
+  post             Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mediaItemId      String         @map("media_item_id")
+  attachmentState  String         @default("attached") @map("attachment_state")
+  attachedAt       DateTime       @default(now()) @map("attached_at") @db.Timestamptz(6)
+  removedAt        DateTime?      @map("removed_at") @db.Timestamptz(6)
+  finalPublished   Boolean        @default(false) @map("final_published")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([generatedAssetId, postId, mediaItemId])
+  @@index([ownerId, contextType, brandId])
+  @@index([postId, attachmentState])
+  @@index([generatedAssetId])
+  @@map("post_creative_assets")
+}
+
+/// Append-only domain ledger. Application code only inserts; database rules
+/// reject UPDATE/DELETE so aggregated intelligence never becomes its audit log.
+model CreativeEvent {
+  id               String                  @id @default(uuid()) @db.Uuid
+  ownerId          String                  @map("owner_id") @db.Uuid
+  brandId          String?                 @map("brand_id") @db.Uuid
+  contextType      String                  @map("context_type")
+  eventType        String                  @map("event_type")
+  conceptId        String?                 @map("concept_id")
+  generatedAssetId String?                 @map("generated_asset_id") @db.Uuid
+  generatedAsset   GeneratedAsset?         @relation(fields: [generatedAssetId], references: [id], onDelete: SetNull)
+  postId           String?                 @map("post_id") @db.Uuid
+  post             Post?                   @relation(fields: [postId], references: [id], onDelete: SetNull)
+  platform         String?
+  metadata         Json?
+  eventId          String?                 @unique @map("event_id")
+  occurredAt       DateTime                @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  @@index([ownerId, contextType, brandId, occurredAt(sort: Desc)])
+  @@index([generatedAssetId, occurredAt(sort: Desc)])
+  @@index([postId, occurredAt(sort: Desc)])
+  @@map("creative_events")
+}
+
+/// Provider-agnostic usage facts for future cost analysis. This is telemetry,
+/// not an entitlement, quota, credit, or billing model.
+model AiUsageEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  ownerId          String   @map("owner_id") @db.Uuid
+  action           String
+  provider         String
+  model            String
+  contextType      String?  @map("context_type")
+  brandId          String?  @map("brand_id") @db.Uuid
+  requestId        String?  @map("request_id")
+  inputTokens      Int?     @map("input_tokens")
+  outputTokens     Int?     @map("output_tokens")
+  imageCalls       Int      @default(0) @map("image_calls")
+  retryCount       Int      @default(0) @map("retry_count")
+  cacheHit         Boolean  @default(false) @map("cache_hit")
+  success          Boolean
+  durationMs       Int      @map("duration_ms")
+  errorCode        String?  @map("error_code")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([requestId])
+  @@map("ai_usage_events")
+}
+
+/// Response-bearing idempotency record for expensive creative operations.
+/// The unique owner/action/key tuple prevents a network retry from crossing
+/// the paid boundary twice while keeping existing concept claims unchanged.
+model CreativeIdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  action         String
+  idempotencyKey String   @map("idempotency_key")
+  status         String   @default("running")
+  response       Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([ownerId, action, idempotencyKey])
+  @@index([createdAt])
+  @@map("creative_idempotency_records")
 }
 
 // ─── Integrations (backend-only, via Prisma Client) ──────────────────────────

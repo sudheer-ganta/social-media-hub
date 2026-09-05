@@ -86,6 +86,9 @@ import creativeRoutes from './routes/creative.routes';
 
 app.use('/api/ai/creative', creativeRoutes);
 
+import creativeHistoryRoutes from './routes/creative-history.routes';
+app.use('/api/creative', creativeHistoryRoutes);
+
 // Publishing. The browser never talks to LinkedIn — it asks this router to
 // send a post it already owns, and the provider layer does the rest.
 // See publish/routes/publish.routes.ts.

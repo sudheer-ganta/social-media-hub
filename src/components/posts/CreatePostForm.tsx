@@ -21,6 +21,7 @@ import { PLATFORM_MAP } from "@/constants";
 import { usePublishPostToProvider, usePublishState } from "@/hooks/usePublish";
 import { useSchedulePost } from "@/hooks/useScheduledPosts";
 import { postsService, ScheduleApiError } from "@/services";
+import { creativeService } from "@/services/creative.service";
 import { aiService } from "@/services/ai.service";
 import { fromStudioOutput } from "@/ai/caption";
 import { currentTime, today } from "@/utils/date";
@@ -526,6 +527,16 @@ export function CreatePostForm({
     const saved = post
       ? await updatePost.mutateAsync({ id: post.id, input })
       : await createPost.mutateAsync(input);
+
+    // The post itself remains compatible with ordinary uploaded media; only
+    // items carrying explicit generated provenance enter the relational layer.
+    await creativeService.syncCreativeAttribution({
+      postId: saved.id,
+      contextType: values.context_type,
+      brandId: values.context_type === "brand" ? values.brand_id : null,
+      media: media.map(({ id, generatedAssetId }) => ({ id, ...(generatedAssetId && { generatedAssetId }) })),
+      eventId: crypto.randomUUID(),
+    });
 
     setLastSavedAt(new Date());
     reset(values, { keepValues: true });

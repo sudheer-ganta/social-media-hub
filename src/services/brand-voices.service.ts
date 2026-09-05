@@ -12,8 +12,8 @@ export const brandVoicesService = {
     return all.find((p) => p.is_default) ?? all[0] ?? null;
   },
 
-  async save(name: string, voice: BrandVoice): Promise<BrandVoiceProfile> {
-    return brandVoicesRepository.upsertByName({ name, voice });
+  async save(brandId: string, name: string, voice: BrandVoice): Promise<BrandVoiceProfile> {
+    return brandVoicesRepository.upsertByBrand({ brand_id: brandId, name, voice });
   },
 
   async setDefault(id: string): Promise<BrandVoiceProfile> {
@@ -26,14 +26,7 @@ export const brandVoicesService = {
   },
 
   async importLegacyProfiles(legacy: Record<string, BrandVoice>): Promise<number> {
-    const entries = Object.entries(legacy);
-    let count = 0;
-    for (const [name, voice] of entries) {
-      if (name.trim()) {
-        await brandVoicesRepository.upsertByName({ name: name.trim(), voice });
-        count++;
-      }
-    }
-    return count;
+    void legacy;
+    return 0;
   },
 };

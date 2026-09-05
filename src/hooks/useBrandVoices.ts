@@ -19,8 +19,8 @@ export function useBrandVoices() {
   const defaultProfile = profiles.find((p: BrandVoiceProfile) => p.is_default) ?? profiles[0] ?? null;
 
   const createMutation = useMutation({
-    mutationFn: ({ name, voice }: { name: string; voice: BrandVoice }) =>
-      brandVoicesService.save(name, voice),
+    mutationFn: ({ brandId, name, voice }: { brandId: string; name: string; voice: BrandVoice }) =>
+      brandVoicesService.save(brandId, name, voice),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: brandVoiceKeys.all });
       toast.success("Brand Voice profile created");
@@ -31,8 +31,8 @@ export function useBrandVoices() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ name, voice }: { id: string; name: string; voice: BrandVoice }) =>
-      brandVoicesService.save(name, voice),
+    mutationFn: ({ brandId, name, voice }: { id: string; brandId: string; name: string; voice: BrandVoice }) =>
+      brandVoicesService.save(brandId, name, voice),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: brandVoiceKeys.all });
       toast.success("Brand Voice profile updated");

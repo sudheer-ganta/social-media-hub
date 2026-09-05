@@ -11,22 +11,26 @@ import {
 } from "@/components/ui/card";
 import { BrandVoicePanel } from "@/components/marketing/BrandVoicePanel";
 import { useBrandVoices } from "@/hooks/useBrandVoices";
+import { useBrands } from "@/hooks/useBrands";
 import type { BrandVoice, BrandVoiceProfile } from "@/types";
 import { DEFAULT_BRAND_VOICE } from "@/ai/types";
 
 export function BrandVoiceSettings() {
   const { profiles, isLoading, createProfile, updateProfile, setDefault, deleteProfile } =
     useBrandVoices();
+  const { brands } = useBrands();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [activeVoice, setActiveVoice] = useState<BrandVoice>(DEFAULT_BRAND_VOICE);
   const [activeName, setActiveName] = useState("");
+  const [activeBrandId, setActiveBrandId] = useState("");
 
-  const handleEdit = (id: string, name: string, voice: BrandVoice) => {
+  const handleEdit = (id: string, name: string, voice: BrandVoice, brandId: string | null) => {
     setEditingId(id);
     setActiveName(name);
     setActiveVoice(voice);
+    setActiveBrandId(brandId ?? "");
     setIsCreating(false);
   };
 
@@ -34,16 +38,18 @@ export function BrandVoiceSettings() {
     setEditingId(null);
     setActiveName("New Brand Voice");
     setActiveVoice(DEFAULT_BRAND_VOICE);
+    setActiveBrandId(brands[0]?.id ?? "");
     setIsCreating(true);
   };
 
   const handleSave = async () => {
     const profileName = (activeVoice.name || activeName || "Brand Voice").trim();
+    if (!activeBrandId) return;
     if (editingId) {
-      await updateProfile({ id: editingId, name: profileName, voice: { ...activeVoice, name: profileName } });
+      await updateProfile({ id: editingId, brandId: activeBrandId, name: profileName, voice: { ...activeVoice, name: profileName } });
       setEditingId(null);
     } else {
-      await createProfile({ name: profileName, voice: { ...activeVoice, name: profileName } });
+      await createProfile({ brandId: activeBrandId, name: profileName, voice: { ...activeVoice, name: profileName } });
       setIsCreating(false);
     }
   };
@@ -137,7 +143,7 @@ export function BrandVoiceSettings() {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs"
-                          onClick={() => handleEdit(p.id, p.name, p.voice)}
+                          onClick={() => handleEdit(p.id, p.name, p.voice, p.brand_id)}
                         >
                           <Edit2 className="h-3 w-3 mr-1" /> Edit
                         </Button>
@@ -160,6 +166,13 @@ export function BrandVoiceSettings() {
           {/* Active Editor */}
           {(isCreating || editingId) && (
             <div className="rounded-xl border bg-card p-4 space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="brand-voice-brand" className="text-sm font-medium">Brand</label>
+                <select id="brand-voice-brand" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={activeBrandId} onChange={(e) => setActiveBrandId(e.target.value)}>
+                  <option value="">Choose a brand</option>
+                  {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+                </select>
+              </div>
               <div className="flex items-center justify-between border-b pb-3">
                 <p className="text-sm font-semibold">
                   {editingId ? `Editing Profile: ${activeName}` : "Create Brand Voice Profile"}
@@ -176,7 +189,7 @@ export function BrandVoiceSettings() {
                   >
                     Cancel
                   </Button>
-                  <Button size="sm" className="h-8 text-xs gap-1" onClick={handleSave}>
+                  <Button size="sm" className="h-8 text-xs gap-1" disabled={!activeBrandId} onClick={handleSave}>
                     <Check className="h-3.5 w-3.5" />
                     Save Profile
                   </Button>
