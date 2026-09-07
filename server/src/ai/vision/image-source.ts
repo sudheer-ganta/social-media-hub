@@ -3,6 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import axios, { type AxiosError } from 'axios';
+import sharp from 'sharp';
 import type { InlineImage } from '../types';
 
 /**
@@ -27,7 +28,7 @@ import type { InlineImage } from '../types';
  * brief alone; a missing image degrades the caption, it does not break it.
  */
 
-/** What Gemini accepts as an inline image part. */
+/** What Gemini accepts as an inline image part. AVIF is deliberately absent — Gemini's own image-input support for it is not guaranteed, so an AVIF response is converted to PNG (see `convertAvifIfNeeded`/`cloudinaryAvifWorkaroundUrl` below) rather than added here and passed straight through. */
 const SUPPORTED_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -232,6 +233,42 @@ function readMimeType(header: unknown): string {
     : '';
 }
 
+/**
+ * A Cloudinary delivery URL can be re-delivered in another format on demand
+ * by inserting a transformation segment right after `/upload/` — cheaper and
+ * more reliable than downloading the AVIF bytes and decoding them ourselves,
+ * and it works even on a host whose libvips build has no AVIF/HEIF codec.
+ * Only rewrites a URL that visibly ends in `.avif` and has no transformation
+ * of its own already, so an already-working (non-AVIF, or already-transformed)
+ * Cloudinary reference is never touched.
+ */
+export function cloudinaryAvifWorkaroundUrl(url: string): string | undefined {
+  if (!/\.avif(?:\?.*)?$/i.test(url)) return undefined;
+  const match = /^(https?:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(.*)$/i.exec(url);
+  if (!match) return undefined;
+  const [, prefix, rest] = match;
+  if (/^[a-z]_[a-z0-9.:]+[,/]/i.test(rest)) return undefined; // a transformation is already present — don't stack a second one
+  return `${prefix}f_jpg/${rest}`;
+}
+
+/**
+ * Best-effort AVIF → PNG conversion for whatever the Cloudinary URL rewrite
+ * above didn't catch (a non-Cloudinary source, or a Cloudinary "auto format"
+ * response that still came back as AVIF). Never throws: a host whose libvips
+ * build lacks the AVIF/HEIF codec returns `undefined`, and the caller falls
+ * through to the ordinary "unsupported format" rejection rather than
+ * crashing the request.
+ */
+export async function convertAvifIfNeeded(buffer: Buffer, mimeType: string): Promise<{ buffer: Buffer; mimeType: string } | undefined> {
+  if (mimeType !== 'image/avif') return undefined;
+  try {
+    const converted = await sharp(buffer).png().toBuffer();
+    return { buffer: converted, mimeType: 'image/png' };
+  } catch {
+    return undefined;
+  }
+}
+
 /** One downloaded image, still as bytes. */
 export interface FetchedImage {
   /** e.g. `image/jpeg`, taken from the response and lowercased. */
@@ -285,8 +322,18 @@ export async function fetchImageBytes(
 
   assertPublicHost(parsed.hostname);
 
+  // A Cloudinary reference that's visibly stored as AVIF is re-requested in
+  // JPEG delivery format up front — cheaper than downloading AVIF bytes just
+  // to convert them locally, and it works even where the local AVIF/HEIF
+  // codec is unavailable (see `convertAvifIfNeeded` below for that path).
+  const cloudinaryRewrite = cloudinaryAvifWorkaroundUrl(parsed.toString());
+  const fetchUrl = cloudinaryRewrite ?? parsed.toString();
+  if (cloudinaryRewrite) {
+    console.info('[image-source] requesting JPEG delivery for an AVIF-stored Cloudinary reference', { host: parsed.hostname, path: parsed.pathname });
+  }
+
   try {
-    const response = await axios.get<ArrayBuffer>(parsed.toString(), {
+    const response = await axios.get<ArrayBuffer>(fetchUrl, {
       responseType: 'arraybuffer',
       timeout: FETCH_TIMEOUT_MS,
       maxRedirects: MAX_REDIRECTS,
@@ -315,7 +362,31 @@ export async function fetchImageBytes(
       validateStatus: (status) => status >= 200 && status < 300,
     });
 
-    const mimeType = readMimeType(response.headers['content-type']);
+    let mimeType = readMimeType(response.headers['content-type']);
+    let buffer: Buffer = Buffer.from(response.data);
+    if (buffer.byteLength === 0) {
+      throw new ImageFetchError(
+        'The image was empty.',
+        parsed.hostname,
+        'size',
+      );
+    }
+
+    // The Cloudinary rewrite above catches the common case; this is the
+    // fallback for everything else that still comes back as AVIF (a
+    // non-Cloudinary host, or a delivery URL our rewrite regex didn't
+    // match) — converted in-process rather than silently discarded.
+    if (mimeType === 'image/avif') {
+      const converted = await convertAvifIfNeeded(buffer, mimeType);
+      if (converted) {
+        buffer = converted.buffer;
+        mimeType = converted.mimeType;
+        console.info('[image-source] converted AVIF reference to PNG for compatibility', { host: parsed.hostname });
+      } else {
+        console.warn('[image-source] AVIF reference could not be converted — rejecting as unsupported', { host: parsed.hostname, path: parsed.pathname });
+      }
+    }
+
     if (!allowedMimeTypes.has(mimeType)) {
       throw new ImageFetchError(
         `That file is not a supported image format${
@@ -326,14 +397,6 @@ export async function fetchImageBytes(
       );
     }
 
-    const buffer = Buffer.from(response.data);
-    if (buffer.byteLength === 0) {
-      throw new ImageFetchError(
-        'The image was empty.',
-        parsed.hostname,
-        'size',
-      );
-    }
     if (buffer.byteLength > maxBytes) {
       throw new ImageFetchError(
         'The image is too large.',

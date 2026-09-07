@@ -913,22 +913,35 @@ function dumpDebugArtifacts(assetId: string, files: Record<string, Buffer | stri
   }
 }
 
-async function fetchReferenceImages(urls: string[]) {
-  const images = await Promise.all(
+/** One reference that failed to fetch — kept (not just logged) so a caller can surface the degradation rather than only seeing a smaller `referenceCount`. */
+interface ReferenceFetchFailure {
+  url: string;
+  reason?: string;
+  detail?: string;
+}
+
+interface FetchedReferenceImages {
+  images: Array<{ mimeType: string; data: string }>;
+  failures: ReferenceFetchFailure[];
+}
+
+async function fetchReferenceImages(urls: string[]): Promise<FetchedReferenceImages> {
+  const failures: ReferenceFetchFailure[] = [];
+  const results = await Promise.all(
     urls.map(async (url) => {
       try {
         const image = await fetchInlineImage(url);
         return { mimeType: image.mimeType, data: image.data };
       } catch (error) {
-        console.warn('[creative] reference asset could not be fetched, skipping', {
-          url,
-          detail: error instanceof ImageFetchError ? error.detail : String(error),
-        });
+        const detail = error instanceof ImageFetchError ? error.detail : String(error);
+        const reason = error instanceof ImageFetchError ? error.reason : undefined;
+        console.warn('[creative] reference asset could not be fetched, skipping', { url, reason, detail });
+        failures.push({ url, reason, detail });
         return null;
       }
     }),
   );
-  return images.filter((image): image is { mimeType: string; data: string } => image !== null);
+  return { images: results.filter((image): image is { mimeType: string; data: string } => image !== null), failures };
 }
 
 const MAX_CAMPAIGN_VARIATIONS = 6;
@@ -1057,7 +1070,13 @@ async function runGeneration({
       mode,
       artDirectionFamily,
       research,
-      referenceStyle: effectiveStyleProfile(referenceStyle, styleDna),
+      // The selected style is now its own mandatory section (selectedStyle),
+      // never folded into referenceStyle — referenceStyle here is whatever
+      // the caller already resolved as genuine reference-image inspiration
+      // (optionally intelligence-enriched), so it stays honest about what it
+      // actually is (see effectiveStyleProfile's callers above `generate`).
+      selectedStyle: styleDna?.style,
+      referenceStyle,
       intent,
       brand,
       creativeDna,
@@ -1104,7 +1123,11 @@ async function runGeneration({
     logoAssetUrl: creativeDna.logoAssetUrl || undefined,
     variationLabel,
     creativeDna,
-    referenceStyle: effectiveStyleProfile(referenceStyle, styleDna),
+    // The renderer now takes styleDna directly (see design-recipe.ts /
+    // Phase 4) and only falls back to referenceStyle.designRecipe when no
+    // style resolved — passing the real referenceStyle through unwrapped
+    // keeps that fallback honest instead of re-conflating it with styleDna.
+    referenceStyle,
     styleDna,
     renderContext,
     ...(withCampaignStage && {
@@ -1235,10 +1258,10 @@ async function finishGeneration({
     // through Gemini), and a failed logo fetch is never fatal.
     const [fetchedReferences, fetchedLogo] = await Promise.all([
       fetchReferenceImages(referenceUrls),
-      logoAssetUrl ? fetchReferenceImages([logoAssetUrl]) : Promise.resolve([]),
+      logoAssetUrl ? fetchReferenceImages([logoAssetUrl]) : Promise.resolve({ images: [], failures: [] }),
     ]);
-    referenceImages = fetchedReferences;
-    logoImage = fetchedLogo[0];
+    referenceImages = fetchedReferences.images;
+    logoImage = fetchedLogo.images[0];
 
     // Asset safety: a member who attached a required product/reference image
     // and had every one of them fail to fetch gets a clear error, not a
@@ -1250,6 +1273,23 @@ async function finishGeneration({
       );
     }
 
+    // A reference that wasn't strictly "required" (hasAssets) can still fail
+    // to fetch and be dropped above without throwing — that's a real
+    // degradation of the request (fewer pixels grounding the selected
+    // style/product than the member attached), so it's surfaced here
+    // explicitly rather than only being inferable from a smaller
+    // referenceCount elsewhere in the logs.
+    const referenceDegraded = fetchedReferences.failures.length > 0 || fetchedLogo.failures.length > 0;
+    if (referenceDegraded) {
+      console.warn('[creative] reference degradation — fewer references reached the image model than were attached', {
+        requestId,
+        assetId: asset.id,
+        requestedCount: referenceUrls.length + (logoAssetUrl ? 1 : 0),
+        fetchedCount: referenceImages.length + fetchedLogo.images.length,
+        failures: [...fetchedReferences.failures, ...fetchedLogo.failures],
+      });
+    }
+
     const imagePrompt = buildImagePrompt(direction, hasAssets, Boolean(logoImage), styleDna);
     enterStage('image-generation');
     console.info('[creative] image generation started', {
@@ -1257,6 +1297,7 @@ async function finishGeneration({
       assetId: asset.id,
       model: imageProvider.model,
       referenceCount: referenceImages.length,
+      referenceDegraded,
       hasLogo: Boolean(logoImage),
     });
     if (metrics) metrics.imageCalls += 1;
@@ -1314,17 +1355,34 @@ async function finishGeneration({
       creativeDna,
       referenceStyle,
       styleDna: styleDna?.style,
+      styleDnaVariant: styleDna?.variant,
       logoImage,
     });
     image = { mimeType: rendered.mimeType, data: rendered.data };
     structure = rendered.structure;
     typography = rendered.typography;
+    // An explicit style selection must never produce 'generic-fallback' — see
+    // design-recipe.ts. If it ever does, that's a real degradation (the
+    // selected style silently failed to reach the renderer), so it's flagged
+    // loudly here rather than blending into the routine info line below.
+    if (styleDna && rendered.recipeSource !== 'style-dna') {
+      console.warn('[creative] selected style did not reach the renderer — recipe fell back', {
+        requestId,
+        assetId: asset.id,
+        selectedStyleId: styleDna.style.id,
+        recipeSource: rendered.recipeSource,
+      });
+    }
     console.info('[creative] renderer completed', {
       requestId,
       assetId: asset.id,
       durationMs: Date.now() - stageStartedAt,
       structure: rendered.structure,
+      recipeSource: rendered.recipeSource,
+      selectedStyleId: styleDna?.style.id,
       typography: rendered.typography && { headline: rendered.typography.headlineFont, body: rendered.typography.bodyFont, accent: rendered.typography.accentFont },
+      styleFidelityCompliant: rendered.styleFidelity.compliant,
+      styleFidelityViolations: rendered.styleFidelity.violations,
       byteLength: Buffer.from(rendered.data, 'base64').length,
     });
     dumpDebugArtifacts(asset.id, {
@@ -1785,7 +1843,8 @@ export const creativeGenerationService = {
       mode: concept.mode,
       artDirectionFamily: concept.artDirectionFamily,
       research,
-      referenceStyle: effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence),
+      selectedStyle: styleDna?.style,
+      referenceStyle: effectiveStyleProfile(referenceStyle, undefined, designContext.brandIntelligence, designContext.performanceEvidence),
       intent,
     });
 
@@ -1852,6 +1911,9 @@ export const creativeGenerationService = {
         resolveIntent(request, metrics),
         resolveReferenceStyle(request),
       ]);
+      // Concept discovery still benefits from the selected style folded into
+      // its "reference style" inspiration channel (out of Phase 3's scope —
+      // concept generation just picks the idea, not the visual system).
       const intelligentStyle = effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence);
       const { concept, research } = await resolveConceptAndResearch(
         request, brand, creativeDna, intent, intelligentStyle, metrics,
@@ -1862,9 +1924,16 @@ export const creativeGenerationService = {
           .catch((error) => console.warn('[creative] intelligence signal skipped', error));
       }
 
+      // The direction/renderer stage gets the REAL reference-style profile
+      // (uploaded images + learned intelligence), never the selected style
+      // folded in — the selected style is passed explicitly as its own
+      // `styleDna` field so it can be a mandatory constraint (creative
+      // direction) and the direct recipe source (renderer), not inspiration.
+      const directionReferenceStyle = effectiveStyleProfile(referenceStyle, undefined, designContext.brandIntelligence, designContext.performanceEvidence);
+
       const asset = await runGeneration({
         userId, request, textProvider, imageProvider, brand, creativeDna, concept,
-        mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle: intelligentStyle, styleDna, intent,
+        mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle: directionReferenceStyle, styleDna, intent,
         requestId, metrics, canonicalConceptId: claimedConceptId,
       });
       await creativeAttributionRepository.recordAssetEvent(userId, asset.id, 'ASSET_GENERATED', requestId ? `${requestId}:generated:${asset.id}` : undefined).catch(() => undefined);
@@ -2045,7 +2114,8 @@ export const creativeGenerationService = {
         hasAssets: parent.sourceAssetUrls.length > 0,
         brand,
         creativeDna,
-        referenceStyle: effectiveStyleProfile(referenceStyle, styleDna),
+        selectedStyle: styleDna?.style,
+        referenceStyle,
         // Carried so an edit can never quietly drop the offer or the event on
         // its way through — the same gate a fresh generation passes.
         intent,

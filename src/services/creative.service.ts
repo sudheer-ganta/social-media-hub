@@ -9,6 +9,7 @@ import type {
   ScoredCreativeConcept,
   UnderstoodCreative,
 } from "@/types/creative";
+import { authenticatedFetch, getValidAccessToken } from "@/lib/auth-token";
 
 /**
  * The browser's side of FlowPost's creative engine. Mirrors `ai.service.ts`
@@ -18,23 +19,7 @@ import type {
 
 const CREATIVE_ENDPOINT = "/api/ai/creative";
 
-/**
- * Generation is two image models back to back — the visual, then the campaign
- * designed over it — so it needs materially more room than a caption call.
- * A timeout here aborts a request the server is still paying for, which is
- * the one failure mode worse than waiting.
- */
 const REQUEST_TIMEOUT_MS = 180_000;
-
-async function getAccessToken(): Promise<string> {
-  const {
-    data: { session },
-  } = await getSupabase().auth.getSession();
-  if (!session?.access_token) {
-    throw new Error("You need to be signed in to create with FlowPost.");
-  }
-  return session.access_token;
-}
 
 async function request<T>(path: string, init: RequestInit, fallback: string): Promise<T> {
   const controller = new AbortController();
@@ -42,16 +27,19 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${CREATIVE_ENDPOINT}${path}`, {
-      ...init,
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...(init.method === "POST" && { "Idempotency-Key": crypto.randomUUID() }),
-        ...init.headers,
-        Authorization: `Bearer ${await getAccessToken()}`,
+    response = await authenticatedFetch(
+      `${API_BASE_URL}${CREATIVE_ENDPOINT}${path}`,
+      {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...(init.method === "POST" && { "Idempotency-Key": crypto.randomUUID() }),
+          ...init.headers,
+        },
       },
-    });
+      "You need to be signed in to create with FlowPost.",
+    );
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") {
       throw new Error("This took too long. Please try again.");
@@ -75,7 +63,6 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
 export interface CreativeRequestInput {
   prompt: string;
   styleId?: string;
-  contextType: "personal" | "brand";
   brandId?: string;
   goal: MarketingGoal;
   funnelStage: FunnelStage;
@@ -96,9 +83,9 @@ export interface CreativeRequestInput {
 }
 
 export async function syncCreativeAttribution(input: { postId: string; contextType: "personal" | "brand"; brandId?: string | null; media: Array<{ id: string; generatedAssetId?: string }>; eventId?: string }) {
-  const response = await fetch(`${API_BASE_URL}/api/creative/attribution/sync`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/creative/attribution/sync`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${await getAccessToken()}` },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   const body = await response.json().catch(() => null);

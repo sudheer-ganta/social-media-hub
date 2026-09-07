@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from 'sharp';
-import { resolveDesignRecipe } from './design-recipe';
+import { resolveDesignRecipe, type RecipeSource } from './design-recipe';
 import {
   buildLayoutPlan,
   resolvePalette,
@@ -8,7 +8,7 @@ import {
   type PlannedBlock,
   type Rect,
 } from './layout-plan';
-import { validateDesign, type DesignValidationResult } from './design-validator';
+import { validateDesign, validateStyleFidelity, type DesignValidationResult, type StyleFidelityResult } from './design-validator';
 import {
   renderBadge,
   renderBandFooter,
@@ -195,6 +195,8 @@ export interface RenderCreativeOptions {
   creativeDna: ResolvedCreativeDna;
   referenceStyle?: ReferenceStyleProfile;
   styleDna?: StyleDNA;
+  /** The deterministic pick among the selected style's own option pools (style-dna.ts `choose()`) — required alongside `styleDna` for a stable, reproducible recipe. */
+  styleDnaVariant?: number;
   /** Fetched once by the caller and reused here — the actual brand logo file, composited pixel-exact, never redrawn. */
   logoImage?: { mimeType: string; data: string };
 }
@@ -204,11 +206,15 @@ export interface RenderedCreative {
   data: string;
   /** For logging/QA — the structural choices the plan made, e.g. "full-bleed/asymmetric/torn-paper-footer/logo:integrated/type:serif-editorial". */
   structure: string;
+  /** Where `structure`'s choices actually came from — 'style-dna' when the member explicitly selected a style. Never silently 'generic-fallback' for an explicit selection (see design-recipe.ts). */
+  recipeSource: RecipeSource;
   /** The full plan, for dogfood scripts and QA — never sent to the browser. */
   plan: LayoutPlan;
   /** The automatic typography engine's choice for this creative — persisted and shown read-only in the UI (spec §9). */
   typography: TypographySelection;
   validation: DesignValidationResult;
+  /** Deterministic check of the finished creative against the selected Style DNA (design-validator.ts `validateStyleFidelity`) — `compliant: true` with no `styleDna` selected. Never blocks the render; the caller decides what a non-compliant report means. */
+  styleFidelity: StyleFidelityResult;
 }
 
 export async function renderCreative({
@@ -217,10 +223,11 @@ export async function renderCreative({
   creativeDna,
   referenceStyle,
   styleDna,
+  styleDnaVariant,
   logoImage,
 }: RenderCreativeOptions): Promise<RenderedCreative> {
   const { width, height } = resolveCanvasSize(direction.aspectRatio);
-  const recipe = resolveDesignRecipe(direction, creativeDna, referenceStyle);
+  const { recipe, source: recipeSource } = resolveDesignRecipe(direction, creativeDna, { styleDna, styleDnaVariant, referenceStyle });
   const palette = resolvePalette(creativeDna.brandColors, recipe.colorPalette, direction.palette);
   const content = buildContent(direction, Boolean(logoImage));
 
@@ -248,6 +255,15 @@ export async function renderCreative({
 
   const validation = validateDesign(plan, content);
   if (!validation.valid) throw new RenderValidationError(validation.errors.map((issue) => issue.message));
+
+  const styleFidelity = validateStyleFidelity({ styleDna, recipe, typography, palette });
+  if (!styleFidelity.compliant) {
+    console.warn('[creative] finished render does not fully match the selected style', {
+      styleId: styleDna?.id,
+      recipeSource,
+      violations: styleFidelity.violations,
+    });
+  }
 
   const overlayBody = plan.blocks.map((block) => renderBlock(block, plan)).join('');
   const overlaySvg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${renderDefs()}${overlayBody}</svg>`;
@@ -291,7 +307,7 @@ export async function renderCreative({
     .png()
     .toBuffer();
 
-  return { mimeType: 'image/png', data: output.toString('base64'), structure: plan.structure, plan, typography, validation };
+  return { mimeType: 'image/png', data: output.toString('base64'), structure: plan.structure, recipeSource, plan, typography, validation, styleFidelity };
 }
 
 export { wrapText, resolvePalette };

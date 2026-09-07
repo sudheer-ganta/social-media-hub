@@ -1,3 +1,4 @@
+import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client';
 import { env } from './env';
@@ -15,7 +16,16 @@ if (!env.DATABASE_URL) {
   );
 }
 
-const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+const pool = new Pool({
+  connectionString: env.DATABASE_URL,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 5000,
+  max: 20,
+  idleTimeoutMillis: 120000,
+  connectionTimeoutMillis: 30000,
+});
+
+const adapter = new PrismaPg(pool);
 
 /**
  * The single Prisma Client for the process.

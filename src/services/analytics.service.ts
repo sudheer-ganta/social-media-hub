@@ -69,26 +69,18 @@ function periodParams(days: ReportingDays): Record<string, string> {
   return days === null ? {} : { days: String(days) };
 }
 
-async function getAccessToken(): Promise<string> {
-  const {
-    data: { session },
-  } = await getSupabase().auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error("You need to be signed in to view analytics.");
-  }
-  return session.access_token;
-}
+import { authenticatedFetch } from "@/lib/auth-token";
 
 async function request<T>(
   path: string,
   fallback: string,
   method: "GET" | "POST" = "GET",
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}/api/analytics${path}`, {
-    method,
-    headers: { Authorization: `Bearer ${await getAccessToken()}` },
-  });
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/analytics${path}`,
+    { method },
+    "You need to be signed in to view analytics.",
+  );
 
   const body = await response.json().catch(() => null);
 

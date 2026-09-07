@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { generateCreativeDirection, summariseCreativeDirection } from './creative-direction.generator';
 import { resolveBrandProfile } from '../brand/brand-profile';
 import { resolveCreativeDna } from '../brand/creative-dna';
+import { getStyleDNA } from '../style-dna/style-dna';
 import type { AiTextProvider } from '../providers';
 import type { CreativeConcept } from '../types';
 
@@ -400,6 +401,108 @@ describe('generateCreativeDirection — retry', () => {
     expect(repairPrompt).toContain('"50% off"');
     // The deterministic repair still guarantees the claim ships.
     expect(JSON.stringify(direction)).toContain('50% off');
+  });
+});
+
+describe('generateCreativeDirection — selected style (Phase 3)', () => {
+  it('renders the selected style as its own MANDATORY section, distinct from reference-style inspiration', async () => {
+    const provider = mockProvider(RAW_PAYLOAD);
+    await generateCreativeDirection({
+      provider,
+      request: 'A festival product launch.',
+      goal: 'brand_awareness',
+      funnelStage: 'TOFU',
+      platforms: [],
+      hasAssets: false,
+      brand: resolveBrandProfile(),
+      creativeDna: resolveCreativeDna(),
+      concept: SAMPLE_CONCEPT,
+      mode: 'EDITORIAL',
+      selectedStyle: getStyleDNA('y2k'),
+    });
+
+    const call = vi.mocked(provider.generateJson).mock.calls[0][0];
+    expect(call.prompt).toContain('## SELECTED STYLE — "Y2K" (MANDATORY');
+    expect(call.prompt).toContain('product requirement, not inspiration');
+    // Never rendered through the uploaded-image "inspiration only" channel.
+    expect(call.prompt).not.toContain('## Reference style');
+  });
+
+  it('does not add a SELECTED STYLE section, and never retries for style reasons, when no style was selected', async () => {
+    const provider = mockProvider(RAW_PAYLOAD);
+    await generateCreativeDirection({
+      provider,
+      request: 'anything',
+      goal: 'brand_awareness',
+      funnelStage: 'TOFU',
+      platforms: [],
+      hasAssets: false,
+      brand: resolveBrandProfile(),
+      creativeDna: resolveCreativeDna(),
+      concept: SAMPLE_CONCEPT,
+      mode: 'EDITORIAL',
+    });
+
+    const call = vi.mocked(provider.generateJson).mock.calls[0][0];
+    expect(call.prompt).not.toContain('## SELECTED STYLE');
+    expect(provider.generateJson).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries once when the returned palette contradicts the selected style, and keeps the compliant attempt', async () => {
+    // Y2K requires a vibrant palette (style-dna.ts); an all-grey first
+    // attempt should trigger exactly one repair call, same bounded-retry
+    // path as a missing requirement — no extra Gemini call is added.
+    const mutedFirst = { ...RAW_PAYLOAD, palette: ['#3a3a3a', '#8a8a8a'] };
+    const vibrantRetry = { ...RAW_PAYLOAD, palette: ['#ff2fd6', '#00e5ff'] };
+    const generateJson = vi.fn().mockResolvedValueOnce(mutedFirst).mockResolvedValueOnce(vibrantRetry);
+    const provider: AiTextProvider = { id: 'mock', model: 'mock-model', supportsVision: false, isConfigured: () => true, generateJson };
+
+    const { direction, meta } = await generateCreativeDirection({
+      provider,
+      request: 'A festival product launch.',
+      goal: 'brand_awareness',
+      funnelStage: 'TOFU',
+      platforms: [],
+      hasAssets: false,
+      brand: resolveBrandProfile(),
+      creativeDna: resolveCreativeDna(),
+      concept: SAMPLE_CONCEPT,
+      mode: 'EDITORIAL',
+      selectedStyle: getStyleDNA('y2k'),
+    });
+
+    expect(generateJson).toHaveBeenCalledTimes(2);
+    expect(meta.attempts).toBe(2);
+    const repairPrompt = generateJson.mock.calls[1][0].prompt as string;
+    expect(repairPrompt).toContain('contradicted the SELECTED STYLE');
+    expect(direction.palette).toEqual(['#ff2fd6', '#00e5ff']);
+  });
+
+  it('two different selected styles produce different SELECTED STYLE sections for the identical brief', async () => {
+    const provider = mockProvider(RAW_PAYLOAD);
+    const baseArgs = {
+      provider,
+      request: 'A festival product launch.',
+      goal: 'brand_awareness' as const,
+      funnelStage: 'TOFU' as const,
+      platforms: [],
+      hasAssets: false,
+      brand: resolveBrandProfile(),
+      creativeDna: resolveCreativeDna(),
+      concept: SAMPLE_CONCEPT,
+      mode: 'EDITORIAL' as const,
+    };
+
+    await generateCreativeDirection({ ...baseArgs, selectedStyle: getStyleDNA('luxury') });
+    const luxuryPrompt = vi.mocked(provider.generateJson).mock.calls[0][0].prompt as string;
+
+    await generateCreativeDirection({ ...baseArgs, selectedStyle: getStyleDNA('neo-brutalism') });
+    const brutalismPrompt = vi.mocked(provider.generateJson).mock.calls[1][0].prompt as string;
+
+    expect(luxuryPrompt).not.toBe(brutalismPrompt);
+    expect(luxuryPrompt).toContain('"Luxury"');
+    expect(brutalismPrompt).toContain('"Neo Brutalism"');
+    expect(luxuryPrompt).toContain('No decorative or handwritten accent lettering'); // luxury.typography.accentAllowed === false
   });
 });
 

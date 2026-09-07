@@ -95,7 +95,9 @@ const renderer = vi.hoisted(() => ({
     mimeType: visualImage.mimeType,
     data: visualImage.data,
     structure: 'full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial',
+    recipeSource: 'generic-fallback' as const,
     plan: { canvas: { width: 1280, height: 1600 }, paper: '#f7f4ee', imageRect: { x: 0, y: 0, width: 1, height: 1 }, blocks: [], structure: '' },
+    styleFidelity: { compliant: true, violations: [] as string[] },
   })),
 }));
 
@@ -547,7 +549,8 @@ describe('creativeGenerationService', () => {
   it('uploads the validated renderer result as final and keeps the wordless foundation only for refinements', async () => {
     imageProvider.generateImage.mockResolvedValueOnce([{ mimeType: 'image/png', data: 'dmlzdWFs' }]);
     renderer.renderCreative.mockResolvedValueOnce({
-      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', plan: RENDER_PLAN,
+      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', recipeSource: 'generic-fallback', plan: RENDER_PLAN,
+      styleFidelity: { compliant: true, violations: [] },
     });
 
     await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
@@ -566,7 +569,8 @@ describe('creativeGenerationService', () => {
   it('falls back to uploading the Stage A creative when the campaign fails — the successful image is never lost', async () => {
     imageProvider.generateImage.mockResolvedValueOnce([{ mimeType: 'image/png', data: 'dmlzdWFs' }]);
     renderer.renderCreative.mockResolvedValueOnce({
-      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', plan: RENDER_PLAN,
+      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', recipeSource: 'generic-fallback', plan: RENDER_PLAN,
+      styleFidelity: { compliant: true, violations: [] },
     });
 
     const asset = await creativeGenerationService.generate('user-1', { prompt: 'Launch' });

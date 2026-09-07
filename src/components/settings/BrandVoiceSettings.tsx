@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, Star, Trash2, Edit2, Check, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,9 @@ import type { BrandVoice, BrandVoiceProfile } from "@/types";
 import { DEFAULT_BRAND_VOICE } from "@/ai/types";
 
 export function BrandVoiceSettings() {
+  const [searchParams] = useSearchParams();
+  const brandIdParam = searchParams.get("brandId");
+
   const { profiles, isLoading, createProfile, updateProfile, setDefault, deleteProfile } =
     useBrandVoices();
   const { brands } = useBrands();
@@ -25,6 +29,28 @@ export function BrandVoiceSettings() {
   const [activeVoice, setActiveVoice] = useState<BrandVoice>(DEFAULT_BRAND_VOICE);
   const [activeName, setActiveName] = useState("");
   const [activeBrandId, setActiveBrandId] = useState("");
+
+  useEffect(() => {
+    if (brandIdParam && !isLoading && !isCreating && !editingId) {
+      const existing = profiles.find((p) => p.brand_id === brandIdParam);
+      if (existing) {
+        handleEdit(existing.id, existing.name, existing.voice, existing.brand_id);
+      } else {
+        const targetBrand = brands.find((b) => b.id === brandIdParam);
+        if (targetBrand) {
+          setEditingId(null);
+          setActiveName(`${targetBrand.name} Voice`);
+          setActiveVoice({
+            ...DEFAULT_BRAND_VOICE,
+            name: `${targetBrand.name} Voice`,
+            description: targetBrand.description || "",
+          });
+          setActiveBrandId(targetBrand.id);
+          setIsCreating(true);
+        }
+      }
+    }
+  }, [brandIdParam, isLoading, profiles, brands]);
 
   const handleEdit = (id: string, name: string, voice: BrandVoice, brandId: string | null) => {
     setEditingId(id);

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { DEFAULT_BRAND_VOICE } from "@/ai/types";
 import { brandsRepository } from "@/repositories/brands.repository";
 import { brandVoicesService } from "@/services/brand-voices.service";
+import { toast } from "sonner";
 import { creationProfileRepository } from "@/repositories/creation-profile.repository";
 
 export default function Onboarding() {
@@ -32,6 +33,10 @@ export default function Onboarding() {
         await creationProfileRepository.complete("brand", brand.id);
         navigate(`/posts/new?context=brand&brand=${brand.id}`, { replace: true });
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to finish onboarding.";
+      toast.error(msg);
+      console.error(err);
     } finally {
       setSaving(false);
     }

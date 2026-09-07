@@ -1,4 +1,9 @@
-import { validateLayoutPlan, type ContentInput, type LayoutPlan, type Rect } from './layout-plan';
+import { validateLayoutPlan, type BrandPalette, type ContentInput, type LayoutPlan, type Rect } from './layout-plan';
+import { getFontDefinition } from '../typography/font-catalog';
+import { paletteComplianceViolations } from '../style-dna/style-compliance';
+import type { TypographySelection } from '../typography/font-selector';
+import type { StyleDNA } from '../style-dna/style-dna';
+import type { ReferenceDesignRecipe } from '../types';
 
 export type DesignValidationCode = 'INVALID_CANVAS' | 'INVALID_GEOMETRY' | 'OUT_OF_BOUNDS' | 'OVERLAP' | 'EMPTY_TEXT' | 'PLACEHOLDER_TEXT' | 'MISSING_CONTENT' | 'SAFE_MARGIN' | 'INVALID_TYPOGRAPHY' | 'UNREADABLE_CONTRAST';
 export interface DesignValidationIssue { code: DesignValidationCode; message: string; block?: string }
@@ -48,7 +53,7 @@ export function validateDesign(plan: LayoutPlan, content: ContentInput): DesignV
     if (block.kind === 'text' && (!Number.isFinite(block.spec.fontSize) || block.spec.fontSize <= 0 || !block.spec.fontFamily.trim())) {
       errors.push({ code: 'INVALID_TYPOGRAPHY', message: `${block.role} has invalid font metrics.`, block: block.role });
     }
-    if ((block.kind === 'cta' && block.spec.shape !== 'underline') || block.kind === 'badge') {
+    if ((block.kind === 'cta' && block.spec.shape !== 'underline') || (block.kind === 'badge' && block.text.trim().length > 0)) {
       const ratio = block.kind === 'cta'
         ? contrast(block.spec.fill, block.spec.textFill)
         : contrast(block.fill, block.textFill);
@@ -60,4 +65,80 @@ export function validateDesign(plan: LayoutPlan, content: ContentInput): DesignV
     }
   }
   return { valid: errors.length === 0, errors, warnings };
+}
+
+export interface StyleFidelityResult {
+  compliant: boolean;
+  violations: string[];
+}
+
+/**
+ * Deterministic check of the FINISHED creative's structural, typographic and
+ * palette choices against the member's explicitly selected Style DNA — never
+ * an AI "does this look like X" score. Every check reads a structured field
+ * Style DNA already declares (`style.texture`, `style.renderer.*`,
+ * `style.typography.preferredCategories`, ...) against a structured field the
+ * renderer already produced; nothing here is inferred from the image itself
+ * or from free text.
+ *
+ * Most of these axes are already enforced BY CONSTRUCTION once the recipe
+ * comes from `styleDnaToRecipe` (design-recipe.ts, Phase 4) — `recipe.texture`
+ * can only ever be one of `style.texture`'s own values, for instance. This
+ * exists as the one place that proves that end to end, and as the safety net
+ * for the two paths that are not construction-guaranteed: typography's
+ * full-catalog fallback (font-selector.ts `rankCandidates`, only reached when
+ * the style's own categories have no candidate for a required script) and the
+ * palette (never deterministically forced — Style DNA deliberately avoids
+ * fixed hex swatches, "vary within X, never copy mechanically").
+ *
+ * Deliberately returns a report rather than throwing: unlike `validateDesign`
+ * above (geometry/contrast defects with no acceptable failure mode), most of
+ * what this catches is a rare fallback path degrading gracefully, not a
+ * broken render — the caller decides what a `compliant: false` report means
+ * for that request (log it, surface it, or in the future gate on it).
+ */
+export function validateStyleFidelity(input: {
+  styleDna?: StyleDNA;
+  recipe: ReferenceDesignRecipe;
+  typography: TypographySelection;
+  palette: BrandPalette;
+}): StyleFidelityResult {
+  const { styleDna: style, recipe, typography, palette } = input;
+  if (!style) return { compliant: true, violations: [] };
+
+  const violations: string[] = [];
+  const notAllowed = (label: string, value: string, allowed: readonly string[]) => {
+    if (!allowed.includes(value)) {
+      violations.push(`${label} "${value}" is not one of "${style.name}"'s allowed values (${allowed.join('/')}).`);
+    }
+  };
+
+  // ── Typography category (headline/body) — hard-filtered at selection
+  // (font-selector.ts Phase 1), checked again here as a regression guard. ──
+  const headlineCategory = getFontDefinition(typography.headlineFont)?.category;
+  if (headlineCategory) notAllowed('headline font category', headlineCategory, style.typography.preferredCategories);
+  const bodyCategory = getFontDefinition(typography.bodyFont)?.category;
+  if (bodyCategory) notAllowed('body font category', bodyCategory, style.typography.preferredCategories);
+
+  // ── Accent font allowed/not allowed ──
+  if (typography.accentFont && !style.typography.accentAllowed) {
+    violations.push(`an accent font ("${typography.accentFont}") was selected, but "${style.name}" does not allow a decorative/handwritten accent.`);
+  }
+
+  // ── Renderer structure: typography family, texture, layout behaviour, and
+  // every other hard renderer constraint Style DNA already represents ──
+  notAllowed('renderer typography family', recipe.typographyFamily, style.renderer.typographyFamily);
+  notAllowed('texture', recipe.texture, style.texture);
+  notAllowed('layout behaviour', recipe.layoutBehaviour, style.layout.layoutBehaviour);
+  notAllowed('footer style', recipe.footerStyle, style.renderer.footer);
+  notAllowed('border style', recipe.borderStyle, style.renderer.border);
+  notAllowed('shape language', recipe.shapeLanguage, style.renderer.shapeLanguage);
+  notAllowed('image treatment', recipe.imageTreatment, style.renderer.imageTreatment);
+  notAllowed('spacing', recipe.spacingBehaviour, style.renderer.spacing);
+  notAllowed('logo treatment', recipe.logoTreatment, style.renderer.logoTreatment);
+
+  // ── Palette (deterministic comparison where possible) ──
+  violations.push(...paletteComplianceViolations([palette.ink, palette.paper, palette.accent], style, 'the final rendered palette'));
+
+  return { compliant: violations.length === 0, violations };
 }

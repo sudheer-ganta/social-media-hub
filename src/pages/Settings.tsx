@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Brain, Building2, User, Wand2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { SettingsForm } from "@/components/settings/SettingsForm";
@@ -8,9 +8,16 @@ import { BrandIntelligenceSettings } from "@/components/settings/BrandIntelligen
 import { cn } from "@/lib/utils";
 
 type Tab = "general" | "brands" | "brand-voice" | "intelligence";
+const VALID_TABS: Tab[] = ["general", "brands", "brand-voice", "intelligence"];
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<Tab>("general");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get("tab") as Tab | null;
+  const activeTab: Tab = rawTab && VALID_TABS.includes(rawTab) ? rawTab : "general";
+
+  const handleTabChange = (tab: Tab) => {
+    setSearchParams(tab === "general" ? {} : { tab });
+  };
 
   return (
     <PageContainer
@@ -23,7 +30,7 @@ export default function Settings() {
         <div className="flex border-b gap-2">
           <button
             type="button"
-            onClick={() => setActiveTab("general")}
+            onClick={() => handleTabChange("general")}
             className={cn(
               "flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-semibold transition-colors",
               activeTab === "general"
@@ -36,7 +43,7 @@ export default function Settings() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("brands")}
+            onClick={() => handleTabChange("brands")}
             className={cn(
               "flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-semibold transition-colors",
               activeTab === "brands"
@@ -49,7 +56,7 @@ export default function Settings() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("brand-voice")}
+            onClick={() => handleTabChange("brand-voice")}
             className={cn(
               "flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-semibold transition-colors",
               activeTab === "brand-voice"
@@ -68,7 +75,7 @@ export default function Settings() {
           */}
           <button
             type="button"
-            onClick={() => setActiveTab("intelligence")}
+            onClick={() => handleTabChange("intelligence")}
             className={cn(
               "flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-semibold transition-colors",
               activeTab === "intelligence"

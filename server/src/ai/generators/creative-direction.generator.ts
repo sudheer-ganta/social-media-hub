@@ -1,5 +1,7 @@
 import { buildCreativeDirectionPrompt } from '../prompts/creative-direction.prompt';
 import { missingFromCreative } from '../intent/claim-match';
+import { styleDirectionViolations } from '../style-dna/style-compliance';
+import type { StyleDNA } from '../style-dna/style-dna';
 import type { AiTextProvider } from '../providers';
 import type {
   ArtDirectionFamily,
@@ -228,6 +230,8 @@ export interface GenerateCreativeDirectionOptions {
   artDirectionFamily: ArtDirectionFamily;
   refinementOf?: { priorDirection: CreativeDirection; instruction: string };
   research?: CreativeResearch;
+  /** The member's explicitly selected style (FlowPost's style picker) — a mandatory constraint, distinct from `referenceStyle` (uploaded-image inspiration). */
+  selectedStyle?: StyleDNA;
   referenceStyle?: ReferenceStyleProfile;
   /** The member's hard requirements. Validated against the copy this stage authors — see spec §1.4. */
   intent?: CreativeIntentBrief;
@@ -247,6 +251,7 @@ export async function generateCreativeDirection({
   artDirectionFamily,
   refinementOf,
   research,
+  selectedStyle,
   referenceStyle,
   intent,
 }: GenerateCreativeDirectionOptions): Promise<CreativeDirectionOutcome> {
@@ -264,6 +269,7 @@ export async function generateCreativeDirection({
     artDirectionFamily,
     refinementOf,
     research,
+    selectedStyle,
     referenceStyle,
     intent,
   });
@@ -278,21 +284,27 @@ export async function generateCreativeDirection({
   let direction = normaliseDirection(payload, mode, artDirectionFamily);
 
   // ── One bounded repair, never more (latency budget: direction ≤ 2 calls) ──
-  // Two defects used to earn a retry each, so a bad day cost three sequential
-  // model calls. Both checks now run against the first attempt and share a
-  // single repair call naming every problem at once; whatever that still
-  // misses is fixed deterministically by repairMissingRequirements.
+  // Three defects used to earn a retry each, so a bad day cost three-plus
+  // sequential model calls. All checks now run against the first attempt and
+  // share a single repair call naming every problem at once; whatever that
+  // still misses is fixed deterministically by repairMissingRequirements.
+  // Style-DNA compliance (deterministic — palette saturation/brightness
+  // against the selected style, never an AI "looks like X" score) rides the
+  // same bounded retry rather than earning its own model call.
   let missing = missingFromCreative(direction, intent);
   const uncommunicative =
     !refinementOf && COMMUNICATION_CRITICAL_GOALS.includes(goal) && isUncommunicative(direction);
+  let styleIssues = styleDirectionViolations(direction, selectedStyle);
   let directionAttempts = 1;
-  const repairAttempted = missing.length > 0 || uncommunicative;
+  const repairAttempted = missing.length > 0 || uncommunicative || styleIssues.length > 0;
   let repaired = false;
 
   if (repairAttempted) {
     console.warn('[ai] creative direction needs repair', {
       missing,
       uncommunicative,
+      styleIssues,
+      selectedStyleId: selectedStyle?.id,
       refinement: Boolean(refinementOf),
     });
     const problems = [
@@ -306,6 +318,8 @@ export async function generateCreativeDirection({
             ? 'Keep the refinement instruction, and keep every other field as the prior direction had it — but the copy must still carry these.'
             : 'Keep the idea.'
         } Put each one into the words of the creative — headline, supportingLine, cta, marketingCreative.offerText, marketingCreative.brandMessage or marketingCreative.secondaryInfo — using the member's own phrasing. The image is wordless, so the copy is the only place these can live.`,
+      styleIssues.length > 0 &&
+        `it contradicted the SELECTED STYLE (mandatory, not inspiration): ${styleIssues.join(' ')}`,
     ].filter((problem): problem is string => typeof problem === 'string');
 
     directionAttempts += 1;
@@ -319,18 +333,27 @@ export async function generateCreativeDirection({
     })) as RawCreativeDirectionPayload;
     const retried = normaliseDirection(retryPayload, mode, artDirectionFamily);
     const retriedMissing = missingFromCreative(retried, intent);
+    const retriedStyleIssues = styleDirectionViolations(retried, selectedStyle);
     // Keep whichever attempt carries more of the requirements — a retry that
     // fixed the offer but lost the event is not an improvement. On a tie the
-    // retry wins: it was also asked to fix communicativeness.
-    if (retriedMissing.length <= missing.length) {
+    // retry wins: it was also asked to fix communicativeness and style
+    // compliance.
+    if (retriedMissing.length + retriedStyleIssues.length <= missing.length + styleIssues.length) {
       direction = retried;
       missing = retriedMissing;
+      styleIssues = retriedStyleIssues;
     }
     if (missing.length > 0) {
       direction = repairMissingRequirements(direction, missing);
       repaired = true;
       missing = missingFromCreative(direction, intent);
     }
+    // No deterministic self-repair for palette (Style DNA deliberately avoids
+    // fixed hex swatches — "vary within X, never copy mechanically" — so
+    // there is no single correct hex to type in, unlike a missing headline
+    // claim). A palette that still disagrees after the one retry ships as
+    // returned; `stillStyleNonCompliant` below makes that visible in logs
+    // rather than silently proceeding unnoticed.
   }
 
   const durationMs = Date.now() - startedAt;
@@ -348,11 +371,13 @@ export async function generateCreativeDirection({
     hasAssets,
     refinement: Boolean(refinementOf),
     requiredClaims: intent?.requiredClaims ?? [],
+    selectedStyleId: selectedStyle?.id,
     directionAttempts,
     repairAttempted,
     repairSucceeded,
     deterministicRepair: repaired,
     stillMissing: missing,
+    stillStyleNonCompliant: styleIssues,
   });
 
   return {

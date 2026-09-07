@@ -18,15 +18,36 @@ function SplashScreen() {
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+  const userId = session?.user?.id;
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(() => {
+    if (!userId) return null;
+    const cached = sessionStorage.getItem(`onboarding_complete_${userId}`);
+    return cached !== null ? cached === "true" : null;
+  });
 
   useEffect(() => {
-    setOnboardingComplete(null);
-    if (!session) return;
+    if (!userId) {
+      setOnboardingComplete(null);
+      return;
+    }
+
+    let active = true;
     creationProfileRepository.get()
-      .then((profile) => setOnboardingComplete(profile?.onboarding_complete ?? false))
-      .catch(() => setOnboardingComplete(false));
-  }, [session, location.pathname]);
+      .then((profile) => {
+        if (!active) return;
+        const complete = profile?.onboarding_complete ?? false;
+        setOnboardingComplete(complete);
+        sessionStorage.setItem(`onboarding_complete_${userId}`, String(complete));
+      })
+      .catch(() => {
+        if (!active) return;
+        setOnboardingComplete(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
   if (loading) return <SplashScreen />;
 

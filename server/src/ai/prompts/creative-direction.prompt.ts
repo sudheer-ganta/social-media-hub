@@ -1,6 +1,7 @@
 import { renderBrandSection } from '../brand/brand-profile';
 import { renderCreativeDnaSection } from '../brand/creative-dna';
 import { renderIntentSection } from '../generators/creative-intent.generator';
+import type { StyleDNA } from '../style-dna/style-dna';
 import type {
   ArtDirectionFamily,
   BrandProfile,
@@ -57,7 +58,7 @@ Rules you never break:
 - STRICT ADHERENCE TO MEMBER'S REQUESTED VISUALS: If the member's prompt describes specific visual scenes, subjects, settings, lighting, physical props, or compositional layouts (e.g. a traveler at an airport window looking at a sunrise over dream destinations, an airplane in the sky, specific suitcases or bags), you MUST incorporate these requested visual details, settings, and physical objects directly into your generated image prompt fields (subject, visualStory, environment, composition, background). Do not ignore, replace, or dilute the user's concrete visual instructions with generic stock scenes or override them completely with abstract brand voice concepts. Ground the brand's voice and personality inside this requested scene instead.
 - SERVICES FIDELITY: When outputting marketingCreative.secondaryInfo, you MUST select the items directly from the brand's defined services (e.g. from the "Services: ..." list in the brand profile below, if provided). Do not invent new services, categories, or list generic placeholder services that the brand does not provide. Keep their exact terms, but you may format them with proper title capitalization and spaces (e.g., convert "chartedflights" to "Charted Flights", "toursandpackages" to "Tours & Packages", and fix obvious spelling mistakes like "curises" to "Cruises").
 - VISUAL RELEVANCE TO CLIENT INDUSTRY/CATEGORY: The wordless image prompt (subject, visualStory, environment, composition) must be grounded in expected visual signifiers, symbols, motifs, or setups traditionally associated with the client's specific industry, service, or business category (e.g. fashion, beauty, medical, food, travel, SaaS). A standard consumer scrolling on social media must instantly recognize the connection between the image subject/theme and the client's industry or service. Describe concrete, physical props and expected details (such as suitcases, passports, tools, ingredients, or equipment) to represent the category, rather than just empty backgrounds or abstract landscapes.
-- Three inputs, three jobs, in priority order — never let one collapse into another: the brand's confirmed identity (logo, colours, typography preferences, tone, personality, audience) CONSTRAINS the creative; the member's request + stated requirements (product, offer, event, occasion, audience, message) DETERMINE what is being advertised; any reference style INFLUENCES how it feels. The same brand must be able to look dramatically different across campaigns, and different brands given the same request must produce dramatically different work.
+- Four inputs, four jobs, in priority order — never let one collapse into another: the brand's confirmed identity (logo, colours, typography preferences, tone, personality, audience) CONSTRAINS the creative; the member's request + stated requirements (product, offer, event, occasion, audience, message) DETERMINE what is being advertised; a "## SELECTED STYLE" section below, if given, is a MANDATORY product requirement the member explicitly chose — it GOVERNS the visual system (typography character, colour behaviour, imagery medium, composition, texture); any separate "## Reference style" section (uploaded images) only INFLUENCES how it feels, subordinate to both brand identity and the selected style. The same brand must be able to look dramatically different across campaigns, and different brands given the same request must produce dramatically different work — but a given selected style must always read as that style.
 - Every aesthetic choice — palette, typography character, texture, lighting, mood — must be traceable to THIS brand, THIS campaign/occasion/product, THESE references, or THIS concept. Never reach for a stock aesthetic (dark-purple event glow, blue-and-white "premium SaaS", warm amber "restaurant cosy", beige "luxury minimal", or any other genre default) unless this client's own brand, campaign or references specifically call for it.
 - Execute the given concept's mechanism specifically. If it's a visual metaphor, the metaphor must be visibly the subject. If it's a puzzle/interaction, the image must actually look like something to solve or respond to — not a product photo with a caption bolted on.
 - The product must participate in the idea, not just sit inside a pretty scene. If a product or reference image was attached, preserve its actual identity — describe it as "the attached product/subject", never invent a replacement.
@@ -76,7 +77,8 @@ Rules you never break:
 - marketingCreative is optional and additive — fill in only the fields this specific concept needs (brandMessage for why-this-brand positioning beyond the headline's hook, secondaryInfo for practical/location/service details, logoTreatment when the mark needs a specific role in this shot, requiredElements for anything else the concept requires). Every text field must have a job — HOOK, EXPLAIN, REINFORCE, INTERACT, IDENTIFY, or DIRECT. If a field has no job here, leave it out. When the ad requires multiple category, product, or service details in secondaryInfo, format them as short, distinct list items separated by a dot (e.g., ["Flights · Hotels · Packages"] or ["Booking · Curation · Custom"]) so they can be parsed as a structured multi-column footer.
 - layoutDirection is the graphic-design layer, separate from marketingCreative's copy content: it says WHERE things sit and in what order, not what they say. Before filling it in, ask "what must be present for this to read as a finished social ad, not a nice picture?" — then fill in only the layoutDirection fields that concept actually needs (a quiet visual-metaphor idea may only need safeAreas; a promo with a logo, CTA and location tag needs most of them). Let the concept decide layout, not habit: don't default to logo top-right / headline top-center / CTA bottom-center every time — vary it per idea, favour asymmetry and editorial composition over dead-centred templates. When styling typographyDirection, specify dynamic, high-quality typography pairings (such as elegant serif for headlines paired with structural sans-serif for secondary copy) rather than standard default styling. textHierarchy lists reading order with each entry's job, e.g. "HOOK — headline, upper third" then "DIRECT — cta, lower-right corner".
 - If a real brand logo image is attached as a reference (noted below), it is a fixed asset, not a suggestion: describe its placement and role via layoutDirection.logoPlacement / marketingCreative.logoTreatment, but never ask for it to be redrawn, redesigned, recoloured, or reinterpreted — and never invent a logo when none was attached.
-- If a "## Reference style" section is given below, it's the member's taste from uploaded images — inspiration for HOW this feels, never WHAT it copies. Priority when things conflict: confirmed brand identity (above) always wins over reference style. Borrow its composition/texture/lighting/mechanism tendencies into composition/lighting/background/productTreatment as fits this concept — but anything in its doNotCopy list must appear in negativeVisualConstraints instead, verbatim in spirit, so the image model is told not to reproduce it.
+- If a "## SELECTED STYLE" section is given below, the member explicitly picked that style from FlowPost's style picker — it is a product requirement, not a suggestion. You still invent the concept's subject, story, imagery specifics, copy and campaign idea freely, but every visual choice you make (mood, lighting, composition, palette) must stay recognisably WITHIN that style's system. Do not blend in another style's visual language, and do not fall back to a generic/neutral look that could belong to any style — the typography, texture and layout axes are enforced deterministically downstream regardless of what you write, but your OWN prose (lighting, mood, palette, composition) must still agree with them, not fight them.
+- If a "## Reference style" section is given below, it's the member's taste from uploaded images — inspiration for HOW this feels, never WHAT it copies. Priority when things conflict: confirmed brand identity, then the selected style (both above) always win over reference style. Borrow its composition/texture/lighting/mechanism tendencies into composition/lighting/background/productTreatment as fits this concept — but anything in its doNotCopy list must appear in negativeVisualConstraints instead, verbatim in spirit, so the image model is told not to reproduce it.
 - Execute the artDirectionFamily given below concretely — it decides medium, lighting quality, texture and composition logic, not just a label. Two concepts in the same family must still look different from each other in specifics; two concepts in DIFFERENT families must look like different media, not the same photoreal-gradient-render with a different subject swapped in.
 - Avoid dog-food-AI patterns unless the concept genuinely calls for them: centered product on a gradient, giant headline over a hero shot, floating 3D objects, glowing dashboards, generic stock-office scenes, a product on a pedestal for no reason, five feature cards, a CTA strip, perfect symmetry, blue/white "premium SaaS" color schemes, neon cyan accent lines, dark corporate rooms, floating glass UI panels, soft corporate three-point lighting. These are allowed only when the concept specifically requires them — never as the unthinking default.
 - Real advertising photography is art-directed, not AI-perfect: allow asymmetry, tactile texture, an unusual crop, imperfect framing where the idea calls for it. Do not make every shot perfectly centered and glossy by default.
@@ -233,7 +235,32 @@ function renderResearchSection(research?: CreativeResearch): string | null {
   return `## Creative research (inspiration only — do not reproduce any of it, use it as technique)\n${lines.join('\n')}`;
 }
 
-/** "Show FlowPost what you like" — inspiration only, ranks below confirmed brand identity, above research. */
+/**
+ * The member's EXPLICITLY SELECTED style — a mandatory product requirement,
+ * never inspiration. Distinct from `renderReferenceStyleSection` below,
+ * which is uploaded-image taste and stays optional/advisory. The axes this
+ * stage cannot itself enforce (typography, texture, layout, renderer rules)
+ * are enforced deterministically further down the pipeline regardless of
+ * what this stage writes — this section exists so the model's OWN prose
+ * (mood, lighting, composition, palette) agrees with those axes instead of
+ * contradicting them.
+ */
+function renderSelectedStyleSection(style?: StyleDNA): string | null {
+  if (!style) return null;
+  const lines = [
+    `- Visual character: ${style.visualCharacter.join(', ')}. Mood: ${style.mood.join(', ')}.`,
+    `- Typography MUST read as: ${style.typography.displayPersonality.join(', ')} (${style.typography.preferredCategories.join('/')} only) — ${style.typography.hierarchy} hierarchy. ${style.typography.accentAllowed ? 'A handwritten/decorative accent is welcome for eyebrow or annotation text.' : 'No decorative or handwritten accent lettering anywhere.'}`,
+    `- Colour MUST behave like: ${style.color.relationships.join('; ')}; ${style.color.contrast} contrast; ${style.color.saturation} saturation; ${style.color.temperature} temperature. Draw palette hex values in the spirit of: ${style.color.paletteFamilies.map((family) => family.join('/')).join(' or ')} — vary within it, never copy a fixed swatch mechanically.`,
+    `- Lighting character: ${style.lighting.direction.join(', ')}; ${style.lighting.quality.join('/')}; ${style.lighting.contrast} contrast.`,
+    `- Imagery MUST be: ${style.imagery.medium.join('/')} (${style.imagery.realism} realism) — never a medium outside this list.`,
+    `- Composition tendency: ${style.composition.join('; ')}; ${style.layout.symmetry} symmetry; ${style.layout.whitespace} whitespace; ${style.layout.density} density.`,
+    `- Texture/graphic language: ${style.texture.join('/')}; ${style.graphicElements.join(', ')}.`,
+    `- Creative imperfection allowed: ${style.imperfection.allowed.join(', ') || 'none'}.`,
+  ];
+  return `## SELECTED STYLE — "${style.name}" (MANDATORY — the member explicitly picked this from FlowPost's style picker; this is a product requirement, not inspiration)\nYou decide this concept's subject, story, imagery specifics, copy and campaign idea freely — but every visual choice below must stay recognisably WITHIN this style's system, never a generic look that could belong to any style, and never another style's visual language.\n${lines.join('\n')}`;
+}
+
+/** "Show FlowPost what you like" — inspiration only, ranks below confirmed brand identity and the selected style, above research. */
 function renderReferenceStyleSection(style?: ReferenceStyleProfile): string | null {
   if (!style || !style.analysed) return null;
   const lines = [
@@ -258,7 +285,7 @@ function renderReferenceStyleSection(style?: ReferenceStyleProfile): string | nu
     `- Influence: ${style.influence}`,
   ].filter((line): line is string => typeof line === 'string' && line.length > 0);
   if (lines.length === 0) return null;
-  return `## Reference style (inspiration only, from ${style.referenceCount} uploaded image(s) — visual language, never content to reproduce; confirmed brand identity above always wins if these conflict)\n${lines.join('\n')}`;
+  return `## Reference style (inspiration only, from ${style.referenceCount} uploaded image(s) — visual language, never content to reproduce; confirmed brand identity and the selected style above always win if these conflict)\n${lines.join('\n')}`;
 }
 
 /** The chosen advertising idea, rendered as the brief this stage must execute — not invent. */
@@ -334,12 +361,15 @@ export function buildCreativeDirectionPrompt(context: {
   /** Set for a refinement — the prior direction in full, plus the member's follow-up. */
   refinementOf?: { priorDirection: CreativeDirection; instruction: string };
   research?: CreativeResearch;
+  /** The member's explicitly selected style (FlowPost's style picker) — a mandatory constraint, distinct from `referenceStyle` (uploaded-image inspiration). */
+  selectedStyle?: StyleDNA;
   referenceStyle?: ReferenceStyleProfile;
   /** The member's hard requirements — carried into a refinement too, so an edit never quietly drops the offer. */
   intent?: CreativeIntentBrief;
 }): BuiltCreativeDirectionPrompt {
   const brandSection = renderBrandSection(context.brand);
   const dnaSection = renderCreativeDnaSection(context.creativeDna);
+  const selectedStyleSection = renderSelectedStyleSection(context.selectedStyle);
   const referenceStyleSection = context.refinementOf ? null : renderReferenceStyleSection(context.referenceStyle);
   const researchSection = context.refinementOf ? null : renderResearchSection(context.research);
   const priorDirectionSection = context.refinementOf
@@ -376,6 +406,7 @@ export function buildCreativeDirectionPrompt(context: {
 
     brandSection,
     dnaSection,
+    selectedStyleSection,
     referenceStyleSection,
     researchSection,
 

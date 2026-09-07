@@ -190,14 +190,17 @@ export function resolveStyleDNA(input: { styleId?: string; prompt: string; varia
     .sort((a, b) => b.score - a.score)[0];
   const promptStyle = matched && matched.score > 0 ? matched.style : undefined;
   const historical = getStyleDNA(input.preferredStyleId);
-  // A style named in the current brief is part of the current request and has
-  // priority over both the picker and history. The picker still wins whenever
-  // the brief does not itself name a style.
-  const style = promptStyle ?? explicit ?? historical;
+  // An explicit picker selection is a deliberate product requirement — the
+  // member chose this style on purpose, so it must never be silently swapped
+  // out because the free-text brief happens to contain another style's name
+  // or alias (e.g. picking Y2K but writing "make it feel minimal somewhere").
+  // Only when nothing was explicitly picked does prompt text get to name the
+  // style, with history as the last, weakest signal.
+  const style = explicit ?? promptStyle ?? historical;
   if (!style) return undefined;
   const seed = `${input.variationKey ?? ''}|${input.prompt}|${style.id}`;
   const variant = [...seed].reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 7);
-  return { style, source: promptStyle ? 'prompt' : explicit ? 'explicit' : 'history', variant };
+  return { style, source: explicit ? 'explicit' : promptStyle ? 'prompt' : 'history', variant };
 }
 
 const choose = <T>(values: T[], variant: number, offset: number): T => values[(variant + offset) % values.length];

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { selectTypography } from './font-selector';
+import { getFontDefinition } from './font-catalog';
+import { getStyleDNA } from '../style-dna/style-dna';
 import type { CreativeDirection, ReferenceDesignRecipe, ResolvedCreativeDna } from '../types';
 
 function dna(overrides?: Partial<ResolvedCreativeDna>): ResolvedCreativeDna {
@@ -170,5 +172,61 @@ describe('selectTypography', () => {
     });
     expect(result.headlineWeight).toBeGreaterThan(0);
     expect(result.bodyWeight).toBeGreaterThan(0);
+  });
+
+  // ── Style DNA category is a hard constraint, not a scoring bonus (Phase 1) ──
+
+  it('Minimal Doodles never selects a serif body font, even though the headline font pairs with one', () => {
+    const style = getStyleDNA('minimal-doodles')!;
+    const result = selectTypography({
+      direction: direction({ concept: 'A friendly local bakery promo', mood: 'warm, friendly' }),
+      creativeDna: dna(),
+      recipe: recipe({ typographyFamily: 'sans-modern' }),
+      styleDna: style,
+    });
+    // Poppins (a plausible headline pick here) lists Lora in pairsWith, and
+    // Lora is a serif — exactly the bug this constraint closes.
+    expect(result.bodyFont).not.toBe('Lora');
+    expect(getFontDefinition(result.bodyFont)?.category).not.toBe('serif');
+    expect(['sans-serif', 'handwritten']).toContain(getFontDefinition(result.bodyFont)?.category);
+  });
+
+  it('two styles with incompatible typography categories resolve to different, style-conformant font categories for the identical brief', () => {
+    const briefDirection = direction({ concept: 'A festival product launch', mood: 'expressive, bold' });
+    const desiMaximalism = getStyleDNA('desi-maximalism')!; // typography categories: serif, display — no sans-serif
+    const vibrantBlocking = getStyleDNA('vibrant-color-blocking')!; // typography categories: sans-serif only
+
+    const a = selectTypography({ direction: briefDirection, creativeDna: dna(), recipe: recipe(), styleDna: desiMaximalism });
+    const b = selectTypography({ direction: briefDirection, creativeDna: dna(), recipe: recipe(), styleDna: vibrantBlocking });
+
+    expect(getFontDefinition(a.headlineFont)?.category).not.toBe('sans-serif');
+    expect(getFontDefinition(a.bodyFont)?.category).not.toBe('sans-serif');
+    expect(getFontDefinition(b.headlineFont)?.category).toBe('sans-serif');
+    expect(getFontDefinition(b.bodyFont)?.category).toBe('sans-serif');
+  });
+
+  it('honours accentAllowed:false even for a style whose category constraints would otherwise permit a decorative accent font', () => {
+    const neoBrutalism = getStyleDNA('neo-brutalism')!; // accentAllowed: false
+    const result = selectTypography({
+      direction: direction({ concept: 'A loud streetwear drop', mood: 'bold, loud, industrial' }),
+      creativeDna: dna(),
+      recipe: recipe({ typographyFamily: 'condensed-display' }),
+      styleDna: neoBrutalism,
+    });
+    expect(result.accentFont).toBeUndefined();
+  });
+
+  it('falls back to the full catalog only when the style constraint leaves zero candidates for the required script', () => {
+    // Desi Maximalism excludes sans-serif; the only Devanagari-capable family
+    // in serif/display is Noto Serif Devanagari, so this must not go empty.
+    const style = getStyleDNA('desi-maximalism')!;
+    const result = selectTypography({
+      direction: direction({ headline: 'नमस्ते दुनिया', supportingLine: 'ताज़ा और स्वादिष्ट' }),
+      creativeDna: dna(),
+      recipe: recipe(),
+      styleDna: style,
+    });
+    expect(result.headlineFont).toMatch(/Devanagari|Noto/);
+    expect(result.bodyFont).toMatch(/Devanagari|Noto/);
   });
 });

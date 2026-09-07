@@ -20,12 +20,32 @@ export const brandsRepository = {
   },
 
   async insert(input: BrandInsert): Promise<Brand> {
-    const { data, error } = await getSupabase()
+    const supabase = getSupabase();
+    const { data, error } = await supabase
       .from(TABLE)
       .insert(input)
       .select()
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === "23505" || error.message?.includes("brands_created_by_name_key")) {
+        const { data: existing, error: findError } = await supabase
+          .from(TABLE)
+          .select("*")
+          .eq("name", input.name)
+          .single();
+        if (!findError && existing) {
+          const { data: updated, error: updateError } = await supabase
+            .from(TABLE)
+            .update(input)
+            .eq("id", existing.id)
+            .select()
+            .single();
+          if (!updateError && updated) return updated as Brand;
+          return existing as Brand;
+        }
+      }
+      throw new Error(error.message);
+    }
     return data as Brand;
   },
 

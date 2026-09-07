@@ -579,7 +579,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
               fontSize: 0,
               fontFamily: fonts.body,
               fill: palette.accent,
-              textFill: palette.accent,
+              textFill: palette.paper,
             });
             
             const textX = currentX + bulletSize + gap * 0.35;

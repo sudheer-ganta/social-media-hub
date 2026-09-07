@@ -1,3 +1,4 @@
+import { styleDnaToRecipe, type StyleDNA } from '../style-dna/style-dna';
 import type {
   CreativeDirection,
   RecipeBorderStyle,
@@ -162,13 +163,42 @@ export function deriveFallbackRecipe(
   };
 }
 
-/** The one entry the renderer calls: the analysed recipe when there is one, the derived fallback otherwise. */
+/**
+ * Where this recipe's structural choices (layout, texture, footer, border,
+ * shape, image treatment) actually came from — logged by the renderer so a
+ * generic-fallback render is never invisible: `'style-dna'` when the member
+ * explicitly selected a style, `'reference-analysis'` when it came from
+ * vision-analysed uploaded references, `'generic-fallback'` only when
+ * neither applies (auto mode with no style resolved and no references).
+ */
+export type RecipeSource = 'style-dna' | 'reference-analysis' | 'generic-fallback';
+
+export interface ResolvedDesignRecipe {
+  recipe: ReferenceDesignRecipe;
+  source: RecipeSource;
+}
+
+/**
+ * The one entry the renderer calls. An explicitly selected style is now the
+ * DIRECT, authoritative source of the structural recipe — computed straight
+ * from Style DNA via `styleDnaToRecipe`, never mediated through the
+ * `ReferenceStyleProfile.analysed` contract that uploaded-reference analysis
+ * also happens to use. That indirection previously meant a selected style's
+ * structure and a vision-analysed reference's structure were
+ * indistinguishable to this function; now a selected style always wins,
+ * deterministically, and callers can see (via `source`) exactly which path
+ * produced a given recipe instead of inferring it from a boolean.
+ */
 export function resolveDesignRecipe(
   direction: CreativeDirection,
   creativeDna: ResolvedCreativeDna,
-  profile?: ReferenceStyleProfile,
-): ReferenceDesignRecipe {
-  return profile?.analysed && profile.designRecipe
-    ? profile.designRecipe
-    : deriveFallbackRecipe(direction, creativeDna, profile);
+  options: { styleDna?: StyleDNA; styleDnaVariant?: number; referenceStyle?: ReferenceStyleProfile } = {},
+): ResolvedDesignRecipe {
+  if (options.styleDna) {
+    return { recipe: styleDnaToRecipe(options.styleDna, options.styleDnaVariant ?? 0), source: 'style-dna' };
+  }
+  if (options.referenceStyle?.analysed && options.referenceStyle.designRecipe) {
+    return { recipe: options.referenceStyle.designRecipe, source: 'reference-analysis' };
+  }
+  return { recipe: deriveFallbackRecipe(direction, creativeDna, options.referenceStyle), source: 'generic-fallback' };
 }

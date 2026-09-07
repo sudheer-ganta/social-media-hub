@@ -202,12 +202,34 @@ function scoreFont(font: FontDefinition, ctx: ScoreContext): number {
   return score;
 }
 
+/**
+ * A style's `preferredCategories` is authoritative — the member's selected
+ * style (or, absent one, the concept's ArtDirectionFamily profile) must not
+ * be silently reinterpreted by typography. This filters candidates BEFORE
+ * scoring, so nothing downstream (pairing, brand-family boost, personality
+ * match) can ever resurrect a category the style excludes. Previously this
+ * was only a +2 scoring bonus, which a strong pairing/personality match
+ * could outweigh — e.g. a sans-only style still ending up with a serif body
+ * font because it was in the headline font's `pairsWith` list.
+ */
+function categoryAllowed(font: FontDefinition, ctx: ScoreContext): boolean {
+  return ctx.styleProfile.preferredCategories.includes(font.category);
+}
+
 function rankCandidates(role: FontRole, ctx: ScoreContext): FontDefinition[] {
-  return [...FONT_CATALOG]
-    .map((font) => ({ font, score: scoreFont(font, ctx) }))
-    .filter((entry) => entry.score > -Infinity)
-    .sort((a, b) => b.score - a.score)
-    .map((entry) => entry.font);
+  const rank = (fonts: FontDefinition[]) =>
+    fonts
+      .map((font) => ({ font, score: scoreFont(font, ctx) }))
+      .filter((entry) => entry.score > -Infinity)
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.font);
+
+  const constrained = rank(FONT_CATALOG.filter((font) => categoryAllowed(font, ctx)));
+  // Only widen back to the full catalog when the hard constraint leaves
+  // nothing at all for this role (e.g. a required script has no family in
+  // the allowed categories) — never to let a well-paired or well-scored font
+  // from an excluded category win anyway.
+  return constrained.length > 0 ? constrained : rank(FONT_CATALOG);
 }
 
 // ─── Geometry helpers (feeds render/layout-plan.ts's existing char-count wrapper) ──

@@ -8,13 +8,25 @@ describe('Style DNA library', () => {
     for (const style of STYLE_DNA_LIBRARY) expect(validateStyleDNA(style), style.id).toEqual([]);
   });
 
-  it('resolves the current prompt before an explicit picker selection', () => {
+  it('an explicit picker selection always wins over a style named in the prompt text', () => {
     const resolved = resolveStyleDNA({ styleId: 'editorial', prompt: 'make this a loud y2k poster' });
-    expect(resolved?.style.id).toBe('y2k');
-    expect(resolved?.source).toBe('prompt');
+    expect(resolved?.style.id).toBe('editorial');
+    expect(resolved?.source).toBe('explicit');
   });
 
-  it('lets the current prompt override historical preference', () => {
+  it('explicit Y2K survives a prompt that mentions "minimal"', () => {
+    const resolved = resolveStyleDNA({ styleId: 'y2k', prompt: 'keep the copy minimal and to the point' });
+    expect(resolved?.style.id).toBe('y2k');
+    expect(resolved?.source).toBe('explicit');
+  });
+
+  it('explicit Luxury survives a prompt that names another style', () => {
+    const resolved = resolveStyleDNA({ styleId: 'luxury', prompt: 'give it a neo brutalism energy in the copy tone' });
+    expect(resolved?.style.id).toBe('luxury');
+    expect(resolved?.source).toBe('explicit');
+  });
+
+  it('the current prompt still overrides historical preference when nothing was explicitly picked', () => {
     expect(resolveStyleDNA({ prompt: 'Create a Y2K party poster', preferredStyleId: 'minimalist' })?.style.id).toBe('y2k');
     expect(resolveStyleDNA({ prompt: 'Create a coffee promotion', preferredStyleId: 'minimalist' })?.source).toBe('history');
   });

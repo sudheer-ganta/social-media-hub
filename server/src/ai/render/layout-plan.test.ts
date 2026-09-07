@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { buildLayoutPlan, resolvePalette, validateLayoutPlan, type ContentInput, type LayoutPlanInput } from './layout-plan';
 import { deriveFallbackRecipe, normaliseDesignRecipe, resolveDesignRecipe } from './design-recipe';
 import { BASE_DIRECTION, BASE_RECIPE, EMPTY_DNA, profileWithRecipe } from './creative-renderer.test';
+import { getStyleDNA } from '../style-dna/style-dna';
 import type { ReferenceDesignRecipe } from '../types';
 
 const CONTENT: ContentInput = {
@@ -164,10 +165,26 @@ describe('deriveFallbackRecipe / resolveDesignRecipe', () => {
     expect(recipe.texture).toBe('paper-grain');
   });
 
-  it('an analysed profile with a recipe wins over the derived fallback', () => {
+  it('an analysed reference profile with a recipe wins over the derived fallback', () => {
     const profile = profileWithRecipe({ footerStyle: 'hairline' });
-    const recipe = resolveDesignRecipe(BASE_DIRECTION, EMPTY_DNA, profile);
+    const { recipe, source } = resolveDesignRecipe(BASE_DIRECTION, EMPTY_DNA, { referenceStyle: profile });
     expect(recipe.footerStyle).toBe('hairline');
+    expect(source).toBe('reference-analysis');
+  });
+
+  it('an explicitly selected style wins over an analysed reference profile — never silently overridden by upload analysis', () => {
+    const profile = profileWithRecipe({ footerStyle: 'hairline', texture: 'none' });
+    const style = getStyleDNA('collage')!; // texture: paper-grain/halftone, footer: torn-paper/none
+    const { recipe, source } = resolveDesignRecipe(BASE_DIRECTION, EMPTY_DNA, { styleDna: style, referenceStyle: profile });
+    expect(source).toBe('style-dna');
+    expect(recipe.footerStyle).not.toBe('hairline');
+    expect(['torn-paper', 'none']).toContain(recipe.footerStyle);
+    expect(['paper-grain', 'halftone']).toContain(recipe.texture);
+  });
+
+  it('with neither a selected style nor an analysed reference, the recipe source is reported as generic-fallback', () => {
+    const { source } = resolveDesignRecipe(BASE_DIRECTION, EMPTY_DNA, {});
+    expect(source).toBe('generic-fallback');
   });
 
   it('TYPOGRAPHY_LED without references centres the layout', () => {

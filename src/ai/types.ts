@@ -170,7 +170,7 @@ export interface BrandVoiceProfile {
 export interface BrandVoiceProfileInsert {
   name: string;
   voice: BrandVoice;
-  brand_id: string;
+  brand_id?: string | null;
   is_default?: boolean;
 }
 
@@ -178,7 +178,7 @@ export interface BrandVoiceProfileUpdate {
   name?: string;
   voice?: BrandVoice;
   is_default?: boolean;
-  brand_id?: string;
+  brand_id?: string | null;
 }
 
 // ─── Competitor context ───────────────────────────────────────────────────────
