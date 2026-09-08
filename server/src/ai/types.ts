@@ -1164,23 +1164,243 @@ export interface LayoutDirection {
   safeAreas?: string;
 }
 
+// ─── Creative strategy — the idea layer, ahead of any graphic design ─────────
+//
+// The architectural rule this layer exists to enforce: EVENT / TOPIC is NOT a
+// visual template, and BRAND is NOT a visual template. A request supplies
+// context; the creative mechanism is *chosen* against that context, never
+// derived from it by lookup. Nothing in this file names an event, a festival,
+// a holiday or an industry — if it did, the next unnamed one would collapse
+// back into whichever visual grammar happened to be hardcoded.
+
+/**
+ * What the domain (a festival, a fandom moment, a product category, a season,
+ * a milestone) actually MEANS — never what it should look like.
+ *
+ * Informative only. A symbol listed here is available to a concept that wants
+ * it; it is never an instruction to draw it, and `visualClichesToAvoid` is
+ * the field that carries the opposite pressure.
+ */
+export interface DomainContext {
+  /** The occasion/topic in the member's own terms, or '' when the request has none. */
+  occasion: string;
+  /** What the occasion means to the people it belongs to. */
+  meaning: string;
+  relevantSymbols: string[];
+  emotionalAssociations: string[];
+  /** Things a creative must not get wrong about this domain. */
+  sensitivities: string[];
+  /** The exhausted, expected visual moves for this domain — the ones to design AWAY from. */
+  visualClichesToAvoid: string[];
+}
+
+/**
+ * Which copy roles this creative actually needs. Absent roles are absent —
+ * copy is never synthesised to fill visual space (see collectCampaignCopy).
+ */
+export interface CopyPlan {
+  /** Roles the idea genuinely requires, in reading order. An idea may need exactly one. */
+  requiredRoles: CopyRole[];
+  /** Hard ceiling on how many text elements may appear. 1 is a legitimate answer. */
+  maxTextElements: number;
+  /** Why this is the minimum copy that communicates the concept. */
+  rationale: string;
+}
+
+export type CopyRole = 'HEADLINE' | 'OFFER' | 'EVENT_BADGE' | 'SUPPORT' | 'BRAND_MESSAGE' | 'CTA' | 'DETAIL';
+
+/**
+ * The creative idea, decided BEFORE any graphic design and long before any
+ * geometry. `creativeMechanism` is deliberately a free string, not an enum:
+ * the model must be able to invent a mechanism this codebase has never heard
+ * of. The listed examples in the prompt are examples, never a menu.
+ */
+export interface CreativeStrategy {
+  /** The one thing this creative communicates, in a sentence. */
+  communicationIdea: string;
+  /** HOW it communicates — the device. Free-form by design; never constrained to a fixed vocabulary. */
+  creativeMechanism: string;
+  /** The feeling the viewer should be left with. */
+  emotionalDirection: string;
+  visualMetaphor?: string;
+  narrativeDevice?: string;
+  /** The tension in the audience's life this idea speaks to. */
+  audienceTension?: string;
+  /** Why this idea belongs to THIS brand rather than any brand in the category. */
+  brandConnection: string;
+  /** The specific visual opportunity the mechanism opens up. */
+  visualOpportunity: string;
+  /** Named clichés this creative is forbidden from using — merged with the domain's own. */
+  prohibitedVisualCliches: string[];
+  /** Context that INFORMS the mechanism. Never dictates it. */
+  domainContext?: DomainContext;
+  /** What makes this different from a conventional social-media template (art-director §13 Q7). */
+  distinctiveness?: string;
+}
+
+export interface RawCreativeStrategyPayload {
+  communicationIdea?: unknown;
+  creativeMechanism?: unknown;
+  emotionalDirection?: unknown;
+  visualMetaphor?: unknown;
+  narrativeDevice?: unknown;
+  audienceTension?: unknown;
+  brandConnection?: unknown;
+  visualOpportunity?: unknown;
+  prohibitedVisualCliches?: unknown;
+  distinctiveness?: unknown;
+  domainContext?: {
+    occasion?: unknown;
+    meaning?: unknown;
+    relevantSymbols?: unknown;
+    emotionalAssociations?: unknown;
+    sensitivities?: unknown;
+    visualClichesToAvoid?: unknown;
+  };
+}
+
+export interface CreativeStrategyOutcome {
+  strategy: CreativeStrategy;
+  meta: { provider: string; model: string; durationMs: number };
+}
+
+export type CompositionFamily =
+  | 'typographic-poster'
+  | 'asymmetric-editorial'
+  | 'tactile-collage'
+  | 'raw-brutalist'
+  | 'minimal-field'
+  | 'split-contrast'
+  | 'diagonal-kinetic'
+  | 'editorial-spine';
+
+export type SpatialAnchor =
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'left-edge'
+  | 'right-edge'
+  | 'top-edge'
+  | 'bottom-edge'
+  | 'center-offset';
+
+export type MovementAxis =
+  | 'vertical-down'
+  | 'diagonal-down-right'
+  | 'diagonal-up-right'
+  | 'horizontal-stagger'
+  | 'radial-outward'
+  | 'static-anchor';
+
+export type DominantRegion =
+  | 'upper-two-thirds'
+  | 'lower-two-thirds'
+  | 'left-major'
+  | 'right-major'
+  | 'full-canvas-field'
+  | 'central-band-offset';
+
+export type NegativeSpaceRegion =
+  | 'upper-right'
+  | 'lower-left'
+  | 'center-field'
+  | 'lower-right'
+  | 'left-gutter'
+  | 'right-gutter'
+  | 'top-gutter'
+  | 'bottom-gutter';
+
+export type LogoPlacementStrategy =
+  | 'negative-space-anchor'
+  | 'opposing-corner'
+  | 'margin-aligned'
+  | 'counter-balance';
+
+export type SemanticNodeRole =
+  | 'primary-hook'
+  | 'secondary-hook'
+  | 'supporting-note'
+  | 'hero-visual'
+  | 'supporting-visual'
+  | 'brand-mark'
+  | 'texture'
+  | 'graphic-device';
+
 /**
  * A true graphic-design concept: "What is the visual idea?"
- * Precedes and drives all composition geometry, scale contrast, and omissions.
+ *
+ * The blueprint answers an IDEA, not a layout. `compositionFamily` and the
+ * spatial-grammar fields below it are the *last* things decided and the least
+ * load-bearing: two concepts sharing a family must still look nothing alike,
+ * which is only possible because the behaviour fields (creativeMechanism,
+ * typeBehavior, imageBehavior, graphicBehavior, spatialRelationship,
+ * materialBehavior, hierarchyStrategy, dominantVisualObject) carry the real
+ * design decision. Positional fields are OPTIONAL and stay undefined when the
+ * art director did not decide them — nothing in this codebase may substitute a
+ * default position, because every default position is a template.
  */
 export interface GraphicDesignConcept {
   conceptName: string;
   visualIdea: string;
   pointOfView?: string;
   emotionalTone?: string;
-  hero: 'typography' | 'image' | 'white-space' | 'graphic-object' | 'texture';
-  imageRole: 'small-tactile-object' | 'full-bleed-canvas' | 'offset-crop' | 'floating-fragment' | 'subordinate-texture' | 'edge-bleed';
-  typographyRole?: 'monumental-hero' | 'editorial-spine' | 'word-stack' | 'restrained-footnote' | 'kinetic-overlap';
-  compositionStrategy?: 'asymmetric-tension' | 'negative-space-field' | 'physical-collage' | 'typographic-sculpture' | 'boundary-crossover' | 'split-contrast';
-  scaleStrategy?: 'extreme-contrast' | 'dominant-hero' | 'editorial-restraint' | 'layered-hierarchy';
-  imperfection?: string;
+  // ─── The creative idea this blueprint executes (authoritative) ────────────
+  /** Carried down from CreativeStrategy — the device this design expresses. */
+  creativeMechanism?: string;
+  /** How type BEHAVES here (as object, as texture, as caption, absent) — not where it sits. */
+  typeBehavior?: string;
+  /** How imagery BEHAVES here (dominant object, fragment, ground, absent) — not where it sits. */
+  imageBehavior?: string;
+  /** How graphic elements BEHAVE (structure, interruption, none). */
+  graphicBehavior?: string;
+  /** The relationship between the elements — crossing, containing, colliding, isolating. */
+  spatialRelationship?: string;
+  /** Material/surface behaviour — print, screen, tactile, layered. */
+  materialBehavior?: string;
+  /** What leads, what follows, and by how much — expressed as an idea, not a font size. */
+  hierarchyStrategy?: string;
+  /** The single object a viewer would name if asked what this creative shows. */
+  dominantVisualObject?: string;
+  /** The minimum copy this idea needs. Optional roles stay OUT. */
+  copyPlan?: CopyPlan;
+  /** The strategy this blueprint executes, carried for the critic and the redesign pass. */
+  strategy?: CreativeStrategy;
+  hero: 'typography' | 'image' | 'graphic-element' | 'whitespace' | 'texture';
+  heroPlacement?: string;
+  imageRole:
+    | 'hero'
+    | 'small-tactile-object'
+    | 'full-bleed'
+    | 'offset-crop'
+    | 'floating-fragment'
+    | 'subordinate-texture'
+    | 'omitted';
+  imageTreatment?: string;
+  firstRead: string;
+  secondRead?: string;
+  attentionHierarchy?: string[];
+  typographyStrategy?: string;
+  typographyScaleContrast?: string;
+  compositionStrategy?: string;
+  logoSanctuary?: string;
+  visualTension?: string;
+  intentionalImperfection?: string[];
   graphicDevices?: string[];
-  elementsToOmit?: Array<'cta' | 'divider' | 'footer' | 'description' | 'secondaryInfo' | 'badge' | 'headline' | 'support' | 'logo'>;
+  elementsToOmit?: string[];
+  visualMetaphor?: string;
+  // Structured composition grammar:
+  compositionFamily?: CompositionFamily | string;
+  anchor?: SpatialAnchor | string;
+  movementAxis?: MovementAxis | string;
+  dominantRegion?: DominantRegion | string;
+  headlinePlacement?: string;
+  visualPlacement?: string;
+  overlapRelationships?: string[];
+  negativeSpaceRegion?: NegativeSpaceRegion | string;
+  logoPlacementStrategy?: LogoPlacementStrategy | string;
+  allowedBleed?: string[];
+  intentionalRotation?: Array<{ target: string; degrees: number }>;
 }
 
 export interface CompositionIntent {
@@ -1487,11 +1707,22 @@ export interface RawCreativeIntentPayload {
  * real logo, the brand palette and the reference design recipe, so a "make it
  * darker" came back as a differently-designed creative. See spec §4.1.
  */
+export type {
+  AssetBrief,
+  BrandVoiceBrief,
+  CreativeBrief,
+  CreativeStyleBrief,
+} from './brand/creative-brief';
+
 export interface CreativeRenderContext {
+  /** Original style-reference URLs, separate from exact product assets. */
+  referenceImageUrls?: string[];
   brand: BrandProfile;
   creativeDna: ResolvedCreativeDna;
   referenceStyle?: ReferenceStyleProfile;
   intent?: CreativeIntentBrief;
+  canonicalBrief?: import('./brand/creative-brief').CreativeBrief;
+  graphicConcept?: import('./brand/creative-brief').GraphicDesignConcept;
   goal: MarketingGoal;
   funnelStage: FunnelStage;
   platforms: string[];

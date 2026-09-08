@@ -20,9 +20,13 @@ const pool = new Pool({
   connectionString: env.DATABASE_URL,
   keepAlive: true,
   keepAliveInitialDelayMillis: 5000,
-  max: 20,
-  idleTimeoutMillis: 120000,
-  connectionTimeoutMillis: 30000,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+
+pool.on('error', (err) => {
+  console.warn('[prisma pg pool error]', err);
 });
 
 const adapter = new PrismaPg(pool);

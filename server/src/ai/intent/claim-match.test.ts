@@ -111,6 +111,17 @@ const intent = (claims: string[]): CreativeIntentBrief =>
   ({ extracted: true, requiredClaims: claims }) as CreativeIntentBrief;
 
 describe('renderedCopyText', () => {
+  it('does not count hidden copy or planning metadata as visible requirements', () => {
+    expect(missingFromCreative(direction({ copyTreatment: 'none', headline: '50% off',
+      marketingCreative: { requiredElements: ['BTS comeback'] } }), intent(['50% off', 'BTS comeback'])))
+      .toEqual(['50% off', 'BTS comeback']);
+  });
+
+  it('retains distinct non-Latin campaign lines', () => {
+    const text = renderedCopyText(direction({ headline: '서울 파티', marketingCreative: { offerText: '여행 할인' } }));
+    expect(text).toContain('서울 파티');
+    expect(text).toContain('여행 할인');
+  });
   it('reads only the words that will be typeset, never the picture description', () => {
     const text = renderedCopyText(
       direction({ headline: 'BTS is back', cta: 'Book a table', subject: 'a Korean dish' }),

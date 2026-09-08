@@ -24,6 +24,7 @@ import { creativeIdempotencyService, IdempotencyInProgressError } from '../servi
  * live in the service, the vendor call lives under `ai/providers`, and this
  * file only turns a request into a call and a result into JSON.
  */
+
 const router = Router();
 
 router.get('/styles', requireAuth, (_req, res) => {
@@ -42,33 +43,39 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
     try {
       await fn(req, res);
       console.info('[creative] request completed', { requestId, durationMs: Date.now() - startedAt });
-    } catch (error) {
-      if (error instanceof CreativeError || error instanceof AiProviderError || error instanceof CloudinaryUploadError) {
-        const status = 'status' in error ? error.status : 502;
-        // The member sees the safe message; the log keeps the vendor detail —
-        // previously this branch logged nothing, so a mapped 502 left no
-        // server-side trace of which stage actually failed.
+    } catch (error: any) {
+      const isKnown = error instanceof CreativeError
+        || error instanceof AiProviderError
+        || error instanceof CloudinaryUploadError
+        || error?.name === 'CreativeError'
+        || error?.name === 'AiProviderError'
+        || error?.name === 'CloudinaryUploadError'
+        || (typeof error?.status === 'number' && error?.message);
+
+      if (isKnown) {
+        const status = typeof error?.status === 'number' ? error.status : 502;
         console.error('[creative] request failed', {
           requestId,
           durationMs: Date.now() - startedAt,
-          errorType: error.name,
+          errorType: error?.name ?? 'Error',
           status,
-          message: error.message,
-          detail: 'detail' in error ? error.detail : undefined,
+          message: error?.message,
+          detail: error?.detail,
         });
-        res.status(status).json({ error: error.message });
+        res.status(status).json({ error: error?.message ?? 'Request failed' });
         return;
       }
       if (error instanceof IdempotencyInProgressError) { res.status(409).json({ error: error.message }); return; }
 
-      console.error('[creative] request failed', {
+      console.error('[creative] request failed (unexpected)', {
         requestId,
         durationMs: Date.now() - startedAt,
         method: req.method,
         path: req.path,
         error: error instanceof Error ? `${error.name}: ${error.message}` : error,
+        stack: error instanceof Error ? error.stack : undefined,
       });
-      res.status(500).json({ error: 'Something went wrong. Please try again.' });
+      res.status(500).json({ error: error instanceof Error && error.message ? error.message : 'Something went wrong. Please try again.' });
     }
   };
 }

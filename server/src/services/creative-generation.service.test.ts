@@ -90,25 +90,9 @@ vi.mock('../services/cloudinary.service', () => ({
 const textProvider = { id: 'gemini', model: 'gemini-3.1-pro-preview', supportsVision: true, isConfigured: () => true, generateJson: vi.fn() };
 const imageProvider = { id: 'gemini', model: 'gemini-2.5-flash-image', isConfigured: () => true, generateImage: vi.fn() };
 
-const renderer = vi.hoisted(() => ({
-  renderCreative: vi.fn(async ({ visualImage }: { visualImage: { mimeType: string; data: string } }) => ({
-    mimeType: visualImage.mimeType,
-    data: visualImage.data,
-    structure: 'full-bleed/asymmetric/no-footer/logo:none/type:serif-editorial',
-    recipeSource: 'generic-fallback' as const,
-    plan: { canvas: { width: 1280, height: 1600 }, paper: '#f7f4ee', imageRect: { x: 0, y: 0, width: 1, height: 1 }, blocks: [], structure: '' },
-    styleFidelity: { compliant: true, violations: [] as string[] },
-  })),
-}));
-
-vi.mock('../ai/render/creative-renderer', () => renderer);
-
-// The raster scan reads real pixels; orchestration tests feed fake bytes, so
-// it's mocked clean here and steered per-test for the retry-path assertions.
-const renderValidation = vi.hoisted(() => ({
-  detectCheckerboard: vi.fn(async () => ({ detected: false, coverage: 0 })),
-}));
-vi.mock('../ai/render/render-validation', () => renderValidation);
+const designer = vi.hoisted(() => ({ designCreative: vi.fn() }));
+vi.mock('../ai/render/designer-composition', () => designer);
+const WITH_LOGO = { creativeDna: { logoAssetUrl: 'https://cdn.example.com/logo.png' } };
 
 vi.mock('../ai', async () => {
   const actual = await vi.importActual<typeof import('../ai')>('../ai');
@@ -239,6 +223,15 @@ const { fetchInlineImage } = await import('../ai/vision/image-source');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  designer.designCreative.mockReset().mockImplementation(async (input: any) => {
+    let visual;
+    if (!input.products.length) {
+      input.onCall?.('image');
+      [visual] = await input.imageProvider.generateImage({ prompt: 'Wordless campaign imagery', referenceImages: input.references });
+    }
+    return { data: Buffer.from('render'), mimeType: 'image/png', visual, plan: {}, typography: undefined,
+      recipeSource: 'generic-fallback', structure: 'designer-composition' };
+  });
   textProvider.generateJson.mockResolvedValue({
     event: '', culturalContext: '', productCategory: '', offer: '', promotionType: '',
     venueType: '', audience: '', requiredClaims: [], optionalDetails: [], confidence: {},
@@ -298,7 +291,7 @@ describe('creativeGenerationService', () => {
     };
     conceptRepo.findOwned.mockResolvedValueOnce({ ...MOCK_CONCEPT, conceptId: 'concept-a', generationStatus: 'generated', generatedAsset: existing });
 
-    const result = await creativeGenerationService.generate('user-1', {
+    const result = await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Coffee promotion',
       selectedConcept: { ...MOCK_CONCEPT, conceptId: 'concept-a' },
     });
@@ -313,7 +306,7 @@ describe('creativeGenerationService', () => {
 
   it('claims and attaches a never-generated concept exactly once', async () => {
     conceptRepo.findOwned.mockResolvedValueOnce({ ...MOCK_CONCEPT, conceptId: 'concept-b', generationStatus: 'not_generated', generatedAsset: null });
-    await creativeGenerationService.generate('user-1', { prompt: 'Coffee promotion', selectedConcept: { ...MOCK_CONCEPT, conceptId: 'concept-b' } });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Coffee promotion', selectedConcept: { ...MOCK_CONCEPT, conceptId: 'concept-b' } });
     expect(conceptRepo.claimGeneration).toHaveBeenCalledTimes(1);
     expect(imageProvider.generateImage).toHaveBeenCalled();
     expect(repo.markCompletedAndAttachConcept).toHaveBeenCalledWith(
@@ -326,7 +319,7 @@ describe('creativeGenerationService', () => {
     conceptRepo.findOwned.mockResolvedValueOnce({ ...MOCK_CONCEPT, conceptId: 'concept-c', generationStatus: 'not_generated', generatedAsset: null });
     repo.markCompletedAndAttachConcept.mockRejectedValueOnce(new Error('Canonical concept attachment failed'));
 
-    await expect(creativeGenerationService.generate('user-1', {
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Coffee promotion', selectedConcept: { ...MOCK_CONCEPT, conceptId: 'concept-c' },
     })).rejects.toMatchObject({ message: "Image created, but FlowPost couldn't save it. Try again." });
     expect(repo.markFailed).toHaveBeenCalledWith('asset-1');
@@ -362,7 +355,7 @@ describe('creativeGenerationService', () => {
   it('does not call Gemini when another request already claimed the concept', async () => {
     conceptRepo.findOwned.mockResolvedValueOnce({ ...MOCK_CONCEPT, conceptId: 'concept-b', generationStatus: 'generating', generatedAsset: null });
     conceptRepo.claimGeneration.mockResolvedValueOnce(false);
-    await expect(creativeGenerationService.generate('user-1', { prompt: 'Coffee promotion', selectedConcept: { ...MOCK_CONCEPT, conceptId: 'concept-b' } })).rejects.toMatchObject({ status: 409 });
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Coffee promotion', selectedConcept: { ...MOCK_CONCEPT, conceptId: 'concept-b' } })).rejects.toMatchObject({ status: 409 });
     expect(imageProvider.generateImage).not.toHaveBeenCalled();
     expect(cloudinary.uploadImageBuffer).not.toHaveBeenCalled();
   });
@@ -380,7 +373,7 @@ describe('creativeGenerationService', () => {
 
   it('runs creative research before the direction call and threads it through', async () => {
     const research = await import('../ai/generators/creative-research.generator');
-    await creativeGenerationService.generate('user-1', { prompt: 'Launch campaign' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch campaign' });
 
     expect(research.generateCreativeResearch).toHaveBeenCalledTimes(1);
     const direction = await import('../ai/generators/creative-direction.generator');
@@ -404,7 +397,7 @@ describe('creativeGenerationService', () => {
       { id: 'prior-2', status: 'PENDING', creativeBrief: { artDirectionFamily: 'COLLAGE' } },
     ]);
 
-    await creativeGenerationService.generate('user-1', { prompt: 'Launch campaign' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch campaign' });
 
     const concepts = await import('../ai/generators/creative-concepts.generator');
     const call = vi.mocked(concepts.generateCreativeConcepts).mock.calls[0][0];
@@ -415,7 +408,7 @@ describe('creativeGenerationService', () => {
   });
 
   it('analyses fresh reference images and threads the profile into concepts and direction', async () => {
-    const asset = await creativeGenerationService.generate('user-1', {
+    const asset = await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Launch campaign',
       referenceImageUrls: ['https://cdn.example.com/ref1.jpg', 'https://cdn.example.com/ref2.jpg'],
       referenceLabels: ['Inspiration', 'Inspiration'],
@@ -438,7 +431,7 @@ describe('creativeGenerationService', () => {
   });
 
   it('reuses a saved style profile without re-analysing reference images', async () => {
-    await creativeGenerationService.generate('user-1', {
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Launch campaign',
       referenceStyleProfile: SAMPLE_REFERENCE_STYLE,
     });
@@ -453,7 +446,7 @@ describe('creativeGenerationService', () => {
   it('discoverConcepts() returns the referenceStyle profile for the "FlowPost understood your style" step', async () => {
     const outcome = await creativeGenerationService.discoverConcepts('user-1', {
       prompt: 'Launch campaign',
-      referenceImageUrls: ['https://cdn.example.com/ref1.jpg'],
+      referenceImageUrls: ['https://cdn.example.com/ref1.jpg', 'https://cdn.example.com/ref2.jpg'],
     });
 
     expect(outcome.referenceStyle).toEqual(SAMPLE_REFERENCE_STYLE);
@@ -481,14 +474,14 @@ describe('creativeGenerationService', () => {
   });
 
   it('generate() with no references never calls the reference-style analyser', async () => {
-    await creativeGenerationService.generate('user-1', { prompt: 'Launch campaign' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch campaign' });
 
     const referenceStyle = await import('../ai/generators/reference-style.generator');
     expect(referenceStyle.generateReferenceStyleProfile).not.toHaveBeenCalled();
   });
 
   it('generate() with no assets produces and persists a completed asset', async () => {
-    const asset = await creativeGenerationService.generate('user-1', {
+    const asset = await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Summer collection launch',
     });
 
@@ -506,85 +499,40 @@ describe('creativeGenerationService', () => {
   });
 
   it('uses one image-model call and makes the validated renderer result final', async () => {
-    await creativeGenerationService.generate('user-1', { prompt: 'Summer collection launch' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Summer collection launch' });
 
     expect(imageProvider.generateImage).toHaveBeenCalledTimes(1);
-    expect(renderer.renderCreative).toHaveBeenCalledTimes(1);
+    expect(designer.designCreative).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a renderer or validator failure and never uploads the raw Gemini visual', async () => {
-    renderer.renderCreative.mockRejectedValueOnce(new Error('layout overlap violation'));
+    designer.designCreative.mockRejectedValueOnce(new Error('layout overlap violation'));
 
-    await expect(creativeGenerationService.generate('user-1', { prompt: 'Launch' })).rejects.toMatchObject({
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' })).rejects.toMatchObject({
       status: 422,
-      message: 'FlowPost could not produce a valid design. Please try again.',
+      message: 'FlowPost could not verify this design against your brief, assets and style. Please try again.',
     });
     expect(cloudinary.uploadImageBuffer).not.toHaveBeenCalled();
     expect(repo.markCompleted).not.toHaveBeenCalled();
     expect(repo.markFailed).toHaveBeenCalledWith('asset-1');
   });
 
-  it('keeps the standalone creative when the campaign pass fails — a successful generation is never lost', async () => {
-    imageProvider.generateImage.mockResolvedValueOnce([{ mimeType: 'image/png', data: 'aW1hZ2U=' }]);
-
-    const asset = await creativeGenerationService.generate('user-1', { prompt: 'Summer collection launch' });
-
-    expect(asset.status).toBe('COMPLETED');
-    expect(asset.imageUrl).toBe('https://cdn.example.com/gen.png');
-    // Only the Stage A row was created, and nothing was marked failed.
-    expect(repo.create).toHaveBeenCalledTimes(1);
-    expect(repo.markFailed).not.toHaveBeenCalled();
+  it('uploads only the verified design and retains generated imagery for refinement', async () => {
+    designer.designCreative.mockResolvedValueOnce({ data: Buffer.from('render'), mimeType: 'image/png',
+      visual: { mimeType: 'image/png', data: 'dmlzdWFs' }, plan: {}, structure: 'designer-composition' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' });
+    expect(cloudinary.uploadImageBuffer.mock.calls.map(c => (c[0] as Buffer).toString())).toEqual(['render', 'visual']);
   });
 
-  // Distinct bytes per artifact so uploads can be told apart:
-  // 'dmlzdWFs' = "visual", 'cmVuZGVy' = "render", 'Y2FtcGFpZ24=' = "campaign".
-  const RENDER_PLAN = {
-    canvas: { width: 1280, height: 1600 },
-    paper: '#f7f4ee',
-    imageRect: { x: 0, y: 0, width: 1, height: 1 },
-    blocks: [],
-    structure: '',
-  };
-
-  it('uploads the validated renderer result as final and keeps the wordless foundation only for refinements', async () => {
-    imageProvider.generateImage.mockResolvedValueOnce([{ mimeType: 'image/png', data: 'dmlzdWFs' }]);
-    renderer.renderCreative.mockResolvedValueOnce({
-      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', recipeSource: 'generic-fallback', plan: RENDER_PLAN,
-      styleFidelity: { compliant: true, violations: [] },
-    });
-
-    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
-
-    const uploadedPayloads = cloudinary.uploadImageBuffer.mock.calls.map((call) =>
-      (call[0] as Buffer).toString('base64'),
-    );
-    // The renderer output is final; the raw visual is retained only as the
-    // private refinement foundation.
-    expect(uploadedPayloads).toHaveLength(2);
-    expect(uploadedPayloads).toContain('dmlzdWFs');
-    expect(uploadedPayloads).toContain('cmVuZGVy');
-    expect(uploadedPayloads).not.toContain('Y2FtcGFpZ24=');
-  });
-
-  it('falls back to uploading the Stage A creative when the campaign fails — the successful image is never lost', async () => {
-    imageProvider.generateImage.mockResolvedValueOnce([{ mimeType: 'image/png', data: 'dmlzdWFs' }]);
-    renderer.renderCreative.mockResolvedValueOnce({
-      mimeType: 'image/png', data: 'cmVuZGVy', structure: 'none', recipeSource: 'generic-fallback', plan: RENDER_PLAN,
-      styleFidelity: { compliant: true, violations: [] },
-    });
-
-    const asset = await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
-
-    expect(asset.status).toBe('COMPLETED');
-    const uploadedPayloads = cloudinary.uploadImageBuffer.mock.calls.map((call) =>
-      (call[0] as Buffer).toString('base64'),
-    );
-    expect(uploadedPayloads).toContain('cmVuZGVy');
-    expect(repo.markFailed).not.toHaveBeenCalled();
+  it('never falls back to an unverified design when style or final QC fails', async () => {
+    designer.designCreative.mockRejectedValueOnce(new Error('Style fidelity failed'));
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' })).rejects.toMatchObject({ status: 422 });
+    expect(repo.markCompleted).not.toHaveBeenCalled();
+    expect(cloudinary.uploadImageBuffer).not.toHaveBeenCalled();
   });
 
   it('generates exactly one creative direction per request', async () => {
-    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' });
 
     const direction = await import('../ai/generators/creative-direction.generator');
     expect(direction.generateCreativeDirection).toHaveBeenCalledTimes(1);
@@ -595,7 +543,7 @@ describe('creativeGenerationService', () => {
       .mockResolvedValueOnce({ url: 'https://cdn.example.com/final.png', publicId: 'f', width: 1, height: 1, format: 'png' })
       .mockResolvedValueOnce({ url: 'https://cdn.example.com/visual.png', publicId: 'v' });
 
-    await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' });
 
     const completed = repo.markCompleted.mock.calls[0][1];
     expect(completed.renderContext.visualImageUrl).toBe('https://cdn.example.com/visual.png');
@@ -605,14 +553,19 @@ describe('creativeGenerationService', () => {
   it('logs per-stage timing and call counts for every generation', async () => {
     const info = vi.spyOn(console, 'info');
     try {
-      await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
+      await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' });
 
       const timing = info.mock.calls.find(([message]) => message === '[creative] request timing');
       expect(timing).toBeDefined();
       expect(timing![1]).toMatchObject({ imageCalls: 1, cloudinaryUploads: 2 });
       expect(timing![1]).toHaveProperty('totalDurationMs');
-      expect(timing![1]).toHaveProperty('directionDurationMs');
       expect(timing![1]).toHaveProperty('textCalls');
+      // The stage ledger names the pipeline in order: the idea is decided
+      // before the design, and the design before any composition exists.
+      expect(timing![1]).toHaveProperty('creativeStrategyDurationMs');
+      expect(timing![1]).toHaveProperty('artDirectorDurationMs');
+      expect(timing![1]).toHaveProperty('copySynthesisDurationMs');
+      expect(timing![1]).toHaveProperty('compositionDurationMs');
     } finally {
       info.mockRestore();
     }
@@ -627,7 +580,7 @@ describe('creativeGenerationService', () => {
       }),
     ).rejects.toMatchObject({
       status: 422,
-      message: 'Add your brand logo to create a branded creative.',
+      message: 'Add your logo to create a creative.',
     });
 
     expect(imageProvider.generateImage).not.toHaveBeenCalled();
@@ -635,7 +588,7 @@ describe('creativeGenerationService', () => {
   });
 
   it('brand mode with a real logo proceeds without sending the logo to the image model to redraw', async () => {
-    const asset = await creativeGenerationService.generate('user-1', {
+    const asset = await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Diwali campaign',
       contextType: 'brand',
       brandId: 'brand-1',
@@ -663,7 +616,7 @@ describe('creativeGenerationService', () => {
   });
 
   it('generate() records provenance as AI_GENERATED and persists Cloudinary\'s own dimensions', async () => {
-    await creativeGenerationService.generate('user-1', { prompt: 'Summer collection launch' });
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Summer collection launch' });
 
     expect(repo.create.mock.calls[0][0].source).toBe('AI_GENERATED');
     expect(repo.markCompleted.mock.calls[0][1]).toMatchObject({ width: 1024, height: 1024, format: 'png' });
@@ -672,7 +625,7 @@ describe('creativeGenerationService', () => {
   it('answers 503 before any model call when image storage is not configured — the deployed-server 502 was one real Gemini image burnt per click', async () => {
     cloudinary.isConfigured.mockReturnValueOnce(false);
 
-    await expect(creativeGenerationService.generate('user-1', { prompt: 'Launch' })).rejects.toMatchObject({
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' })).rejects.toMatchObject({
       status: 503,
       message: 'Image storage is not configured on this server yet.',
     });
@@ -684,53 +637,42 @@ describe('creativeGenerationService', () => {
   it('reports "created but couldn\'t save" — not "generation failed" — when Gemini succeeds and only Cloudinary fails', async () => {
     cloudinary.uploadImageBuffer.mockRejectedValue(new CloudinaryUploadErrorMock('Cloudinary rejected the upload'));
 
-    await expect(creativeGenerationService.generate('user-1', { prompt: 'Launch' })).rejects.toMatchObject({
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' })).rejects.toMatchObject({
       message: "Image created, but FlowPost couldn't save it. Try again.",
     });
 
     expect(repo.markFailed).toHaveBeenCalledTimes(1);
   });
 
-  it('regenerates once when the visual fails the checkerboard scan, and completes when the retry is clean', async () => {
-    renderValidation.detectCheckerboard
-      .mockResolvedValueOnce({ detected: true, coverage: 0.4 })
-      .mockResolvedValueOnce({ detected: false, coverage: 0 });
-
-    const asset = await creativeGenerationService.generate('user-1', { prompt: 'Launch' });
-
-    expect(asset.status).toBe('COMPLETED');
-    // One initial visual and exactly one deterministic artifact retry.
-    expect(imageProvider.generateImage).toHaveBeenCalledTimes(2);
-    expect(imageProvider.generateImage.mock.calls[1][0].prompt).toContain('checkerboard');
+  it('rejects partially unreadable products instead of silently dropping one', async () => {
+    vi.mocked(fetchInlineImage).mockImplementationOnce(async () => ({ mimeType: 'image/png', data: 'ZmFrZQ==', sizeBytes: 4 }))
+      .mockRejectedValueOnce(new Error('404'));
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Both products',
+      assetUrls: ['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png'] })).rejects.toMatchObject({ status: 422 });
+    expect(designer.designCreative).not.toHaveBeenCalled();
+    expect(repo.markCompleted).not.toHaveBeenCalled();
   });
 
-  it('fails loudly — never ships the artifact — when the retry is also checkered', async () => {
-    renderValidation.detectCheckerboard
-      .mockResolvedValueOnce({ detected: true, coverage: 0.4 })
-      .mockResolvedValueOnce({ detected: true, coverage: 0.35 });
-
-    await expect(creativeGenerationService.generate('user-1', { prompt: 'Launch' })).rejects.toMatchObject({
-      message: 'The generated visual contained a rendering artifact. Please try again.',
-    });
-    expect(imageProvider.generateImage).toHaveBeenCalledTimes(2);
-    expect(repo.markFailed).toHaveBeenCalledTimes(1);
+  it('fails if the mandatory logo cannot be fetched', async () => {
+    vi.mocked(fetchInlineImage).mockRejectedValueOnce(new Error('404'));
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' })).rejects.toMatchObject({ status: 422 });
+    expect(designer.designCreative).not.toHaveBeenCalled();
   });
 
-  it('generate() with an asset fetches it and sends it as a reference image, preserving the subject', async () => {
-    const asset = await creativeGenerationService.generate('user-1', {
+  it('generate() with an asset fetches it and sends the original to the compositor without an image-generation call', async () => {
+    const asset = await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Create a monsoon campaign for this shoe.',
       assetUrls: ['https://cdn.example.com/shoe.jpg'],
     });
 
     expect(fetchInlineImage).toHaveBeenCalledWith('https://cdn.example.com/shoe.jpg');
-    const call = imageProvider.generateImage.mock.calls[0][0];
-    expect(call.referenceImages).toHaveLength(1);
-    expect(call.prompt).toContain('Preserve the exact product/subject shown');
+    expect(imageProvider.generateImage).not.toHaveBeenCalled();
+    expect(designer.designCreative.mock.calls[0][0].products).toHaveLength(1);
     expect(asset.status).toBe('COMPLETED');
   });
 
   it('generate() with a saved brand logo fetches it for the renderer, never sends it to the image model, and never redraws it', async () => {
-    const asset = await creativeGenerationService.generate('user-1', {
+    const asset = await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Diwali campaign',
       creativeDna: { logoAssetUrl: 'https://cdn.example.com/logo.png' },
     });
@@ -739,8 +681,8 @@ describe('creativeGenerationService', () => {
     const call = imageProvider.generateImage.mock.calls[0][0];
     expect(call.referenceImages).toHaveLength(0);
     expect(call.prompt).not.toContain('reproduce it exactly');
-    expect(renderer.renderCreative).toHaveBeenCalledWith(
-      expect.objectContaining({ logoImage: { mimeType: 'image/jpeg', data: 'ZmFrZQ==' } }),
+    expect(designer.designCreative).toHaveBeenCalledWith(
+      expect.objectContaining({ logo: { mimeType: 'image/jpeg', data: 'ZmFrZQ==' } }),
     );
     expect(asset.status).toBe('COMPLETED');
   });
@@ -750,7 +692,7 @@ describe('creativeGenerationService', () => {
     vi.mocked(failing.fetchInlineImage).mockRejectedValueOnce(new Error('404'));
 
     await expect(
-      creativeGenerationService.generate('user-1', {
+      creativeGenerationService.generate('user-1', { ...WITH_LOGO,
         prompt: 'Create a campaign for this product.',
         assetUrls: ['https://cdn.example.com/broken.jpg'],
       }),
@@ -765,7 +707,7 @@ describe('creativeGenerationService', () => {
     const concepts = await import('../ai/generators/creative-concepts.generator');
     const direction = await import('../ai/generators/creative-direction.generator');
 
-    await creativeGenerationService.generate('user-1', {
+    await creativeGenerationService.generate('user-1', { ...WITH_LOGO,
       prompt: 'Launch campaign',
       selectedConcept: MOCK_CONCEPT,
     });
@@ -779,14 +721,14 @@ describe('creativeGenerationService', () => {
   });
 
   it('rejects an empty prompt before calling any provider', async () => {
-    await expect(creativeGenerationService.generate('user-1', { prompt: '' })).rejects.toBeInstanceOf(
+    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: '' })).rejects.toBeInstanceOf(
       CreativeError,
     );
     expect(repo.create).not.toHaveBeenCalled();
   });
 
   it('generateCampaign() produces one linked asset per label, sharing a campaignId', async () => {
-    const assets = await creativeGenerationService.generateCampaign('user-1', {
+    const assets = await creativeGenerationService.generateCampaign('user-1', { ...WITH_LOGO,
       prompt: 'Launch campaign for the new collection',
       variationLabels: ['Hero', 'Product', 'Lifestyle'],
     });
@@ -804,7 +746,7 @@ describe('creativeGenerationService', () => {
 
   it('generateCampaign() rejects fewer than two labels', async () => {
     await expect(
-      creativeGenerationService.generateCampaign('user-1', {
+      creativeGenerationService.generateCampaign('user-1', { ...WITH_LOGO,
         prompt: 'anything',
         variationLabels: ['Hero'],
       }),
@@ -813,7 +755,7 @@ describe('creativeGenerationService', () => {
 
   it('generateCampaign() runs research exactly once and reuses it across every variation', async () => {
     const research = await import('../ai/generators/creative-research.generator');
-    await creativeGenerationService.generateCampaign('user-1', {
+    await creativeGenerationService.generateCampaign('user-1', { ...WITH_LOGO,
       prompt: 'Launch campaign',
       variationLabels: ['Hero', 'Product', 'Lifestyle'],
     });
@@ -826,6 +768,7 @@ describe('creativeGenerationService', () => {
       id: 'asset-1',
       prompt: 'Original request',
       creativeBrief: { concept: 'Quiet Luxury', mode: 'EDITORIAL' },
+      renderContext: { creativeDna: WITH_LOGO.creativeDna },
       sourceAssetUrls: [],
       imageUrl: 'https://cdn.example.com/prior.png',
       contextType: 'personal',
@@ -844,6 +787,7 @@ describe('creativeGenerationService', () => {
       id: 'parent-1',
       prompt: 'Original request',
       creativeBrief: { concept: 'Quiet Luxury', mode: 'EDITORIAL' },
+      renderContext: { creativeDna: WITH_LOGO.creativeDna },
       sourceAssetUrls: [],
       imageUrl: 'https://cdn.example.com/prior.png',
       contextType: 'personal',
@@ -865,6 +809,7 @@ describe('creativeGenerationService', () => {
   it('explicit regeneration creates a new AI_REGENERATED child instead of reopening the canonical image', async () => {
     repo.findById.mockResolvedValueOnce({
       id: 'parent-1', prompt: 'Original request', creativeBrief: { concept: 'Quiet Luxury', mode: 'EDITORIAL', artDirectionFamily: 'EDITORIAL_PHOTOGRAPHY' },
+      renderContext: { creativeDna: WITH_LOGO.creativeDna },
       sourceAssetUrls: [], imageUrl: 'https://cdn.example.com/prior.png', contextType: 'personal', brandId: null, campaignId: null,
     });
     await creativeGenerationService.regenerate('user-1', { assetId: 'parent-1' });
@@ -943,7 +888,7 @@ describe('creativeGenerationService', () => {
     expect(fetchInlineImage).toHaveBeenCalledWith('https://cdn.example.com/prior-campaign.png');
   });
 
-  it('refine() still works on a row written before renderContext existed', async () => {
+  it('refine() requires a new creative when a legacy row has no saved logo', async () => {
     repo.findById.mockResolvedValueOnce({
       id: 'legacy-1',
       prompt: 'Original request',
@@ -956,12 +901,8 @@ describe('creativeGenerationService', () => {
       renderContext: null,
     });
 
-    const asset = await creativeGenerationService.refine('user-1', {
-      assetId: 'legacy-1',
-      instruction: 'make it darker',
-    });
-
-    expect(asset.status).toBe('COMPLETED');
+    await expect(creativeGenerationService.refine('user-1', { assetId: 'legacy-1', instruction: 'make it darker' })).rejects.toMatchObject({ status: 422 });
+    expect(repo.create).not.toHaveBeenCalled();
   });
 
   it('refine() persists the inherited context on the new row, so the NEXT refinement inherits it too', async () => {
@@ -976,7 +917,7 @@ describe('creativeGenerationService', () => {
 
   it('refine() surfaces a failure without touching the parent — the previous creative survives', async () => {
     repo.findById.mockResolvedValueOnce(PARENT_WITH_CONTEXT);
-    imageProvider.generateImage.mockRejectedValueOnce(new Error('model unavailable'));
+    designer.designCreative.mockRejectedValueOnce(new Error('QC unavailable'));
 
     await expect(
       creativeGenerationService.refine('user-1', { assetId: 'parent-1', instruction: 'make it darker' }),

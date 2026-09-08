@@ -11,6 +11,8 @@ import type {
   CreativeDirection,
   CreativeDirectionOutcome,
   CreativeIntentBrief,
+  CreativeStrategy,
+  GraphicDesignConcept,
   CreativeMode,
   CreativeResearch,
   FunnelStage,
@@ -208,7 +210,7 @@ export function repairMissingRequirements(
     headline: direction.headline || missing[0],
     marketingCreative: {
       ...direction.marketingCreative,
-      secondaryInfo: [...new Set([...existing, ...missing])].slice(0, 4),
+      secondaryInfo: [...new Set([...existing, ...missing])],
     },
   };
 }
@@ -235,6 +237,16 @@ export interface GenerateCreativeDirectionOptions {
   referenceStyle?: ReferenceStyleProfile;
   /** The member's hard requirements. Validated against the copy this stage authors — see spec §1.4. */
   intent?: CreativeIntentBrief;
+  /**
+   * The blueprint this copy serves. Copy synthesis previously ran with no
+   * knowledge of the design, so it authored a full marketing kit for every
+   * creative and the composition stage had to place all of it — which is how
+   * finished designs acquired a headline, a description, a second description,
+   * a supporting sentence, category labels and a footer line.
+   */
+  graphicConcept?: GraphicDesignConcept;
+  /** The idea layer, so the words serve the mechanism rather than the category. */
+  creativeStrategy?: CreativeStrategy;
 }
 
 export async function generateCreativeDirection({
@@ -254,6 +266,8 @@ export async function generateCreativeDirection({
   selectedStyle,
   referenceStyle,
   intent,
+  graphicConcept,
+  creativeStrategy,
 }: GenerateCreativeDirectionOptions): Promise<CreativeDirectionOutcome> {
   const startedAt = Date.now();
 
@@ -272,6 +286,8 @@ export async function generateCreativeDirection({
     selectedStyle,
     referenceStyle,
     intent,
+    graphicConcept,
+    creativeStrategy,
   });
 
   const payload = (await provider.generateJson({
@@ -356,6 +372,9 @@ export async function generateCreativeDirection({
     // rather than silently proceeding unnoticed.
   }
 
+  if (missing.length > 0 || styleIssues.length > 0) {
+    throw new Error(`Creative direction failed requirements: ${[...missing, ...styleIssues].join('; ')}`);
+  }
   const durationMs = Date.now() - startedAt;
   const repairSucceeded =
     repairAttempted &&

@@ -15,18 +15,23 @@ function resolveRow(row: any): ResolvedIntelligencePreference {
 }
 
 export async function resolveBrandIntelligence(userId: string, brandId: string): Promise<BrandIntelligenceProfile> {
-  const rows = await brandIntelligenceRepository.listSignals(userId, brandId);
-  const resolved = rows.map(resolveRow);
-  const explicit = resolved.filter((p) => p.strength === 'explicit');
-  const learned = resolved.filter((p) => p.strength !== 'explicit');
-  const usable = [...explicit, ...learned.filter((p) => p.strength === 'strong')];
-  const explicitStyle = explicit.find((p) => p.dimension === 'style' && p.polarity === 'positive');
-  const learnedStyle = learned.filter((p) => p.dimension === 'style' && p.polarity === 'positive' && p.strength === 'strong').sort((a,b) => b.confidence - a.confidence)[0];
-  return {
-    brandId, explicit, learned,
-    ...((explicitStyle ?? learnedStyle) && { preferredStyleId: (explicitStyle ?? learnedStyle)!.value }),
-    guidance: usable.map((p) => `${p.polarity === 'negative' ? 'Avoid' : 'Prefer'} ${p.dimension}: ${p.value}`),
-  };
+  try {
+    const rows = await brandIntelligenceRepository.listSignals(userId, brandId);
+    const resolved = rows.map(resolveRow);
+    const explicit = resolved.filter((p) => p.strength === 'explicit');
+    const learned = resolved.filter((p) => p.strength !== 'explicit');
+    const usable = [...explicit, ...learned.filter((p) => p.strength === 'strong')];
+    const explicitStyle = explicit.find((p) => p.dimension === 'style' && p.polarity === 'positive');
+    const learnedStyle = learned.filter((p) => p.dimension === 'style' && p.polarity === 'positive' && p.strength === 'strong').sort((a,b) => b.confidence - a.confidence)[0];
+    return {
+      brandId, explicit, learned,
+      ...((explicitStyle ?? learnedStyle) && { preferredStyleId: (explicitStyle ?? learnedStyle)!.value }),
+      guidance: usable.map((p) => `${p.polarity === 'negative' ? 'Avoid' : 'Prefer'} ${p.dimension}: ${p.value}`),
+    };
+  } catch (error) {
+    console.warn('[creative] resolveBrandIntelligence failed, returning empty profile', error);
+    return { brandId, explicit: [], learned: [], guidance: [] };
+  }
 }
 
 export async function setExplicitPreference(userId: string, brandId: string, input: { dimension?: unknown; value?: unknown; polarity?: unknown }) {

@@ -111,7 +111,7 @@ describe('generateCreativeConcepts', () => {
     expect(concepts).toHaveLength(3);
   });
 
-  it('never returns an empty set — keeps the strongest of a weak batch rather than leaving the user with nothing', async () => {
+  it('rejects a weak batch after repair instead of returning the least-bad concept', async () => {
     const allWeak = {
       concepts: [
         { conceptName: 'A', bigIdea: 'a', visualMechanism: 'x', mode: 'EDITORIAL', scores: strongScores({ conceptStrength: 10, templateRisk: 95 }) },
@@ -119,7 +119,7 @@ describe('generateCreativeConcepts', () => {
       ],
     };
     const provider = mockProvider(allWeak);
-    const { concepts } = await generateCreativeConcepts({
+    await expect(generateCreativeConcepts({
       provider,
       request: 'anything',
       goal: 'brand_awareness',
@@ -128,10 +128,8 @@ describe('generateCreativeConcepts', () => {
       hasAssets: false,
       brand: resolveBrandProfile(),
       creativeDna: resolveCreativeDna(),
-    });
-
-    expect(concepts).toHaveLength(1);
-    expect(concepts[0].conceptName).toBe('B'); // the less-bad of the two
+    })).rejects.toThrow('No concept met the campaign requirements');
+    expect(provider.generateJson).toHaveBeenCalledTimes(2);
   });
 
   it('drops a concept missing its anchor fields (conceptName/bigIdea/visualMechanism) rather than passing through a malformed one', async () => {
@@ -519,7 +517,7 @@ describe('generateCreativeConcepts — hard requirements', () => {
       concepts: [conceptWith('Synchronized Flavors', 'A beautiful plate of food.', 'EDITORIAL_PHOTOGRAPHY')],
     });
 
-    await generateCreativeConcepts({ provider, ...base() });
+    await expect(generateCreativeConcepts({ provider, ...base() })).rejects.toThrow('No concept met');
 
     const calls = vi.mocked(provider.generateJson).mock.calls;
     expect(calls.length).toBeGreaterThanOrEqual(2);
@@ -528,7 +526,7 @@ describe('generateCreativeConcepts — hard requirements', () => {
     expect(retry.prompt).toContain('50% off');
   });
 
-  it('never returns nothing — the best-covering concept survives, carrying what it still misses', async () => {
+  it('never sends an incomplete concept to the picker', async () => {
     const provider = mockProvider({
       concepts: [
         conceptWith('Half Empty', 'A plate of Korean food, beautifully lit.', 'EDITORIAL_PHOTOGRAPHY'),
@@ -536,13 +534,7 @@ describe('generateCreativeConcepts — hard requirements', () => {
       ],
     });
 
-    const { concepts } = await generateCreativeConcepts({ provider, ...base() });
-
-    expect(concepts.length).toBeGreaterThan(0);
-    // The one that at least carries "Korean food" beats the one carrying none,
-    // and what it still misses travels with it for the direction stage to fix.
-    expect(concepts[0].intentFidelity?.requiredElementsPresent).toContain('Korean food');
-    expect(concepts[0].intentFidelity?.missingRequirements).toContain('50% off');
+    await expect(generateCreativeConcepts({ provider, ...base() })).rejects.toThrow('No concept met');
   });
 
   it('retries to restore a full set when the gate silently shrinks it below three, and keeps the bigger covered retry', async () => {

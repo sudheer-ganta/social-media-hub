@@ -200,8 +200,7 @@ export function gateByIntent(
   const complete = scored.filter((c) => c.intentFidelity.missingRequirements.length === 0);
   if (complete.length > 0) return complete;
 
-  const best = Math.max(...scored.map((c) => c.intentFidelity.score));
-  return scored.filter((c) => c.intentFidelity.score === best);
+  return [];
 }
 
 export interface GenerateCreativeConceptsOptions {
@@ -231,12 +230,6 @@ function normaliseConcepts(rawConcepts: unknown): ScoredCreativeConcept[] {
 
 function gateConcepts(normalised: ScoredCreativeConcept[]): ScoredCreativeConcept[] {
   const gated = normalised.filter(passesQualityGate);
-  // The gate exists to protect the user from weak ideas, not to leave them
-  // with nothing — if every proposal happened to score under the bar, the
-  // strongest of a bad batch still beats no batch at all.
-  if (gated.length === 0 && normalised.length > 0) {
-    return [[...normalised].sort((a, b) => overallScore(b) - overallScore(a))[0]];
-  }
   return gated;
 }
 
@@ -408,8 +401,9 @@ export async function generateCreativeConcepts({
   //     ways ("calendar metaphor / calendar composition / calendar
   //     transformation") → cosmetic variation, not three ideas.
   let diversity = evaluateConceptDiversity(concepts);
-  if (diversity.violationCount > 0) {
+  if (concepts.length === 0 || diversity.violationCount > 0) {
     const problems = [
+      concepts.length === 0 && 'every proposal failed the quality gate; propose clear, relevant alternatives',
       isDegenerateFamilySpread(concepts) &&
         `every concept picked the same art-direction family (${concepts[0].artDirectionFamily}) — that renders as one repeated visual template`,
       diversity.duplicatedFamilies.length > 0 &&
@@ -431,7 +425,7 @@ export async function generateCreativeConcepts({
     })) as { concepts?: unknown };
     const retryConcepts = gateConcepts(normaliseConcepts(retryPayload.concepts));
     const retryDiversity = evaluateConceptDiversity(retryConcepts);
-    if (retryConcepts.length > 0 && retryDiversity.violationCount < diversity.violationCount) {
+    if (retryConcepts.length > 0 && (concepts.length === 0 || retryDiversity.violationCount < diversity.violationCount)) {
       concepts = retryConcepts;
       diversity = retryDiversity;
     }
@@ -447,7 +441,7 @@ export async function generateCreativeConcepts({
   concepts = gateByIntent(concepts, intent);
   const dropped = concepts.some((c) => (c.intentFidelity?.missingRequirements.length ?? 0) > 0);
   const shrankBelowThree = concepts.length < Math.min(3, beforeIntentGate);
-  if ((dropped || shrankBelowThree) && intent?.requiredClaims.length) {
+  if ((concepts.length === 0 || dropped || shrankBelowThree) && intent?.requiredClaims.length) {
     attempts += 1;
     const keptMissing = [...new Set(concepts.flatMap((c) => c.intentFidelity?.missingRequirements ?? []))];
     const stillMissing = keptMissing.length > 0 ? keptMissing : intent.requiredClaims;
@@ -476,6 +470,7 @@ export async function generateCreativeConcepts({
   // mechanism diversity): with more than three concepts standing, the weaker
   // of any mechanism duplicates is dropped rather than shown.
   concepts = trimDuplicateMechanisms(concepts);
+  if (!concepts.length) throw new Error('No concept met the campaign requirements. Please try again.');
   const finalDiversity = evaluateConceptDiversity(concepts);
 
   const durationMs = Date.now() - startedAt;

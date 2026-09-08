@@ -406,7 +406,7 @@ describe('generateCreativeDirection — retry', () => {
 
 describe('generateCreativeDirection — selected style (Phase 3)', () => {
   it('renders the selected style as its own MANDATORY section, distinct from reference-style inspiration', async () => {
-    const provider = mockProvider(RAW_PAYLOAD);
+    const provider = mockProvider({ ...RAW_PAYLOAD, palette: ['#ff2fd6', '#ffffff'] });
     await generateCreativeDirection({
       provider,
       request: 'A festival product launch.',
@@ -453,7 +453,7 @@ describe('generateCreativeDirection — selected style (Phase 3)', () => {
     // attempt should trigger exactly one repair call, same bounded-retry
     // path as a missing requirement — no extra Gemini call is added.
     const mutedFirst = { ...RAW_PAYLOAD, palette: ['#3a3a3a', '#8a8a8a'] };
-    const vibrantRetry = { ...RAW_PAYLOAD, palette: ['#ff2fd6', '#00e5ff'] };
+    const vibrantRetry = { ...RAW_PAYLOAD, palette: ['#ff2fd6', '#00e5ff', '#ffffff'] };
     const generateJson = vi.fn().mockResolvedValueOnce(mutedFirst).mockResolvedValueOnce(vibrantRetry);
     const provider: AiTextProvider = { id: 'mock', model: 'mock-model', supportsVision: false, isConfigured: () => true, generateJson };
 
@@ -475,7 +475,7 @@ describe('generateCreativeDirection — selected style (Phase 3)', () => {
     expect(meta.attempts).toBe(2);
     const repairPrompt = generateJson.mock.calls[1][0].prompt as string;
     expect(repairPrompt).toContain('contradicted the SELECTED STYLE');
-    expect(direction.palette).toEqual(['#ff2fd6', '#00e5ff']);
+    expect(direction.palette).toEqual(['#ff2fd6', '#00e5ff', '#ffffff']);
   });
 
   it('two different selected styles produce different SELECTED STYLE sections for the identical brief', async () => {

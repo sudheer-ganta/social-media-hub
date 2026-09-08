@@ -26,7 +26,7 @@ const GEMINI_API_BASE =
   'https://generativelanguage.googleapis.com/v1beta/models';
 
 /** A slow model still beats a hung request holding an Express worker. */
-const REQUEST_TIMEOUT_MS = 45_000;
+const REQUEST_TIMEOUT_MS = 90_000;
 
 /**
  * Generous on purpose. Three captions, a hashtag list and a caption per
@@ -180,6 +180,38 @@ function toProviderError(error: unknown): AiProviderError {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Strips unsupported OpenAPI/JSONSchema keywords (e.g. maxItems, minItems, minimum, maximum)
+ * that cause Gemini's responseSchema validation to return 400 INVALID_ARGUMENT.
+ */
+function sanitizeGeminiSchema(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object') return schema;
+  if (Array.isArray(schema)) return schema.map(sanitizeGeminiSchema);
+
+  const raw = schema as Record<string, unknown>;
+  const allowedKeys = new Set([
+    'type', 'format', 'description', 'nullable', 'enum', 'properties', 'required', 'items',
+  ]);
+  const cleaned: Record<string, unknown> = {};
+
+  for (const [key, val] of Object.entries(raw)) {
+    if (!allowedKeys.has(key)) continue;
+    if (key === 'properties' && val && typeof val === 'object' && !Array.isArray(val)) {
+      const cleanedProps: Record<string, unknown> = {};
+      for (const [pKey, pVal] of Object.entries(val as Record<string, unknown>)) {
+        cleanedProps[pKey] = sanitizeGeminiSchema(pVal);
+      }
+      cleaned.properties = cleanedProps;
+    } else if (key === 'items') {
+      cleaned.items = sanitizeGeminiSchema(val);
+    } else {
+      cleaned[key] = val;
+    }
+  }
+
+  return cleaned;
+}
+
 export class GeminiProvider implements AiTextProvider {
   readonly id = 'gemini';
 
@@ -233,7 +265,7 @@ export class GeminiProvider implements AiTextProvider {
         // Native structured output. The generator still validates the result:
         // schema enforcement constrains the shape, not the sense.
         responseMimeType: 'application/json',
-        responseSchema: options.responseSchema,
+        responseSchema: options.responseSchema ? sanitizeGeminiSchema(options.responseSchema) : undefined,
         ...(thinkingConfigFor(this.model) && {
           thinkingConfig: thinkingConfigFor(this.model),
         }),

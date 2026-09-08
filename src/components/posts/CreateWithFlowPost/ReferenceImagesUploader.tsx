@@ -93,7 +93,7 @@ export function ReferenceImagesUploader({ images, onChange, disabled }: Referenc
     <div className="space-y-1.5">
       <Label className="text-sm font-semibold">Show FlowPost what you like</Label>
       <p className="text-xs text-muted-foreground">
-        Upload a few creatives, ads, or visuals you love. FlowPost learns the visual direction without copying the references.
+        Add designs whose look you want to follow. FlowPost uses their typography, composition and visual treatment with your own content. Add products in the product-images section above.
       </p>
 
       {images.length > 0 && (
@@ -157,7 +157,7 @@ export function ReferenceImagesUploader({ images, onChange, disabled }: Referenc
           {uploadingCount > 0
             ? "Uploading…"
             : images.length === 0
-              ? "Drag & drop, or click to add 2–6 images"
+              ? "Drag & drop, or click to add 1–6 images"
               : `Add more (${remaining} left)`}
         </div>
       )}

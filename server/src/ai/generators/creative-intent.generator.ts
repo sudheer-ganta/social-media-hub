@@ -7,10 +7,8 @@ import type { CreativeIntentBrief, RawCreativeIntentPayload } from '../types';
  * {@link CreativeIntentBrief} — the hard requirements every later stage is
  * validated against.
  *
- * Runs first, ahead of research and concepts, and degrades silently: a failed
- * extraction returns `extracted: false` with no claims, which leaves the
- * pipeline exactly as it behaved before intent existed rather than blocking a
- * generation on a bookkeeping call.
+ * Runs ahead of research and concepts. Failed extraction must not be treated
+ * as an empty brief: every later check depends on these requirements.
  */
 
 const MAX_CLAIM_LENGTH = 80;
@@ -65,7 +63,10 @@ export function normaliseIntent(payload: RawCreativeIntentPayload): CreativeInte
     promotionType: asString(payload.promotionType, 80),
     venueType: asString(payload.venueType, 80),
     audience: asString(payload.audience),
-    requiredClaims: asClaims(payload.requiredClaims, 8),
+    requiredClaims: [...new Set([
+      ...asClaims(payload.requiredClaims, 8),
+      asString(payload.event), asString(payload.productCategory), asString(payload.offer, 80),
+    ].filter(Boolean))],
     optionalDetails: asClaims(payload.optionalDetails, 6),
     confidence: asConfidence(payload.confidence),
   };
@@ -98,7 +99,11 @@ export async function generateCreativeIntent({
       temperature: built.temperature,
   })) as RawCreativeIntentPayload;
 
+    if (!payload || !Array.isArray(payload.requiredClaims)) throw new Error('The campaign requirements could not be extracted.');
     const intent = normaliseIntent(payload);
+    // Literal discount offers cannot disappear because the model omitted a field.
+    const discounts = request.match(/\d+(?:\.\d+)?\s*%\s*(?:off|discount)\b/gi) ?? [];
+    intent.requiredClaims = [...new Set([...intent.requiredClaims, ...discounts])];
     console.info('[creative] intent extracted', {
       model: provider.model,
       durationMs: Date.now() - startedAt,

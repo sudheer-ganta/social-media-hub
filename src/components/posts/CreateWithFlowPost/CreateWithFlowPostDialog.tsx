@@ -263,7 +263,7 @@ export function CreateWithFlowPostDialog({
   const logoAssetUrl = logoOverride ?? creativeDnaProfile?.dna.logoAssetUrl ?? "";
   // Brand mode renders nothing without a real logo — FlowPost will not invent
   // one, and a branded creative carrying a made-up mark is worse than none.
-  const logoMissing = contextType === "brand" && !logoAssetUrl;
+  const logoMissing = !logoAssetUrl;
 
   useEffect(() => {
     if (!open || styles.length > 0) return;
@@ -323,6 +323,7 @@ export function CreateWithFlowPostDialog({
   }
 
   async function handleAttachAsset(file: File) {
+    if (assets.length >= 5) { toast.error("You can include up to five product images."); return; }
     setUploading(true);
     try {
       const uploaded = await cloudinaryService.uploadMedia(file);
@@ -376,7 +377,7 @@ export function CreateWithFlowPostDialog({
    */
   async function handleCreateConcept(concept: ScoredCreativeConcept) {
     if (logoMissing) {
-      setError("Add your brand logo to create a branded creative.");
+      setError("Add your logo to create a creative.");
       setStep("input");
       return;
     }
@@ -566,17 +567,17 @@ export function CreateWithFlowPostDialog({
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">
-                  FlowPost uses this as a creative system—layout, image language, color behavior and typography—not a fixed template.
+                  Your choice guides the composition, typography, colors and image style. Reference images guide the look within this style.
                 </p>
               </div>
 
-              {contextType === "brand" && (
+              {(
                 <div className="space-y-1.5">
                   <Label className="text-sm font-semibold">
                     Brand logo <span className="text-destructive">*</span>
                   </Label>
                   <p className="text-[11px] text-muted-foreground">
-                    Required for branded creatives. FlowPost places your real logo file — it never draws one.
+                    Required. Your original logo gets its own clear space, away from text and product images.
                   </p>
                   <div className="flex items-center gap-2">
                     {logoAssetUrl ? (
@@ -616,14 +617,14 @@ export function CreateWithFlowPostDialog({
                   </div>
                   {logoMissing && (
                     <p className="text-[11px] text-destructive">
-                      Add your brand logo to create a branded creative.
+                      Add your logo to create a creative.
                     </p>
                   )}
                 </div>
               )}
 
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Product / reference (optional)</Label>
+                <Label className="text-xs text-muted-foreground">Product images to include (optional)</Label>
                 <div className="flex flex-wrap gap-2">
                   {assets.map((a) => (
                     <span
@@ -645,7 +646,7 @@ export function CreateWithFlowPostDialog({
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs"
-                    disabled={uploading || busy}
+                    disabled={uploading || busy || assets.length >= 5}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : "+ Add"}
@@ -664,7 +665,7 @@ export function CreateWithFlowPostDialog({
                 </div>
                 {assets.length > 0 && (
                   <p className="text-[11px] text-muted-foreground">
-                    FlowPost will preserve what's shown here, not invent a replacement.
+                    Every image you add will appear in the post, without redrawing or cropping it.
                   </p>
                 )}
               </div>
@@ -846,7 +847,7 @@ export function CreateWithFlowPostDialog({
           )}
           {step === "concepts" && logoMissing && (
             <p className="mr-auto text-xs text-destructive">
-              Add your brand logo to create a branded creative.
+              Add your logo to create a creative.
             </p>
           )}
           {step === "discovering" && (

@@ -1,4 +1,5 @@
 import type { CreativeDirection, CreativeIntentBrief, IntentFidelity, ScoredCreativeConcept } from '../types';
+import { collectCampaignCopy } from '../prompts/campaign-creative.prompt';
 
 /**
  * "Does this artifact actually say what the member asked for?" — answered in
@@ -28,7 +29,7 @@ export function claimTokens(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/(\d)\s*%/g, '$1%')
-    .replace(/[^a-z0-9%]+/g, ' ')
+    .replace(/[^\p{L}\p{N}%]+/gu, ' ')
     .split(/\s+/)
     .filter((token) => token.length > 0 && !STOP_WORDS.has(token));
 }
@@ -107,19 +108,7 @@ export function conceptText(concept: ScoredCreativeConcept): string {
  * requirement matters, it has to be legible.
  */
 export function renderedCopyText(direction: CreativeDirection): string {
-  return [
-    direction.headline,
-    direction.supportingLine,
-    direction.cta,
-    direction.interactionInstructions,
-    direction.marketingCreative?.brandMessage,
-    direction.marketingCreative?.offerText,
-    direction.marketingCreative?.eventBadge,
-    ...(direction.marketingCreative?.secondaryInfo ?? []),
-    ...(direction.marketingCreative?.requiredElements ?? []),
-  ]
-    .filter(Boolean)
-    .join(' ');
+  return collectCampaignCopy(direction).map(line => line.text).join(' ');
 }
 
 /** The hard requirements this creative's copy still drops. Empty means publishable, per spec §1.4. */

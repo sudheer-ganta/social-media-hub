@@ -13,9 +13,15 @@ export interface DesignContext {
 /** Reads explicit selections only. Generating/viewing alone is never interpreted as preference. */
 export async function loadDesignContext(scope: ConceptScope): Promise<DesignContext> {
   const [history, brandIntelligence, performanceEvidence] = await Promise.all([
-    creativeConceptRepository.explicitStyleHistory(scope),
+    creativeConceptRepository.explicitStyleHistory(scope).catch((error) => {
+      console.warn('[creative] explicitStyleHistory unavailable; continuing without it', error);
+      return [];
+    }),
     scope.contextType === 'brand' && scope.brandId
-      ? brandIntelligenceService.resolveBrandIntelligence(scope.userId, scope.brandId)
+      ? brandIntelligenceService.resolveBrandIntelligence(scope.userId, scope.brandId).catch((error) => {
+          console.warn('[creative] brandIntelligence unavailable; continuing without it', error);
+          return undefined;
+        })
       : Promise.resolve(undefined),
     creativePerformanceService.compactPerformanceGuidance(scope).catch((error) => {
       console.warn('[creative] performance evidence unavailable; continuing without it', error);

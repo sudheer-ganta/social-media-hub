@@ -1,5 +1,6 @@
 import type {
   BrandProfile,
+  CopyPlan,
   CreativeDirection,
   CreativeIntentBrief,
   MarketingGoal,
@@ -44,36 +45,144 @@ export interface CampaignCopyLine {
   text: string;
 }
 
-/** The exact words this creative carries, in reading order. Never re-authored here. */
-export function collectCampaignCopy(direction: CreativeDirection): CampaignCopyLine[] {
+/**
+ * The exact words this creative carries, in reading order. Never re-authored
+ * here — and, since the copy plan landed, never PADDED here either.
+ *
+ * The version this replaced emitted every role the direction happened to fill:
+ * headline, offer, a supporting line, an event badge, a brand message, one
+ * entry per secondaryInfo item, and a CTA. Seven text blocks, on every
+ * creative, whether or not the idea wanted them — which is what turned
+ * finished designs into information cards with a picture attached. The
+ * quantity of copy was a property of the direction model's enthusiasm, not of
+ * the creative idea.
+ *
+ * A `copyPlan` from the art director now decides. Roles it does not list are
+ * dropped even when text exists for them, and `maxTextElements` is a hard
+ * ceiling, so a one-line poster stays a one-line poster. Required campaign
+ * facts are the only thing that can survive the trim (see keepRequiredFacts) —
+ * a design may be minimal, but it may not silently lose the member's offer.
+ *
+ * With no plan, behaviour is unchanged: the copy stage keeps its own judgement
+ * rather than inheriting a default that would be a template of its own.
+ */
+export function collectCampaignCopy(
+  direction: CreativeDirection,
+  omittedElements: string[] = [],
+  copyPlan?: CopyPlan,
+  requiredClaims: string[] = [],
+): CampaignCopyLine[] {
   const lines: CampaignCopyLine[] = [];
   const push = (role: CampaignCopyLine['role'], text?: string) => {
     const trimmed = (text ?? '').trim();
     if (trimmed) lines.push({ role, text: trimmed });
   };
 
+  const isOmitted = (pattern: RegExp) => omittedElements.some((e) => pattern.test(e));
+  const omitCta = isOmitted(/cta|button|action/i);
+  const omitDesc = isOmitted(/description|paragraph|body text|secondary text/i);
+
   if (direction.copyTreatment !== 'none') {
     push('HEADLINE', direction.headline);
   }
   push('OFFER', direction.marketingCreative?.offerText);
-  if (direction.copyTreatment !== 'none') {
+  if (direction.copyTreatment !== 'none' && !omitDesc) {
     push('SUPPORT', direction.copyTreatment === 'headline_support' ? direction.supportingLine : undefined);
     push('SUPPORT', direction.copyTreatment === 'interactive' ? direction.interactionInstructions : undefined);
   }
   push('EVENT_BADGE', direction.marketingCreative?.eventBadge);
-  push('BRAND_MESSAGE', direction.marketingCreative?.brandMessage);
-  for (const detail of direction.marketingCreative?.secondaryInfo ?? []) push('DETAIL', detail);
-  push('CTA', direction.cta);
+  if (!omitDesc) {
+    push('BRAND_MESSAGE', direction.marketingCreative?.brandMessage);
+    for (const detail of direction.marketingCreative?.secondaryInfo ?? []) {
+      push('DETAIL', detail);
+    }
+  }
+  if (!omitCta) {
+    push('CTA', direction.cta);
+  }
 
   // The direction model occasionally files the same sentence twice (headline
   // and brandMessage). Rendering it twice reads as a design mistake.
   const seen = new Set<string>();
-  return lines.filter((line) => {
-    const key = line.text.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (seen.has(key)) return false;
+  const deduped = lines.filter((line) => {
+    const key = line.text.toLowerCase().replace(/[^\p{L}\p{N}%]/gu, '');
+    if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+
+  return applyCopyPlan(deduped, copyPlan, requiredClaims);
+}
+
+/**
+ * Trims the authored copy down to what the creative idea asked for.
+ *
+ * Order matters: roles are kept in the plan's own reading order, so a plan of
+ * ["OFFER", "HEADLINE"] genuinely leads with the offer rather than being
+ * re-sorted back into the conventional headline-first shape.
+ */
+export function applyCopyPlan(
+  lines: CampaignCopyLine[],
+  copyPlan?: CopyPlan,
+  requiredClaims: string[] = [],
+): CampaignCopyLine[] {
+  if (!copyPlan?.requiredRoles.length) return lines;
+
+  const wanted = new Set<CampaignCopyLine['role']>(copyPlan.requiredRoles);
+  const ordered: CampaignCopyLine[] = [];
+  for (const role of copyPlan.requiredRoles) {
+    for (const line of lines) {
+      if (line.role === role && !ordered.includes(line)) ordered.push(line);
+    }
+  }
+  // Anything the plan did not ask for is dropped, not appended.
+  const planned = ordered.filter((line) => wanted.has(line.role));
+  const capped = planned.slice(0, Math.max(1, copyPlan.maxTextElements));
+
+  return keepRequiredFacts(capped, lines, requiredClaims);
+}
+
+/**
+ * Restores any line the trim removed that carries a hard campaign fact.
+ *
+ * A minimal design is a legitimate choice; losing the member's stated offer is
+ * not, and the intent-fidelity check downstream would fail the whole render
+ * rather than tell anyone why.
+ *
+ * Two independent safety nets, both generic. The member's own `requiredClaims`
+ * are matched directly, which covers a named occasion, a venue or anything else
+ * they insisted on. The structural pattern catches a fact that survives only in
+ * a rephrased line — a percentage, a currency amount, a time or a date — so it
+ * works for every kind of campaign without this file ever knowing what any
+ * particular campaign is about.
+ */
+const CARRIES_HARD_FACT =
+  /\d+\s*%|(?:[$£€₹]\s?\d)|\b\d{1,2}\s*(?::\s*\d{2}|[ap]\.?m\.?)|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+
+const normalise = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}%]+/gu, ' ').trim();
+
+export function keepRequiredFacts(
+  kept: CampaignCopyLine[],
+  all: CampaignCopyLine[],
+  requiredClaims: string[] = [],
+): CampaignCopyLine[] {
+  const result = [...kept];
+  const covered = () => result.map((line) => normalise(line.text)).join(' ');
+
+  for (const line of all) {
+    if (result.includes(line)) continue;
+    if (CARRIES_HARD_FACT.test(line.text)) {
+      result.push(line);
+      continue;
+    }
+    // A claim already carried by a surviving line needs no second copy of itself.
+    const claim = requiredClaims.find((c) => {
+      const needle = normalise(c);
+      return needle.length > 0 && normalise(line.text).includes(needle) && !covered().includes(needle);
+    });
+    if (claim) result.push(line);
+  }
+  return result;
 }
 
 const ROLE_GUIDANCE: Record<CampaignCopyLine['role'], string> = {
@@ -220,31 +329,29 @@ export function buildCampaignCreativePrompt(context: CampaignCreativeContext): s
 
   const copyBlock = copy.length
     ? [
-        'THE EXACT WORDS ON THIS CREATIVE. Reproduce each string character for character, spelled exactly as written between the quotation marks. Do not translate, rephrase, shorten, expand, correct, or re-punctuate any of them. Do not add ANY other word, letter, number, label, caption, watermark, or signature that is not listed here:',
-        ...copy.map(
-          (line, index) => `  ${index + 1}. ${line.role} — "${line.text}"  (${ROLE_GUIDANCE[line.role]})`,
-        ),
-        `Exactly ${copy.length} text element${copy.length === 1 ? '' : 's'} appear${copy.length === 1 ? 's' : ''} on this creative. No more.`,
-      ].join('\n')
+      'THE EXACT WORDS ON THIS CREATIVE. Reproduce each string character for character, spelled exactly as written between the quotation marks. Do not translate, rephrase, shorten, expand, correct, or re-punctuate any of them. Do not add ANY other word, letter, number, label, caption, watermark, or signature that is not listed here:',
+      ...copy.map(
+        (line, index) => `  ${index + 1}. ${line.role} — "${line.text}"  (${ROLE_GUIDANCE[line.role]})`,
+      ),
+      `Exactly ${copy.length} text element${copy.length === 1 ? '' : 's'} appear${copy.length === 1 ? 's' : ''} on this creative. No more.`,
+    ].join('\n')
     : 'This creative carries NO text at all. Do not render any words, letters, numerals, labels, or typography anywhere in the image — the idea communicates visually.';
 
   const requirementsBlock = intent?.requiredClaims.length
     ? `NON-NEGOTIABLE: the finished creative must clearly communicate ${intent.requiredClaims
-        .map((claim) => `"${claim}"`)
-        .join(', ')}. These are the member's own stated requirements and are already carried by the copy above — render that copy legibly and prominently enough that a viewer takes them in at a glance. Never omit, abbreviate, or restyle them into illegibility.`
+      .map((claim) => `"${claim}"`)
+      .join(', ')}. These are the member's own stated requirements and are already carried by the copy above — render that copy legibly and prominently enough that a viewer takes them in at a glance. Never omit, abbreviate, or restyle them into illegibility.`
     : null;
 
+  const logoZone = layout?.logoPlacement || creativeDna.logoTreatment;
   const logoBlock = hasLogo
-    ? `LOGO: a real brand logo file is composited onto this creative afterward, in the ${describeLogoZone(
-        layout?.logoPlacement || creativeDna.logoTreatment || 'bottom-right',
-      )} area. Leave that area as plain, calm background — no text, no busy detail, no graphic element there, and NO box, frame, plate, chip, or container drawn to "hold" the logo; the logo file arrives with its own shape. Do NOT draw, letter, invent, approximate, or place any logo, wordmark, monogram, badge, emblem, or brand signature yourself, anywhere in the image.`
+    ? `LOGO: a real brand logo file is composited onto this creative afterward${logoZone ? `, in the ${describeLogoZone(logoZone)} area` : ''}. ${logoZone ? 'Leave that area' : 'Leave a calm area of the composition free for it'} — no text, no busy detail, no graphic element there, and NO box, frame, plate, chip, or container drawn to "hold" the logo; the logo file arrives with its own shape. Do NOT draw, letter, invent, approximate, or place any logo, wordmark, monogram, badge, emblem, or brand signature yourself, anywhere in the image.`
     : 'LOGO: this creative has no logo. Do not draw or invent a logo, wordmark, monogram, badge, emblem, or brand signature anywhere in the image.';
 
   const lines = [
     'You are a senior graphic designer finishing a social campaign creative.',
     '',
-    `THE ATTACHED IMAGE IS THE CREATIVE'S VISUAL FOUNDATION AND IS ALREADY APPROVED.${
-      hasProductAssets ? ' (The first attached image is that foundation; any further attachments are the member\'s real product/reference photos.)' : ''
+    `THE ATTACHED IMAGE IS THE CREATIVE'S VISUAL FOUNDATION AND IS ALREADY APPROVED.${hasProductAssets ? ' (The first attached image is that foundation; any further attachments are the member\'s real product/reference photos.)' : ''
     } Keep its scene, subject, framing, materials, colour and light. Do not replace the subject, restage the shot, change the setting, or generate a different photograph — you are designing ON TOP OF this exact image, the way a designer lays out a page over a supplied photo. Reframing, extending the canvas, colour-grading to suit the layout and adding design surfaces (bands, panels, scrims, frames, texture) are all fine; inventing a new picture is not.`,
     '',
     `THE CAMPAIGN: ${direction.concept}. ${direction.visualStory}`,
