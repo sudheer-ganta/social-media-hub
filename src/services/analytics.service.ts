@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { API_BASE_URL, type AccountContext } from "@/constants/integrations";
 
 /**

@@ -1,4 +1,4 @@
-import type { ReferenceDesignRecipe } from '../types';
+import type { CompositionArchetype, GraphicDesignConcept, CompositionIntent, ImageCapabilities, ReferenceDesignRecipe } from '../types';
 import type { BaseFontStack } from '../typography/font-selector';
 import { fitText, type CtaSpec, type TextBlockSpec } from './primitives';
 
@@ -46,14 +46,18 @@ export type TextRole = 'headline' | 'support' | 'brandMessage' | 'secondaryInfo'
 export type PlannedBlock =
   | { kind: 'scrim'; rect: Rect; direction: 'up' | 'down'; maxOpacity: number; color: string }
   | { kind: 'footer'; rect: Rect; style: 'torn-paper' | 'solid-band' | 'hairline'; fill: string }
+  | { kind: 'panel'; rect: Rect; fill: string; stroke?: string; strokeWidth?: number; radius?: number; rotationDeg?: number; offsetShadow?: boolean }
   | { kind: 'text'; role: TextRole; rect: Rect; spec: TextBlockSpec }
-  | { kind: 'badge'; rect: Rect; text: string; fontSize: number; fontFamily: string; fill: string; textFill: string; shapeLanguage?: 'organic' | 'geometric' | 'editorial-rules' | 'none' }
+  | { kind: 'badge'; rect: Rect; text: string; fontSize: number; fontFamily: string; fill: string; textFill: string; shapeLanguage?: 'organic' | 'geometric' | 'editorial-rules' | 'none'; rotationDeg?: number }
   | { kind: 'cta'; rect: Rect; spec: CtaSpec }
   | { kind: 'logo'; rect: Rect; opacity: number }
-  | { kind: 'underline'; rect: Rect; stroke: string; strokeWidth: number }
+  | { kind: 'underline'; rect: Rect; stroke: string; strokeWidth: number; rotationDeg?: number }
   | { kind: 'divider'; rect: Rect; stroke: string; opacity: number }
   | { kind: 'border'; style: 'hairline' | 'thick' | 'inset-frame'; stroke: string }
-  | { kind: 'texture'; texture: 'paper-grain' | 'film-grain' | 'halftone' | 'noise' };
+  | { kind: 'texture'; texture: 'paper-grain' | 'film-grain' | 'halftone' | 'noise' }
+  | { kind: 'tape'; rect: Rect; rotationDeg?: number; color?: string; opacity?: number }
+  | { kind: 'stamp'; rect: Rect; text: string; rotationDeg?: number; borderStyle?: 'dashed' | 'solid' | 'circle' | 'double'; fill?: string; stroke?: string; fontFamily?: string; fontSize?: number }
+  | { kind: 'handwritten-note'; rect: Rect; text: string; fontFamily?: string; rotationDeg?: number; fill?: string; fontSize?: number };
 
 export interface LayoutPlan {
   canvas: { width: number; height: number };
@@ -61,9 +65,19 @@ export interface LayoutPlan {
   paper: string;
   /** Where the generated visual goes, normalized. */
   imageRect: Rect;
+  /** Optional slight rotation of the photographic element for physical/tactile imperfection (±1–3 deg). */
+  imageRotationDeg?: number;
+  /** Whether the image has an offset shadow backing panel. */
+  imageShadow?: boolean;
   blocks: PlannedBlock[];
   /** Human-readable one-liner for logs/QA — which structural choices this plan made. */
   structure: string;
+  /** The deterministic composition archetype that produced this layout geometry. */
+  archetype?: CompositionArchetype;
+  /** The graphic design concept guiding this layout. */
+  concept?: GraphicDesignConcept;
+  /** The bold art-direction decisions in this creative. */
+  artDirectionDecisions?: string[];
 }
 
 // ─── Design System Defaults ──────────────────────────────────────────────────
@@ -312,17 +326,47 @@ export function resolvePalette(
   recipePalette: string[],
   directionPalette: string[] = [],
 ): BrandPalette {
-  const pick = (colors: string[], accentBySaturation: boolean): BrandPalette | null => {
+  const pick = (colors: string[], isRecipe: boolean): BrandPalette | null => {
     const valid = colors.filter((c) => /^#[0-9a-f]{6}$/i.test(c.trim()));
     if (valid.length === 0) return null;
     const sorted = [...valid].sort((a, b) => luminance(a) - luminance(b));
-    // Strict ink luminance constraint to avoid low contrast body colors
-    const ink = luminance(sorted[0]) < DESIGN_SYSTEM_DEFAULTS.inkMaxLuminance ? sorted[0] : NEUTRAL.ink;
-    const paper = luminance(sorted[sorted.length - 1]) > DESIGN_SYSTEM_DEFAULTS.paperMinLuminance ? sorted[sorted.length - 1] : NEUTRAL.paper;
-    const accent = accentBySaturation ? [...valid].sort((a, b) => saturation(b) - saturation(a))[0] : valid[0];
+
+    // When a multi-color recipe palette is provided (e.g. from Style DNA [paper, ink, accent]):
+    if (isRecipe && valid.length >= 2) {
+      const paper = valid[0];
+      let ink = valid[1];
+      if (Math.abs(luminance(ink) - luminance(paper)) < 0.25) {
+        ink = luminance(paper) < 0.45 ? sorted[sorted.length - 1] : sorted[0];
+      }
+      const accent = valid.length >= 3 ? valid[2] : sorted[0];
+      return { ink, paper, accent };
+    }
+
+    if (valid.length === 1) {
+      const ink = luminance(valid[0]) < DESIGN_SYSTEM_DEFAULTS.inkMaxLuminance ? valid[0] : NEUTRAL.ink;
+      const paper = luminance(valid[0]) > DESIGN_SYSTEM_DEFAULTS.paperMinLuminance ? valid[0] : NEUTRAL.paper;
+      return { ink, paper, accent: valid[0] };
+    }
+
+    // Direction or multi-brand palette:
+    // Paper from lightest, ink from darkest, accent from most saturated
+    const ink = sorted[0];
+    const paper = sorted[sorted.length - 1];
+    const accent = [...valid].sort((a, b) => saturation(b) - saturation(a))[0] ?? valid[0];
     return { ink, paper, accent };
   };
-  return pick(brandColors, false) ?? pick(recipePalette, true) ?? pick(directionPalette, true) ?? NEUTRAL;
+
+  const brandPick = pick(brandColors, false);
+  if (brandPick) {
+    return {
+      ...brandPick,
+      accent: brandColors[0],
+      paper: brandColors.length === 1 ? NEUTRAL.paper : brandPick.paper,
+      ink: brandColors.length === 1 ? NEUTRAL.ink : brandPick.ink,
+    };
+  }
+
+  return pick(recipePalette, true) ?? pick(directionPalette, false) ?? NEUTRAL;
 }
 
 /** An accent that would vanish against this fill falls back to ink — a CTA must never be invisible. */
@@ -387,6 +431,16 @@ export interface LayoutPlanInput {
   typography: BaseFontStack;
   /** Accent font for the interactive-support badge, when the style profile offered one. */
   accentFontFamily?: string;
+  /** The deterministic composition archetype driving layout geometry. */
+  compositionArchetype?: CompositionArchetype;
+  /** Image capabilities, e.g. whether transparency/cutout is available. */
+  capabilities?: ImageCapabilities;
+  /** Graphic design concept defining the primary visual idea. */
+  graphicConcept?: GraphicDesignConcept;
+  /** Dynamic composition intent derived from the concept and Style DNA. */
+  compositionIntent?: CompositionIntent;
+  /** Optional deterministic seed for layout variations within the same archetype. */
+  seed?: number;
 }
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
@@ -395,6 +449,1757 @@ interface StackItem {
   height: number;
   gapAfter: number;
   place: (topY: number) => void;
+}
+
+interface LayoutPlanCtx {
+  w: number;
+  h: number;
+  m: number;
+  gap: number;
+  bottomSafe: number;
+  norm: (x: number, y: number, bw: number, bh: number) => Rect;
+  fonts: {
+    headline: string;
+    body: string;
+    headlineWeight: number;
+    bodyWeight: number;
+    headlineCharWidth: number;
+    lineHeightMult: number;
+    letterSpacing?: number;
+    headlineLineHeight: number;
+    headlineLetterSpacing?: number;
+    supportLineHeight: number;
+    supportLetterSpacing?: number;
+  };
+  characterScale: number;
+  densityScale: number;
+  headlineSize: number;
+  headlineMaxLines: number;
+  headlineRotation: number;
+  headlineUpper: boolean;
+  supportUpper: boolean;
+  supportSize: number;
+  brandMsgSize: number;
+  secondarySize: number;
+  ctaFontSize: number;
+  ctaH: number;
+  tone: 'light' | 'dark';
+  concept: GraphicDesignConcept;
+}
+
+function placeArchetypeLogo(
+  w: number,
+  h: number,
+  m: number,
+  bottomSafe: number,
+  recipe: ReferenceDesignRecipe,
+  blocks: PlannedBlock[],
+  norm: (x: number, y: number, bw: number, bh: number) => Rect,
+  preferredCorner: 'top-right' | 'top-left' | 'bottom-right' = 'top-right',
+) {
+  const size = w * LAYOUT_CONFIG.logo.cornerSizeRatio;
+  const candidates =
+    preferredCorner === 'top-right'
+      ? [
+          { x: w - m - size, y: m * 0.8 },
+          { x: m, y: m * 0.8 },
+          { x: w - m - size, y: h - m - size - bottomSafe },
+          { x: m, y: h - m - size - bottomSafe },
+        ]
+      : [
+          { x: m, y: m * 0.8 },
+          { x: w - m - size, y: m * 0.8 },
+          { x: m, y: h - m - size - bottomSafe },
+          { x: w - m - size, y: h - m - size - bottomSafe },
+        ];
+
+  const occupied = blocks.filter((b): b is Extract<PlannedBlock, { rect: Rect }> => 'rect' in b && SOLID_KINDS.has(b.kind));
+  const spot = candidates.find((c) => {
+    const rect = norm(c.x, c.y, size, size);
+    return occupied.every((b) => overlapArea(rect, b.rect) <= LAYOUT_CONFIG.collisionThreshold);
+  }) ?? candidates[0];
+
+  blocks.push({ kind: 'logo', rect: norm(spot.x, spot.y, size, size), opacity: 1 });
+}
+
+/**
+ * Resolves or synthesizes a GraphicDesignConcept.
+ * If input.graphicConcept was provided by the AI Creative Director, honors it.
+ * Otherwise, synthesizes an art-directed concept based on archetype and style.
+ */
+export function resolveGraphicDesignConcept(input: LayoutPlanInput): GraphicDesignConcept {
+  if (input.graphicConcept) {
+    return {
+      ...input.graphicConcept,
+      elementsToOmit: input.graphicConcept.elementsToOmit ?? [],
+      graphicDevices: input.graphicConcept.graphicDevices ?? [],
+    };
+  }
+
+  const archetype = input.compositionArchetype ?? input.recipe.compositionArchetype ?? 'FULL_BLEED_TYPE';
+
+  switch (archetype) {
+    case 'TYPOGRAPHIC_POSTER':
+      return {
+        conceptName: 'Monumental Type & Tactile Subject',
+        visualIdea: 'Oversized, sculptural typography dominates the poster while photography acts as a small tactile artifact held with tape.',
+        hero: 'typography',
+        imageRole: 'small-tactile-object',
+        typographyRole: 'monumental-hero',
+        scaleStrategy: 'extreme-contrast',
+        compositionStrategy: 'typographic-sculpture',
+        imperfection: 'slight image tilt, washi tape, word offsets',
+        graphicDevices: ['tape', 'stamp'],
+        elementsToOmit: ['cta', 'divider', 'footer'],
+      };
+    case 'COLLAGE_LAYERED':
+      return {
+        conceptName: 'Raw Kitchen Noticeboard',
+        visualIdea: 'Layered collage of physical paper fragments, tilted photograph held with tape, postal ink stamp, and annotations.',
+        hero: 'graphic-object',
+        imageRole: 'small-tactile-object',
+        typographyRole: 'word-stack',
+        scaleStrategy: 'layered-hierarchy',
+        compositionStrategy: 'physical-collage',
+        imperfection: 'offset paper layers, slight rotation, tape, stamp, rough underline',
+        graphicDevices: ['tape', 'stamp', 'handwritten-note', 'offset-panel'],
+        elementsToOmit: ['cta', 'divider', 'footer'],
+      };
+    case 'NEGATIVE_SPACE':
+      return {
+        conceptName: 'Radical White Space',
+        visualIdea: 'A deliberate, vast field of empty paper space where a small off-center photograph and delicate type create intense focus.',
+        hero: 'white-space',
+        imageRole: 'offset-crop',
+        typographyRole: 'restrained-footnote',
+        scaleStrategy: 'extreme-contrast',
+        compositionStrategy: 'negative-space-field',
+        imperfection: 'asymmetric placement, generous breathing room',
+        graphicDevices: [],
+        elementsToOmit: ['cta', 'divider', 'footer', 'description'],
+      };
+    case 'EDITORIAL_OVERLAP':
+      return {
+        conceptName: 'Boundary Crosscut',
+        visualIdea: 'Deliberate tension where typography crosses the boundary of an edge-bleeding photograph.',
+        hero: 'typography',
+        imageRole: 'edge-bleed',
+        typographyRole: 'kinetic-overlap',
+        scaleStrategy: 'dominant-hero',
+        compositionStrategy: 'boundary-crossover',
+        imperfection: 'asymmetric margins, boundary slice',
+        graphicDevices: ['rough-underline'],
+        elementsToOmit: ['divider', 'footer'],
+      };
+    case 'FULL_BLEED_TYPE':
+      return {
+        conceptName: 'Monumental Integrated Bleed',
+        visualIdea: 'Full-canvas imagery with monumental typography integrated directly into the composition.',
+        hero: 'image',
+        imageRole: 'full-bleed-canvas',
+        typographyRole: 'monumental-hero',
+        scaleStrategy: 'extreme-contrast',
+        compositionStrategy: 'asymmetric-tension',
+        elementsToOmit: ['divider', 'footer'],
+      };
+    case 'PRODUCT_CUTOUT':
+      return {
+        conceptName: 'Floating Cutout Focus',
+        visualIdea: 'Isolated hero subject floating on an offset backdrop panel with rotated stamp badge.',
+        hero: 'image',
+        imageRole: 'floating-fragment',
+        scaleStrategy: 'dominant-hero',
+        graphicDevices: ['stamp'],
+        elementsToOmit: ['divider', 'footer'],
+      };
+    case 'ASYMMETRIC_GRID':
+      return {
+        conceptName: 'Editorial Folio Column',
+        visualIdea: 'Modern asymmetric two-column tension with structured gutters and folio detail.',
+        hero: 'typography',
+        imageRole: 'offset-crop',
+        scaleStrategy: 'layered-hierarchy',
+        compositionStrategy: 'asymmetric-tension',
+        elementsToOmit: ['footer'],
+      };
+    case 'SPLIT_COMPOSITION':
+      return {
+        conceptName: 'Graphic Color Block Tension',
+        visualIdea: 'High-contrast graphic color block dividing the canvas with bold typographic weight.',
+        hero: 'graphic-object',
+        imageRole: 'offset-crop',
+        scaleStrategy: 'dominant-hero',
+        compositionStrategy: 'split-contrast',
+        elementsToOmit: ['divider', 'footer'],
+      };
+    case 'IMAGE_AS_BACKGROUND':
+      return {
+        conceptName: 'Atmospheric Postcard Panel',
+        visualIdea: 'Atmospheric scene acting as a tactile backdrop for a floating editorial paper panel.',
+        hero: 'graphic-object',
+        imageRole: 'subordinate-texture',
+        scaleStrategy: 'layered-hierarchy',
+        graphicDevices: ['tape'],
+        elementsToOmit: ['divider', 'footer'],
+      };
+    case 'FRAME_WITH_OVERLAP':
+      return {
+        conceptName: 'Architectural Frame Puncture',
+        visualIdea: 'A structured frame boundary where bold typography intentionally punctures and breaks the margin lines.',
+        hero: 'typography',
+        imageRole: 'floating-fragment',
+        scaleStrategy: 'dominant-hero',
+        compositionStrategy: 'boundary-crossover',
+        elementsToOmit: ['footer'],
+      };
+    default:
+      return {
+        conceptName: 'Art-Directed Creative',
+        visualIdea: 'Contemporary art-directed composition with distinct scale contrast.',
+        hero: 'typography',
+        imageRole: 'offset-crop',
+        elementsToOmit: ['divider', 'footer'],
+      };
+  }
+}
+
+function buildFullBleedTypePlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, tone, headlineUpper, supportUpper, characterScale, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+  const imageRect = norm(0, 0, w, h);
+  const lightPhoto = tone === 'light';
+
+  const headlineSize = Math.min(w * 0.092 * characterScale, (h * 0.28) / 2.0);
+  const bodyColW = w - m * 2.4;
+  const bodyX = m * 1.4;
+
+  let stackH = 0;
+  const textItems: Array<{ height: number; gap: number; place: (y: number) => void }> = [];
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, bodyColW, headlineSize, 3, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * fonts.headlineLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    textItems.push({
+      height: blockH,
+      gap: gap * 0.8,
+      place: (topY) => {
+        blocks.push({
+          kind: 'text',
+          role: 'headline',
+          rect: norm(bodyX, topY, Math.min(bodyColW, actualW), blockH),
+          spec: {
+            lines: fit.lines,
+            x: bodyX,
+            y: topY + fit.fontSize * 0.88,
+            fontSize: fit.fontSize,
+            lineHeight,
+            fontFamily: fonts.headline,
+            fill: adjustContrast(lightPhoto ? palette.ink : DESIGN_SYSTEM_DEFAULTS.fallbackLightText, lightPhoto ? '#ffffff' : '#000000', 4.5),
+            fontWeight: fonts.headlineWeight,
+            align: 'left',
+            shadow: !lightPhoto,
+            letterSpacing: fonts.headlineLetterSpacing,
+          },
+        });
+      },
+    });
+    stackH += blockH;
+  }
+
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, bodyColW, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * fonts.supportLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+    textItems.push({
+      height: blockH,
+      gap: gap * 0.8,
+      place: (topY) => {
+        blocks.push({
+          kind: 'text',
+          role: 'support',
+          rect: norm(bodyX, topY, Math.min(bodyColW, actualW), blockH),
+          spec: {
+            lines: fit.lines,
+            x: bodyX,
+            y: topY + fit.fontSize * 0.85,
+            fontSize: fit.fontSize,
+            lineHeight,
+            fontFamily: fonts.body,
+            fill: adjustContrast(lightPhoto ? palette.ink : DESIGN_SYSTEM_DEFAULTS.fallbackLightText, lightPhoto ? '#ffffff' : '#000000', 4.5),
+            align: 'left',
+            shadow: !lightPhoto,
+            opacity: 0.95,
+          },
+        });
+      },
+    });
+    stackH += gap * 0.8 + blockH;
+  }
+
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 2.0;
+    textItems.push({
+      height: ctx.ctaH,
+      gap: 0,
+      place: (topY) => {
+        blocks.push({
+          kind: 'cta',
+          rect: norm(bodyX, topY, ctaW, ctx.ctaH),
+          spec: {
+            text: content.cta as string,
+            x: bodyX,
+            y: topY,
+            width: ctaW,
+            height: ctx.ctaH,
+            fontSize: fit.fontSize,
+            fontFamily: fonts.body,
+            shape: 'annotation',
+            fill: visibleAccent(palette, lightPhoto ? '#ffffff' : '#000000'),
+            textFill: lightPhoto ? palette.ink : '#ffffff',
+          },
+        });
+      },
+    });
+    stackH += gap * 0.8 + ctx.ctaH;
+  }
+
+  const cursor = Math.max(h * 0.52, h - stackH - m * 1.5 - bottomSafe);
+  const scrimTop = Math.max(0, cursor - m * 1.2);
+  blocks.unshift({
+    kind: 'scrim',
+    rect: norm(0, scrimTop, w, h - scrimTop),
+    direction: 'up',
+    maxOpacity: lightPhoto ? 0.6 : 0.72,
+    color: lightPhoto ? DESIGN_SYSTEM_DEFAULTS.lightScrimColor : DESIGN_SYSTEM_DEFAULTS.darkScrimColor,
+  });
+
+  let currentY = cursor;
+  for (let i = 0; i < textItems.length; i++) {
+    textItems[i].place(currentY);
+    currentY += textItems[i].height + (i < textItems.length - 1 ? textItems[i].gap : 0);
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-right');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'monumental-integrated-bleed',
+      'extreme-scale-contrast',
+      'scrim-integrated-lighting',
+    ],
+    structure: `FULL_BLEED_TYPE/full-bleed/${recipe.typographyFamily}`,
+    archetype: 'FULL_BLEED_TYPE',
+  };
+}
+
+function buildEditorialOverlapPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  // Edge-bleeding photography crop
+  const imgW = w * 0.90;
+  const imgH = h * 0.54;
+  const imageRect = norm(0, 0, imgW, imgH);
+
+  let headlineBlockH = 0;
+  let headlineTopY = imgH - h * 0.08;
+  const bodyX = m * 1.4;
+  const bodyColW = w - m * 2.8;
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, bodyColW, ctx.headlineSize, 3, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * fonts.headlineLineHeight;
+    headlineBlockH = fit.lines.length * lineHeight;
+    // Overlap: 50% across photo, 50% across paper
+    headlineTopY = imgH - headlineBlockH * 0.50;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(bodyX, headlineTopY, Math.min(bodyColW, actualW), headlineBlockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: headlineTopY + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        shadow: true,
+        letterSpacing: fonts.headlineLetterSpacing,
+      },
+    });
+
+    // Editorial rough underline
+    const underlineW = Math.min(actualW * 0.8, bodyColW * 0.7);
+    blocks.push({
+      kind: 'underline',
+      rect: norm(bodyX, headlineTopY + headlineBlockH + 6, underlineW, 3),
+      stroke: palette.accent,
+      style: 'rough',
+    });
+  }
+
+  let cursor = headlineTopY + headlineBlockH + gap * 1.0;
+
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, bodyColW * 0.85, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * fonts.supportLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(bodyX, cursor, Math.min(bodyColW * 0.85, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.85,
+        letterSpacing: 0.8,
+      },
+    });
+    cursor += blockH + gap * 0.8;
+  }
+
+  if (content.secondaryInfo && !omit.has('secondaryInfo')) {
+    const fit = fitText(content.secondaryInfo, bodyColW, ctx.secondarySize, 1, BODY_CHAR_WIDTH);
+    const blockH = fit.fontSize * 1.4;
+    const actualW = fit.lines[0].length * fit.fontSize * BODY_CHAR_WIDTH;
+    blocks.push({
+      kind: 'text',
+      role: 'secondaryInfo',
+      rect: norm(bodyX, cursor, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight: fit.fontSize * 1.3,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.75,
+        letterSpacing: 1.2,
+      },
+    });
+    cursor += blockH + gap * 0.8;
+  }
+
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 1.8;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(bodyX, cursor, ctaW, ctx.ctaH),
+      spec: {
+        text: content.cta,
+        x: bodyX,
+        y: cursor,
+        width: ctaW,
+        height: ctx.ctaH,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, palette.paper),
+        textFill: palette.ink,
+      },
+    });
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-right');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'edge-bleeding-photo-crop',
+      'boundary-crossing-headline',
+      'editorial-scale-contrast',
+    ],
+    structure: `EDITORIAL_OVERLAP/editorial-frame/${recipe.typographyFamily}`,
+    archetype: 'EDITORIAL_OVERLAP',
+  };
+}
+
+function buildProductCutoutPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+  const isCutout = input.capabilities?.isCutout === true;
+
+  let imageRect: Rect;
+  if (isCutout) {
+    const imgW = w * 0.64;
+    const imgH = h * 0.52;
+    const imgX = w * 0.18;
+    const imgY = h * 0.28;
+    imageRect = norm(imgX, imgY, imgW, imgH);
+
+    // Subtle background accent panel
+    blocks.push({
+      kind: 'panel',
+      rect: norm(w * 0.14, h * 0.24, w * 0.72, h * 0.58),
+      fill: palette.paper,
+      radius: 8,
+    });
+
+    const bodyColW = w - m * 2.4;
+    const bodyX = m * 1.2;
+    let topCursor = m * 1.2;
+
+    if (content.headline && !omit.has('headline')) {
+      const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+      const fit = fitText(text, bodyColW, ctx.headlineSize * 0.95, 2, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+      const lineHeight = fit.fontSize * fonts.headlineLineHeight;
+      const blockH = fit.lines.length * lineHeight;
+      const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+      const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+      blocks.push({
+        kind: 'text',
+        role: 'headline',
+        rect: norm(bodyX, topCursor, Math.min(bodyColW, actualW), blockH),
+        spec: {
+          lines: fit.lines,
+          x: bodyX,
+          y: topCursor + fit.fontSize * 0.88,
+          fontSize: fit.fontSize,
+          lineHeight,
+          fontFamily: fonts.headline,
+          fill: adjustContrast(palette.ink, palette.paper, 4.5),
+          fontWeight: fonts.headlineWeight,
+          align: 'left',
+          letterSpacing: fonts.headlineLetterSpacing,
+        },
+      });
+      topCursor += blockH + gap * 0.6;
+    }
+
+    if (content.support && !omit.has('description') && !omit.has('support')) {
+      const text = supportUpper ? content.support.toUpperCase() : content.support;
+      const fit = fitText(text, bodyColW * 0.8, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+      const lineHeight = fit.fontSize * fonts.supportLineHeight;
+      const blockH = fit.lines.length * lineHeight;
+      const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+      const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+      blocks.push({
+        kind: 'text',
+        role: 'support',
+        rect: norm(bodyX, topCursor, Math.min(bodyColW * 0.8, actualW), blockH),
+        spec: {
+          lines: fit.lines,
+          x: bodyX,
+          y: topCursor + fit.fontSize * 0.85,
+          fontSize: fit.fontSize,
+          lineHeight,
+          fontFamily: fonts.body,
+          fill: adjustContrast(palette.ink, palette.paper, 4.5),
+          align: 'left',
+          opacity: 0.85,
+        },
+      });
+    }
+
+    if ((content.eventBadge || content.supportIsInteraction) && !omit.has('badge')) {
+      const badgeText = content.eventBadge ?? (content.supportIsInteraction ? content.support : 'NEW') ?? 'NEW';
+      const badgeFont = ctx.supportSize * 0.9;
+      const badgeW = badgeText.length * badgeFont * 0.62 + badgeFont * 2;
+      const badgeH = badgeFont * 2.2;
+      const badgeFill = visibleAccent(palette, palette.paper);
+      blocks.push({
+        kind: 'badge',
+        rect: norm(imgX + imgW - badgeW * 0.8, imgY + imgH * 0.08, badgeW, badgeH),
+        text: badgeText,
+        fontSize: badgeFont,
+        fontFamily: input.accentFontFamily ?? fonts.body,
+        fill: badgeFill,
+        textFill: adjustContrast(onColor(badgeFill, palette), badgeFill, 4.5),
+        shapeLanguage: 'geometric',
+      });
+    }
+
+    if (content.cta && !omit.has('cta')) {
+      const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+      const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 2.0;
+      const ctaY = Math.min(imgY + imgH + gap, h - ctx.ctaH - m - bottomSafe);
+      blocks.push({
+        kind: 'cta',
+        rect: norm(bodyX, ctaY, ctaW, ctx.ctaH),
+        spec: {
+          text: content.cta,
+          x: bodyX,
+          y: ctaY,
+          width: ctaW,
+          height: ctx.ctaH,
+          fontSize: fit.fontSize,
+          fontFamily: fonts.body,
+          shape: 'annotation',
+          fill: visibleAccent(palette, palette.paper),
+          textFill: palette.ink,
+        },
+      });
+    }
+  } else {
+    // Non-cutout fallback
+    const imgH = h * 0.50;
+    imageRect = norm(m, m * 1.2, w - m * 2, imgH);
+    let cursor = m * 1.2 + imgH + gap;
+    if (content.headline && !omit.has('headline')) {
+      const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+      const fit = fitText(text, w - m * 2, ctx.headlineSize, 2, fonts.headlineCharWidth);
+      const blockH = fit.lines.length * fit.fontSize * fonts.headlineLineHeight;
+      blocks.push({
+        kind: 'text',
+        role: 'headline',
+        rect: norm(m, cursor, w - m * 2, blockH),
+        spec: {
+          lines: fit.lines,
+          x: m,
+          y: cursor + fit.fontSize * 0.88,
+          fontSize: fit.fontSize,
+          lineHeight: fit.fontSize * fonts.headlineLineHeight,
+          fontFamily: fonts.headline,
+          fill: palette.ink,
+          align: 'left',
+        },
+      });
+      cursor += blockH + gap;
+    }
+    if (content.cta && !omit.has('cta')) {
+      const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+      const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 2.0;
+      blocks.push({
+        kind: 'cta',
+        rect: norm(m, cursor, ctaW, ctx.ctaH),
+        spec: {
+          text: content.cta,
+          x: m,
+          y: cursor,
+          width: ctaW,
+          height: ctx.ctaH,
+          fontSize: fit.fontSize,
+          fontFamily: fonts.body,
+          shape: 'annotation',
+          fill: visibleAccent(palette, palette.paper),
+          textFill: palette.ink,
+        },
+      });
+    }
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-left');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'floating-subject-focus',
+      'offset-backdrop-panel',
+      'angled-stamp-badge',
+    ],
+    structure: isCutout
+      ? `PRODUCT_CUTOUT/cutout-floating/${recipe.typographyFamily}`
+      : `PRODUCT_CUTOUT/spotlight/${recipe.typographyFamily}`,
+    archetype: 'PRODUCT_CUTOUT',
+  };
+}
+
+function buildAsymmetricGridPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  const gridGap = m * 0.75;
+  const col1W = (w - m * 2 - gridGap) * 0.58;
+  const col2W = (w - m * 2 - gridGap) * 0.42;
+  const col2X = m + col1W + gridGap;
+
+  const imageRect = norm(m, m, col1W, h - m * 2 - bottomSafe);
+
+  let cursor = m * 1.3;
+
+  if (content.hasLogo && !omit.has('logo')) {
+    const size = col2W * 0.28;
+    blocks.push({
+      kind: 'logo',
+      rect: norm(col2X, m, size, size),
+      opacity: 1,
+    });
+    cursor = m + size + gap * 0.8;
+  }
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, col2W, col2W * 0.18, 4, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * 1.12;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(col2X, cursor, Math.min(col2W, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: col2X,
+        y: cursor + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        letterSpacing: fonts.headlineLetterSpacing,
+      },
+    });
+    cursor += blockH + gap * 0.9;
+  }
+
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, col2W, ctx.supportSize, 3, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * 1.3;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(col2X, cursor, Math.min(col2W, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: col2X,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.85,
+      },
+    });
+    cursor += blockH + gap * 0.9;
+  }
+
+  if (content.secondaryInfo && !omit.has('secondaryInfo')) {
+    blocks.push({
+      kind: 'divider',
+      rect: norm(col2X, cursor, col2W, 1),
+      stroke: palette.ink,
+      opacity: 0.35,
+    });
+    cursor += gap * 0.5;
+
+    const fit = fitText(content.secondaryInfo, col2W, ctx.secondarySize, 2, BODY_CHAR_WIDTH);
+    const blockH = fit.lines.length * fit.fontSize * 1.3;
+    blocks.push({
+      kind: 'text',
+      role: 'secondaryInfo',
+      rect: norm(col2X, cursor, col2W, blockH),
+      spec: {
+        lines: fit.lines,
+        x: col2X,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight: fit.fontSize * 1.3,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.75,
+        letterSpacing: 0.8,
+      },
+    });
+    cursor += blockH + gap * 0.9;
+  }
+
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, col2W, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+    const ctaY = h - m - ctx.ctaH - bottomSafe;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(col2X, ctaY, col2W, ctx.ctaH),
+      spec: {
+        text: content.cta,
+        x: col2X,
+        y: ctaY,
+        width: col2W,
+        height: ctx.ctaH,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, palette.paper),
+        textFill: palette.ink,
+      },
+    });
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'asymmetric-two-column-grid',
+      'architectural-folio-typography',
+    ],
+    structure: `ASYMMETRIC_GRID/60-40-split/${recipe.typographyFamily}`,
+    archetype: 'ASYMMETRIC_GRID',
+  };
+}
+
+function buildTypographicPosterPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, characterScale, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  // 1. Monumental Typography Hero
+  // Giant, architectural word stack with staggered line offsets
+  const headlineSize = Math.min(w * 0.12 * characterScale, (h * 0.38) / 2.0);
+  const bodyColW = w - m * 2;
+  let headlineBlockH = 0;
+  let headlineBottom = m * 1.2;
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, bodyColW, headlineSize, 3, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * 1.02;
+    headlineBlockH = fit.lines.length * lineHeight;
+    headlineBottom = m * 1.2 + headlineBlockH;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    // Stagger words for visual rhythm if multiple lines
+    const lineOffsets = fit.lines.length > 1
+      ? fit.lines.map((_, i) => Math.min(w * 0.14, i * w * 0.07))
+      : undefined;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(m, m * 1.2, Math.min(bodyColW, actualW + (lineOffsets ? lineOffsets[lineOffsets.length - 1] : 0)), headlineBlockH),
+      spec: {
+        lines: fit.lines,
+        x: m,
+        y: m * 1.2 + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        letterSpacing: -0.5,
+        lineOffsets,
+      },
+    });
+  }
+
+  // 2. Small Tactile Subject Image (tilted with soft shadow)
+  const imgW = w * 0.50;
+  const imgH = h * 0.35;
+  const imgX = w - m * 1.4 - imgW;
+  const imgY = Math.max(h * 0.36, headlineBottom + gap * 0.5);
+  const imageRect = norm(imgX, imgY, imgW, imgH);
+  const imageRotationDeg = -2.5;
+
+  // 3. Washi / Masking Tape Pin
+  const tapeW = Math.round(imgW * 0.44);
+  const tapeH = Math.max(38, Math.round(h * 0.026));
+  const tapeX = imgX + imgW * 0.28;
+  const tapeY = imgY - tapeH * 0.45;
+  blocks.push({
+    kind: 'tape',
+    rect: norm(tapeX, tapeY, tapeW, tapeH),
+    rotationDeg: -4.2,
+    color: '#f5ecd7',
+    opacity: 0.92,
+  });
+
+  // 4. Postal / Rubber Ink Stamp Graphic Device
+  const stampSize = Math.min(w * 0.22, 220);
+  const stampX = m * 1.5;
+  const stampY = imgY + imgH * 0.15;
+  const stampText = content.eventBadge ?? (content.brandMessage ? 'AUTHENTIC' : 'SEVEN SISTERS');
+  const stampStroke = adjustContrast(palette.accent, palette.paper, 3.5);
+  const stampFontSize = Math.round(stampSize * 0.16);
+  blocks.push({
+    kind: 'stamp',
+    rect: norm(stampX, stampY, stampSize, stampSize),
+    text: stampText,
+    rotationDeg: 12,
+    stroke: stampStroke,
+    fontSize: stampFontSize,
+    borderStyle: 'double',
+  });
+
+  // 5. Restrained Editorial Footnote & Supporting Metadata
+  let cursor = imgY + imgH + gap * 1.0;
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, w * 0.65, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * fonts.supportLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(m, cursor, w * 0.65, blockH),
+      spec: {
+        lines: fit.lines,
+        x: m,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.9,
+        letterSpacing: 1.2,
+      },
+    });
+    cursor += blockH + gap * 0.6;
+  }
+
+  // 6. Optional CTA — Editorial annotation, never a pill button
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize * 0.9, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 1.6;
+    const ctaY = h - m * 1.2 - ctx.ctaH * 0.85 - bottomSafe;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(m, ctaY, ctaW, ctx.ctaH * 0.85),
+      spec: {
+        text: content.cta,
+        x: m,
+        y: ctaY,
+        width: ctaW,
+        height: ctx.ctaH * 0.85,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, palette.paper),
+        textFill: palette.ink,
+      },
+    });
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-right');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    imageRotationDeg,
+    imageShadow: true,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'monumental-word-stack',
+      'tilted-tactile-photo',
+      'washi-tape-pin',
+      'editorial-rubber-stamp',
+    ],
+    structure: `TYPOGRAPHIC_POSTER/monumental-staggered/${recipe.typographyFamily}`,
+    archetype: 'TYPOGRAPHIC_POSTER',
+  };
+}
+
+function buildCollageLayeredPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  // 1. Layer 1: Background Offset Paper Panel (acts as archival sheet on the canvas)
+  const panelW = w * 0.86;
+  const panelH = h * 0.82;
+  const panelX = w * 0.07;
+  const panelY = h * 0.09;
+  blocks.push({
+    kind: 'panel',
+    rect: norm(panelX, panelY, panelW, panelH),
+    fill: palette.paper,
+    stroke: palette.ink,
+    strokeWidth: 1.5,
+    radius: 2,
+    rotationDeg: -1.5,
+    offsetShadow: true,
+  });
+
+  // 2. Layer 2: Tilted Photograph Fragment (held with tape)
+  const imgW = w * 0.58;
+  const imgH = h * 0.40;
+  const imgX = w * 0.26;
+  const imgY = h * 0.16;
+  const imageRect = norm(imgX, imgY, imgW, imgH);
+  const imageRotationDeg = 3.2;
+
+  // 3. Washi Tape Strip Pinning the Photo Corner
+  const tapeW = Math.round(imgW * 0.42);
+  const tapeH = Math.max(38, Math.round(h * 0.026));
+  const tapeX = imgX + imgW * 0.20;
+  const tapeY = imgY - tapeH * 0.45;
+  blocks.push({
+    kind: 'tape',
+    rect: norm(tapeX, tapeY, tapeW, tapeH),
+    rotationDeg: 5.8,
+    color: '#f3e8d2',
+    opacity: 0.92,
+  });
+
+  // 4. Layer 3: Editorial Rubber Stamp
+  const stampSize = Math.min(w * 0.22, 200);
+  const stampX = w * 0.09;
+  const stampY = h * 0.14;
+  const stampText = content.eventBadge ?? 'ORIGINAL';
+  const stampStroke = adjustContrast(palette.accent, palette.paper, 3.5);
+  const stampFontSize = Math.round(stampSize * 0.16);
+  blocks.push({
+    kind: 'stamp',
+    rect: norm(stampX, stampY, stampSize, stampSize),
+    text: stampText,
+    rotationDeg: -12,
+    stroke: stampStroke,
+    fontSize: stampFontSize,
+    borderStyle: 'dashed',
+  });
+
+  // 5. Layer 4: Organic Handwritten Note
+  const noteX = w * 0.10;
+  const noteY = h * 0.52;
+  blocks.push({
+    kind: 'handwritten-note',
+    rect: norm(noteX, noteY, w * 0.42, 34),
+    text: 'freshly steamed daily',
+    rotationDeg: -2.8,
+    fill: palette.ink,
+    fontSize: w * 0.032,
+  });
+
+  // 6. Typographic Headline: Bold, overlapping the lower section with slight tilt
+  let headlineTopY = Math.max(imgY + imgH * 0.72, h * 0.58);
+  const headlineX = w * 0.10;
+  const headlineColW = w * 0.80;
+  let headlineBlockH = 0;
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, headlineColW, ctx.headlineSize * 1.05, 3, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * fonts.headlineLineHeight;
+    headlineBlockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    const lineOffsets = fit.lines.length > 1
+      ? fit.lines.map((_, i) => i * w * 0.05)
+      : undefined;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(headlineX, headlineTopY, Math.min(headlineColW, actualW + (lineOffsets ? lineOffsets[lineOffsets.length - 1] : 0)), headlineBlockH),
+      spec: {
+        lines: fit.lines,
+        x: headlineX,
+        y: headlineTopY + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        rotationDeg: -1.2,
+        letterSpacing: fonts.headlineLetterSpacing,
+        lineOffsets,
+      },
+    });
+
+    // Add a rough underline under the primary headline phrase
+    const underlineW = Math.min(actualW * 0.75, headlineColW * 0.8);
+    const underlineY = headlineTopY + headlineBlockH + 4;
+    blocks.push({
+      kind: 'underline',
+      rect: norm(headlineX, underlineY, underlineW, 4),
+      stroke: palette.accent,
+      style: 'rough',
+      rotationDeg: -1.0,
+    });
+  }
+
+  let cursor = headlineTopY + headlineBlockH + gap * 1.1;
+
+  // 7. Editorial Footnote / Secondary Copy
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, headlineColW * 0.85, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * fonts.supportLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(headlineX, cursor, headlineColW * 0.85, blockH),
+      spec: {
+        lines: fit.lines,
+        x: headlineX,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.85,
+      },
+    });
+    cursor += blockH + gap * 0.8;
+  }
+
+  // 8. Optional CTA — Annotation style, no pill button
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 2.0;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(headlineX, cursor, ctaW, ctx.ctaH),
+      spec: {
+        text: content.cta,
+        x: headlineX,
+        y: cursor,
+        width: ctaW,
+        height: ctx.ctaH,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, palette.paper),
+        textFill: palette.ink,
+      },
+    });
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-left');
+  }
+
+  blocks.push({ kind: 'texture', texture: 'paper-grain' });
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    imageRotationDeg,
+    imageShadow: true,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'layered-paper-panel',
+      'tilted-photo-with-tape',
+      'postal-stamp-graphic',
+      'handwritten-annotation',
+      'physical-collage-hierarchy',
+    ],
+    structure: `COLLAGE_LAYERED/physical-collage/${recipe.typographyFamily}`,
+    archetype: 'COLLAGE_LAYERED',
+  };
+}
+
+function buildNegativeSpacePlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  // Radical white space: 55-65% pure intentional breathing room
+  // Small, quiet, intentional photograph crop offset to lower right
+  const imgW = w * 0.44;
+  const imgH = h * 0.32;
+  const imgX = w - m * 1.6 - imgW;
+  const imgY = h - m * 2.2 - imgH - bottomSafe;
+  const imageRect = norm(imgX, imgY, imgW, imgH);
+
+  let cursor = m * 2.4;
+  const bodyX = m * 1.8;
+  const bodyColW = w * 0.62;
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, bodyColW, ctx.headlineSize * 0.88, 3, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * 1.25;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(bodyX, cursor, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        letterSpacing: 1.8,
+      },
+    });
+    cursor += blockH + gap * 1.4;
+  }
+
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, bodyColW * 0.85, ctx.supportSize * 0.90, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * 1.4;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(bodyX, cursor, Math.min(bodyColW * 0.85, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.75,
+        letterSpacing: 2.0,
+      },
+    });
+    cursor += blockH + gap * 1.2;
+  }
+
+  // CTA is omitted by default in negative space to preserve purity,
+  // but if explicitly requested and not in omit, render as quiet footnote
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize * 0.85, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 1.4;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(bodyX, cursor, ctaW, ctx.ctaH * 0.75),
+      spec: {
+        text: content.cta,
+        x: bodyX,
+        y: cursor,
+        width: ctaW,
+        height: ctx.ctaH * 0.75,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, palette.paper),
+        textFill: palette.ink,
+      },
+    });
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-right');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'radical-whitespace-field',
+      'asymmetric-deliberate-margins',
+      'quiet-architectural-type',
+      'intentional-omissions',
+    ],
+    structure: `NEGATIVE_SPACE/minimal-breathing-room/${recipe.typographyFamily}`,
+    archetype: 'NEGATIVE_SPACE',
+  };
+}
+
+function buildSplitCompositionPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, characterScale, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  // Inverted Graphic Split: Bold Top Typographic Panel, Full-Bleed Bottom Photography
+  const splitH = h * 0.44;
+  const blockFill = palette.ink;
+  const textFill = adjustContrast(palette.paper, blockFill, 4.5);
+
+  blocks.push({
+    kind: 'panel',
+    rect: norm(0, 0, w, splitH),
+    fill: blockFill,
+  });
+
+  const imageRect = norm(0, splitH, w, h - splitH);
+
+  let cursor = m * 1.1;
+  const bodyX = m * 1.4;
+  const bodyColW = w - m * 2.8;
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const headlineSize = Math.min(w * 0.088 * characterScale, (splitH * 0.55) / 2.0);
+    const fit = fitText(text, bodyColW, headlineSize, 3, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * fonts.headlineLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(bodyX, cursor, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: textFill,
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        letterSpacing: fonts.headlineLetterSpacing,
+      },
+    });
+    cursor += blockH + gap * 0.6;
+  }
+
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, bodyColW * 0.85, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * fonts.supportLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(bodyX, cursor, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: textFill,
+        align: 'left',
+        opacity: 0.9,
+      },
+    });
+    cursor += blockH + gap * 0.6;
+  }
+
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 2.0;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(bodyX, cursor, ctaW, ctx.ctaH * 0.85),
+      spec: {
+        text: content.cta,
+        x: bodyX,
+        y: cursor,
+        width: ctaW,
+        height: ctx.ctaH * 0.85,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, blockFill),
+        textFill: visibleAccent(palette, blockFill),
+      },
+    });
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-right');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'inverted-bold-split-composition',
+      'high-contrast-architectural-header',
+      'full-bleed-subject-base',
+    ],
+    structure: `SPLIT_COMPOSITION/inverted-split/${recipe.typographyFamily}`,
+    archetype: 'SPLIT_COMPOSITION',
+  };
+}
+
+function buildImageAsBackgroundPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  const imageRect = norm(0, 0, w, h);
+
+  const panelX = m * 1.2;
+  const panelY = h * 0.44;
+  const panelW = w - m * 2.4;
+  const panelH = h * 0.46 - bottomSafe;
+
+  // Floating tactile paper panel with subtle rotation & shadow
+  blocks.push({
+    kind: 'panel',
+    rect: norm(panelX, panelY, panelW, panelH),
+    fill: palette.paper,
+    stroke: palette.ink,
+    strokeWidth: 1,
+    radius: 4,
+    rotationDeg: -0.8,
+    offsetShadow: true,
+  });
+
+  // Washi tape pinning top of the floating panel
+  const tapeW = Math.round(panelW * 0.32);
+  const tapeH = Math.max(36, Math.round(h * 0.025));
+  const tapeX = panelX + panelW * 0.34;
+  const tapeY = panelY - tapeH * 0.45;
+  blocks.push({
+    kind: 'tape',
+    rect: norm(tapeX, tapeY, tapeW, tapeH),
+    rotationDeg: 1.2,
+    color: '#f5ecd7',
+    opacity: 0.9,
+  });
+
+  let cursor = panelY + m * 1.0;
+  const bodyX = panelX + m * 0.9;
+  const bodyColW = panelW - m * 1.8;
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, bodyColW, ctx.headlineSize * 0.95, 3, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * fonts.headlineLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(bodyX, cursor, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        letterSpacing: fonts.headlineLetterSpacing,
+      },
+    });
+    cursor += blockH + gap * 0.7;
+  }
+
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, bodyColW, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * fonts.supportLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(bodyX, cursor, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.85,
+      },
+    });
+    cursor += blockH + gap * 0.7;
+  }
+
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, bodyColW * 0.5, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 2.0;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(bodyX, cursor, ctaW, ctx.ctaH),
+      spec: {
+        text: content.cta,
+        x: bodyX,
+        y: cursor,
+        width: ctaW,
+        height: ctx.ctaH,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, palette.paper),
+        textFill: palette.ink,
+      },
+    });
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-right');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'tactile-floating-panel',
+      'washi-tape-anchor',
+      'atmospheric-depth',
+    ],
+    structure: `IMAGE_AS_BACKGROUND/floating-panel/${recipe.typographyFamily}`,
+    archetype: 'IMAGE_AS_BACKGROUND',
+  };
+}
+
+function buildFrameWithOverlapPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): LayoutPlan {
+  const { w, h, m, gap, norm, fonts, bottomSafe, headlineUpper, supportUpper, concept } = ctx;
+  const { recipe, content, palette } = input;
+  const blocks: PlannedBlock[] = [];
+  const omit = new Set(concept.elementsToOmit);
+
+  blocks.push({
+    kind: 'border',
+    style: 'inset-frame',
+    stroke: palette.ink,
+  });
+
+  const imgX = m * 1.4;
+  const imgY = m * 2.0;
+  const imgW = w - m * 2.8;
+  const imgH = h * 0.50;
+  const imageRect = norm(imgX, imgY, imgW, imgH);
+
+  const bodyX = m * 1.6;
+  const bodyColW = w - m * 3.2;
+  const topY = m * 0.8;
+
+  if (content.headline && !omit.has('headline')) {
+    const text = headlineUpper ? content.headline.toUpperCase() : content.headline;
+    const fit = fitText(text, bodyColW, ctx.headlineSize, 2, fonts.headlineCharWidth * (headlineUpper ? 1.06 : 1));
+    const lineHeight = fit.fontSize * fonts.headlineLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * fonts.headlineCharWidth;
+
+    blocks.push({
+      kind: 'text',
+      role: 'headline',
+      rect: norm(bodyX, topY, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: topY + fit.fontSize * 0.88,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.headline,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        fontWeight: fonts.headlineWeight,
+        align: 'left',
+        shadow: true,
+        letterSpacing: fonts.headlineLetterSpacing,
+      },
+    });
+  }
+
+  let cursor = imgY + imgH + gap * 0.8;
+
+  if (content.support && !omit.has('description') && !omit.has('support')) {
+    const text = supportUpper ? content.support.toUpperCase() : content.support;
+    const fit = fitText(text, bodyColW, ctx.supportSize, 2, BODY_CHAR_WIDTH * (supportUpper ? 1.08 : 1));
+    const lineHeight = fit.fontSize * fonts.supportLineHeight;
+    const blockH = fit.lines.length * lineHeight;
+    const widestLine = fit.lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const actualW = widestLine * fit.fontSize * BODY_CHAR_WIDTH;
+
+    blocks.push({
+      kind: 'text',
+      role: 'support',
+      rect: norm(bodyX, cursor, Math.min(bodyColW, actualW), blockH),
+      spec: {
+        lines: fit.lines,
+        x: bodyX,
+        y: cursor + fit.fontSize * 0.85,
+        fontSize: fit.fontSize,
+        lineHeight,
+        fontFamily: fonts.body,
+        fill: adjustContrast(palette.ink, palette.paper, 4.5),
+        align: 'left',
+        opacity: 0.85,
+      },
+    });
+    cursor += blockH + gap * 0.8;
+  }
+
+  if (content.cta && !omit.has('cta')) {
+    const fit = fitText(content.cta, w * 0.35, ctx.ctaFontSize, 1, BODY_CHAR_WIDTH);
+    const ctaW = fit.lines[0].length * fit.fontSize * 0.62 + ctx.ctaFontSize * 1.8;
+    blocks.push({
+      kind: 'cta',
+      rect: norm(bodyX, cursor, ctaW, ctx.ctaH),
+      spec: {
+        text: content.cta,
+        x: bodyX,
+        y: cursor,
+        width: ctaW,
+        height: ctx.ctaH,
+        fontSize: fit.fontSize,
+        fontFamily: fonts.body,
+        shape: 'annotation',
+        fill: visibleAccent(palette, palette.paper),
+        textFill: palette.ink,
+      },
+    });
+  }
+
+  if (content.eventBadge && !omit.has('badge')) {
+    const badgeText = content.eventBadge;
+    const badgeFont = ctx.supportSize * 0.85;
+    const badgeW = badgeText.length * badgeFont * 0.62 + badgeFont * 2;
+    const badgeH = badgeFont * 2.0;
+    blocks.push({
+      kind: 'badge',
+      rect: norm(w - m * 2 - badgeW, m * 0.5, badgeW, badgeH),
+      text: badgeText,
+      fontSize: badgeFont,
+      fontFamily: input.accentFontFamily ?? fonts.body,
+      fill: palette.accent,
+      textFill: adjustContrast(onColor(palette.accent, palette), palette.accent, 4.5),
+      shapeLanguage: 'editorial-rules',
+    });
+  }
+
+  if (content.hasLogo && !omit.has('logo')) {
+    placeArchetypeLogo(w, h, m, bottomSafe, recipe, blocks, norm, 'top-right');
+  }
+
+  if (recipe.texture !== 'none') {
+    blocks.push({ kind: 'texture', texture: recipe.texture as any });
+  }
+
+  return {
+    canvas: { width: w, height: h },
+    paper: palette.paper,
+    imageRect,
+    blocks,
+    concept,
+    artDirectionDecisions: [
+      'architectural-frame-puncture',
+      'intentional-boundary-break',
+      'editorial-corner-stamp',
+    ],
+    structure: `FRAME_WITH_OVERLAP/breaking-frame/${recipe.typographyFamily}`,
+    archetype: 'FRAME_WITH_OVERLAP',
+  };
 }
 
 export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
@@ -477,6 +2282,63 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   const ctaFontSize = w * LAYOUT_CONFIG.textSizes.ctaFontSizeMultiplier;
   const ctaH = ctaFontSize * LAYOUT_CONFIG.textSizes.ctaHeightMultiplier;
 
+  // Resolve Graphic Design Concept
+  const concept = resolveGraphicDesignConcept(input);
+
+  // Archetype dispatch: if archetype is provided, execute dedicated composition geometry
+  const archetype: CompositionArchetype | undefined =
+    input.compositionArchetype ?? recipe.compositionArchetype;
+
+  if (archetype) {
+    const ctx: LayoutPlanCtx = {
+      w,
+      h,
+      m,
+      gap,
+      bottomSafe,
+      norm,
+      fonts,
+      characterScale,
+      densityScale,
+      headlineSize,
+      headlineMaxLines,
+      headlineRotation,
+      headlineUpper,
+      supportUpper,
+      supportSize,
+      brandMsgSize,
+      secondarySize,
+      ctaFontSize,
+      ctaH,
+      tone,
+      concept,
+    };
+
+    switch (archetype) {
+      case 'FULL_BLEED_TYPE':
+        return buildFullBleedTypePlan(input, ctx);
+      case 'EDITORIAL_OVERLAP':
+        return buildEditorialOverlapPlan(input, ctx);
+      case 'PRODUCT_CUTOUT':
+        return buildProductCutoutPlan(input, ctx);
+      case 'ASYMMETRIC_GRID':
+        return buildAsymmetricGridPlan(input, ctx);
+      case 'TYPOGRAPHIC_POSTER':
+        return buildTypographicPosterPlan(input, ctx);
+      case 'COLLAGE_LAYERED':
+        return buildCollageLayeredPlan(input, ctx);
+      case 'NEGATIVE_SPACE':
+        return buildNegativeSpacePlan(input, ctx);
+      case 'SPLIT_COMPOSITION':
+        return buildSplitCompositionPlan(input, ctx);
+      case 'IMAGE_AS_BACKGROUND':
+        return buildImageAsBackgroundPlan(input, ctx);
+      case 'FRAME_WITH_OVERLAP':
+        return buildFrameWithOverlapPlan(input, ctx);
+    }
+  }
+
+  // Legacy fallback (when no archetype is set)
   // ── Footer ── a real treatment (torn paper / band / hairline), only when the
   // recipe asks for one AND there is content that belongs in it.
   const wantsFooter =
@@ -1024,6 +2886,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   }
 
   const structure = [
+    'legacy-fallback',
     treatment,
     layout,
     wantsFooter ? `${recipe.footerStyle}-footer` : 'no-footer',
@@ -1044,10 +2907,112 @@ const PLACEHOLDER_PATTERNS = [/lorem ipsum/i, /placeholder/i, /\byour (text|logo
 /** Kinds whose rects must never collide — text on text is the "background text becomes noise" failure. */
 const SOLID_KINDS = new Set(['text', 'cta', 'logo', 'badge']);
 
-function overlapArea(a: Rect, b: Rect): number {
+const HEADLINE_IMAGE_OVERLAP_ALLOWED = new Set<CompositionArchetype>([
+  'EDITORIAL_OVERLAP',
+  'FULL_BLEED_TYPE',
+  'FRAME_WITH_OVERLAP',
+  'COLLAGE_LAYERED',
+  'IMAGE_AS_BACKGROUND',
+  'TYPOGRAPHIC_POSTER',
+]);
+
+const BADGE_IMAGE_OVERLAP_ALLOWED = new Set<CompositionArchetype>([
+  'PRODUCT_CUTOUT',
+  'COLLAGE_LAYERED',
+  'FULL_BLEED_TYPE',
+  'IMAGE_AS_BACKGROUND',
+]);
+
+export function overlapArea(a: Rect, b: Rect): number {
   const x = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
   const y = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
   return x * y;
+}
+
+/**
+ * Anti-template diversity validator.
+ * Detects the legacy repetitive template collapse:
+ * TOP IMAGE + TEXT DIRECTLY BELOW + DIVIDER + BOTTOM CTA + FOOTER BAND.
+ */
+export function validateCompositionDiversity(plan: LayoutPlan): string[] {
+  const issues: string[] = [];
+
+  // If the plan is intentionally the legacy fallback (no archetype requested),
+  // skip anti-template check:
+  if (!plan.archetype && (plan.structure?.includes('legacy-fallback') || plan.structure?.includes('stacked-fallback'))) {
+    return issues;
+  }
+
+  let riskScore = 0;
+  const reasons: string[] = [];
+
+  // 1. Image signals
+  const img = plan.imageRect;
+  if (img && img.y <= 0.06 && img.y >= -0.01) {
+    riskScore += 15;
+    reasons.push('image starts at top (y <= 0.06)');
+  }
+  if (img && img.height >= 0.45 && img.height <= 0.70) {
+    riskScore += 15;
+    reasons.push('image occupies 45-70% height');
+  }
+  if (img && img.width >= 0.88) {
+    riskScore += 10;
+    reasons.push('image occupies full width (>= 90%)');
+  }
+
+  // 2. Headline text directly below image and centered
+  const headline = plan.blocks.find(
+    (b) => b.kind === 'text' && (b as Extract<PlannedBlock, { kind: 'text' }>).role === 'headline'
+  ) as Extract<PlannedBlock, { kind: 'text' }> | undefined;
+
+  if (headline && img) {
+    const headlineY = headline.rect.y;
+    const imgBottom = img.y + img.height;
+    if (headlineY >= imgBottom - 0.02 && headlineY <= imgBottom + 0.15) {
+      if (headline.spec.align === 'center' || Math.abs(headline.rect.x + headline.rect.width / 2 - 0.5) < 0.06) {
+        riskScore += 20;
+        reasons.push('headline centered directly below top image');
+      }
+    }
+  }
+
+  // 3. Horizontal divider below text
+  const divider = plan.blocks.find((b) => b.kind === 'divider') as Extract<PlannedBlock, { kind: 'divider' }> | undefined;
+  if (divider && divider.rect.width >= 0.4) {
+    if (headline && divider.rect.y > headline.rect.y) {
+      riskScore += 20;
+      reasons.push('horizontal divider below text');
+    }
+  }
+
+  // 4. Bottom CTA (at bottom)
+  const cta = plan.blocks.find((b) => b.kind === 'cta') as Extract<PlannedBlock, { kind: 'cta' }> | undefined;
+  if (cta && cta.rect.y >= 0.72) {
+    riskScore += 15;
+    reasons.push('CTA at bottom');
+  }
+
+  // 5. Footer band
+  const footer = plan.blocks.find((b) => b.kind === 'footer');
+  if (footer) {
+    riskScore += 25;
+    reasons.push('footer band present');
+  }
+
+  // High risk threshold: >= 75 points
+  if (riskScore >= 75) {
+    issues.push(
+      `LEGACY_TEMPLATE_COLLAPSE: Design collapsed into legacy repetitive template (${reasons.join(', ')}). Risk score: ${riskScore}`
+    );
+  }
+
+  // Anti-safe requirement: Ensure at least one decisive art-direction decision
+  if (plan.archetype && (!plan.artDirectionDecisions || plan.artDirectionDecisions.length === 0)) {
+    issues.push('MISSING_ART_DIRECTION: No decisive visual/art-direction decision recorded for this composition.');
+  }
+
+  return issues;
 }
 
 /**
@@ -1058,7 +3023,7 @@ function overlapArea(a: Rect, b: Rect): number {
  */
 export function validateLayoutPlan(plan: LayoutPlan, content: ContentInput): string[] {
   const issues: string[] = [];
-  const solid: Array<{ label: string; rect: Rect }> = [];
+  const solid: Array<{ label: string; rect: Rect; kind: string; role?: string }> = [];
 
   for (const block of plan.blocks) {
     if (!('rect' in block)) continue;
@@ -1067,7 +3032,12 @@ export function validateLayoutPlan(plan: LayoutPlan, content: ContentInput): str
       issues.push(`${block.kind} out of canvas bounds: ${JSON.stringify(rect)}`);
     }
     if (SOLID_KINDS.has(block.kind)) {
-      solid.push({ label: `${block.kind}${'role' in block ? `:${block.role}` : ''}`, rect });
+      solid.push({
+        label: `${block.kind}${'role' in block ? `:${block.role}` : ''}`,
+        rect,
+        kind: block.kind,
+        role: 'role' in block ? block.role : undefined,
+      });
     }
     if (block.kind === 'text') {
       if (block.spec.lines.length === 0 || block.spec.lines.some((line) => line.trim().length === 0)) {
@@ -1081,6 +3051,7 @@ export function validateLayoutPlan(plan: LayoutPlan, content: ContentInput): str
     }
   }
 
+  // Solid block ↔ solid block collisions (text ↔ text, text ↔ cta are strictly forbidden)
   for (let i = 0; i < solid.length; i++) {
     for (let j = i + 1; j < solid.length; j++) {
       if (overlapArea(solid[i].rect, solid[j].rect) > 0.0005) {
@@ -1089,10 +3060,53 @@ export function validateLayoutPlan(plan: LayoutPlan, content: ContentInput): str
     }
   }
 
+  // Archetype-aware image overlap checks
+  if (plan.imageRect) {
+    for (const b of solid) {
+      const area = overlapArea(plan.imageRect, b.rect);
+      if (area > 0.005) {
+        if (b.kind === 'text' && b.role === 'headline') {
+          if (plan.archetype && !HEADLINE_IMAGE_OVERLAP_ALLOWED.has(plan.archetype)) {
+            issues.push(`headline unexpectedly overlaps image in ${plan.archetype}`);
+          }
+        } else if (b.kind === 'badge') {
+          if (plan.archetype && !BADGE_IMAGE_OVERLAP_ALLOWED.has(plan.archetype)) {
+            issues.push(`badge unexpectedly overlaps image in ${plan.archetype}`);
+          }
+        } else if (b.kind === 'text' && b.role !== 'headline') {
+          if (
+            plan.archetype === 'SPLIT_COMPOSITION' ||
+            plan.archetype === 'ASYMMETRIC_GRID' ||
+            plan.archetype === 'NEGATIVE_SPACE'
+          ) {
+            issues.push(`${b.role ?? 'text'} unexpectedly overlaps image in ${plan.archetype}`);
+          }
+        } else if (b.kind === 'cta') {
+          if (
+            plan.archetype === 'SPLIT_COMPOSITION' ||
+            plan.archetype === 'ASYMMETRIC_GRID' ||
+            plan.archetype === 'NEGATIVE_SPACE' ||
+            plan.archetype === 'EDITORIAL_OVERLAP'
+          ) {
+            issues.push(`cta unexpectedly overlaps image in ${plan.archetype}`);
+          }
+        }
+      }
+    }
+  }
+
+  const omitted = new Set(plan.concept?.elementsToOmit ?? []);
   const rendered = new Set(plan.blocks.map((b) => ('role' in b ? b.role : b.kind)));
-  if (content.headline && !rendered.has('headline')) issues.push('headline was authored but not planned');
-  if (content.cta && !rendered.has('cta')) issues.push('cta was authored but not planned');
-  if (content.hasLogo && !rendered.has('logo')) issues.push('a logo exists but no logo block was planned');
+  if (content.headline && !rendered.has('headline') && !omitted.has('headline')) {
+    issues.push('headline was authored but not planned');
+  }
+  if (content.cta && !rendered.has('cta') && !omitted.has('cta')) {
+    issues.push('cta was authored but not planned');
+  }
+  if (content.hasLogo && !rendered.has('logo') && !omitted.has('logo')) {
+    issues.push('a logo exists but no logo block was planned');
+  }
 
   return issues;
 }
+

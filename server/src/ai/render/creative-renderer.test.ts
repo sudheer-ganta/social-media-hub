@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
 import { renderCreative, buildContent, resolveCanvasSize, resolvePalette } from './creative-renderer';
+import { getStyleDNA } from '../style-dna/style-dna';
 import type { CreativeDirection, ReferenceDesignRecipe, ReferenceStyleProfile, ResolvedCreativeDna } from '../types';
 
 export const BASE_DIRECTION: CreativeDirection = {
@@ -241,4 +242,51 @@ describe('renderCreative', () => {
     // Two sequential real renders (see the timeout note above the PNG-size
     // tests in this file) — generous under parallel suite load.
   }, 40_000);
+
+  describe('end-to-end rendering with Style DNA and Composition Archetypes', () => {
+    const representativeStyles = [
+      { styleId: 'minimalist', expectedArchetypePool: ['NEGATIVE_SPACE', 'FULL_BLEED_TYPE', 'SPLIT_COMPOSITION', 'EDITORIAL_OVERLAP'] },
+      { styleId: 'editorial', expectedArchetypePool: ['EDITORIAL_OVERLAP', 'ASYMMETRIC_GRID', 'FULL_BLEED_TYPE', 'FRAME_WITH_OVERLAP'] },
+      { styleId: 'neo-brutalism', expectedArchetypePool: ['TYPOGRAPHIC_POSTER', 'ASYMMETRIC_GRID', 'SPLIT_COMPOSITION', 'PRODUCT_CUTOUT'] },
+      { styleId: 'y2k', expectedArchetypePool: ['COLLAGE_LAYERED', 'PRODUCT_CUTOUT', 'ASYMMETRIC_GRID', 'FRAME_WITH_OVERLAP'] },
+      { styleId: 'collage', expectedArchetypePool: ['COLLAGE_LAYERED', 'PRODUCT_CUTOUT', 'FRAME_WITH_OVERLAP', 'ASYMMETRIC_GRID'] },
+    ];
+
+    it.each(representativeStyles)(
+      'renders end-to-end creative for $styleId adhering to its archetype pool',
+      async ({ styleId, expectedArchetypePool }) => {
+        const visualImage = await tinyPng(80, 80);
+        const styleDna = getStyleDNA(styleId)!;
+        expect(styleDna).toBeDefined();
+
+        const result = await renderCreative({
+          visualImage,
+          direction: {
+            ...BASE_DIRECTION,
+            headline: 'Autumn Collection 2026',
+            supportingLine: 'Handcrafted luxury, timeless modern aesthetics.',
+            cta: 'Explore Now',
+          },
+          creativeDna: { ...EMPTY_DNA, brandColors: ['#222222', '#f5f5f5'] },
+          styleDna,
+          styleDnaVariant: 0,
+        });
+
+        expect(result.mimeType).toBe('image/png');
+        expect(result.recipeSource).toBe('style-dna');
+        expect(result.plan.archetype).toBeDefined();
+        expect(expectedArchetypePool).toContain(result.plan.archetype);
+        expect(result.validation.valid).toBe(true);
+        expect(result.validation.errors).toEqual([]);
+
+        const metadata = await sharp(Buffer.from(result.data, 'base64')).metadata();
+        expect(metadata.format).toBe('png');
+        const expectedSize = resolveCanvasSize(BASE_DIRECTION.aspectRatio);
+        expect(metadata.width).toBe(expectedSize.width);
+        expect(metadata.height).toBe(expectedSize.height);
+      },
+      45_000,
+    );
+  });
 });
+

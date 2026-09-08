@@ -18,7 +18,10 @@ import {
   renderDivider,
   renderHairlineFooter,
   renderHandDrawnLine,
+  renderHandwrittenNote,
   renderScrim,
+  renderStamp,
+  renderTape,
   renderTextBlock,
   renderTexture,
   renderTornFooter,
@@ -26,7 +29,7 @@ import {
 } from './primitives';
 import { rasterizeTextOverlay } from './text-rasterizer';
 import { selectTypography, type TypographySelection } from '../typography/font-selector';
-import type { CreativeDirection, ReferenceStyleProfile, ResolvedCreativeDna } from '../types';
+import type { CreativeDirection, GraphicDesignConcept, ImageCapabilities, ReferenceStyleProfile, ResolvedCreativeDna } from '../types';
 import type { StyleDNA } from '../style-dna/style-dna';
 
 /**
@@ -65,19 +68,23 @@ export function resolveCanvasSize(aspectRatio: string): { width: number; height:
 const sameCopy = (a: string, b: string) => a.toLowerCase().replace(/[^a-z0-9]/g, '') === b.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export function buildContent(direction: CreativeDirection, hasLogo: boolean): ContentInput {
+  const omissions = new Set(direction.graphicConcept?.elementsToOmit ?? []);
   const wantsCopy = direction.copyTreatment !== 'none';
   let support =
-    direction.copyTreatment === 'headline_support' && direction.supportingLine ? direction.supportingLine : undefined;
-  const brandMessage = direction.marketingCreative?.brandMessage;
+    !omissions.has('description') && direction.copyTreatment === 'headline_support' && direction.supportingLine
+      ? direction.supportingLine
+      : undefined;
+  const brandMessage = !omissions.has('description') ? direction.marketingCreative?.brandMessage : undefined;
   // Stage A has no dedicated offer device — the offer display fragment rides
   // as the support line (or joins the footer) so the standalone creative
   // still carries it. Stage B gives it its own graphic treatment.
   const offerText = direction.marketingCreative?.offerText;
-  const secondaryInfo = [...(direction.marketingCreative?.secondaryInfo ?? [])];
+  const secondaryInfo = !omissions.has('secondaryInfo') ? [...(direction.marketingCreative?.secondaryInfo ?? [])] : [];
   if (offerText && !(direction.headline && sameCopy(offerText, direction.headline)) && !(support && sameCopy(offerText, support))) {
-    if (wantsCopy && !support) support = offerText;
-    else if (!secondaryInfo.some((line) => sameCopy(line, offerText))) secondaryInfo.unshift(offerText);
+    if (wantsCopy && !support && !omissions.has('description')) support = offerText;
+    else if (!secondaryInfo.some((line) => sameCopy(line, offerText)) && !omissions.has('secondaryInfo')) secondaryInfo.unshift(offerText);
   }
+  const cta = !omissions.has('cta') && direction.cta ? direction.cta : undefined;
   return {
     ...(wantsCopy && direction.headline && { headline: direction.headline }),
     ...(support && { support }),
@@ -89,9 +96,9 @@ export function buildContent(direction: CreativeDirection, hasLogo: boolean): Co
     ...(secondaryInfo.length && {
       secondaryInfo: secondaryInfo.join(' · '),
     }),
-    ...(direction.cta && { cta: direction.cta }),
-    ...(direction.marketingCreative?.eventBadge && { eventBadge: direction.marketingCreative.eventBadge }),
-    hasLogo,
+    ...(cta && { cta }),
+    ...(!omissions.has('badge') && direction.marketingCreative?.eventBadge && { eventBadge: direction.marketingCreative.eventBadge }),
+    hasLogo: !omissions.has('footer') && hasLogo,
   };
 }
 
@@ -116,6 +123,14 @@ function renderBlock(block: PlannedBlock, plan: LayoutPlan): string {
       if (block.style === 'hairline') return renderHairlineFooter(w, h, r.y, block.fill, '#00000055', w * 0.06);
       return renderBandFooter(w, h, r.y, block.fill);
     }
+    case 'panel': {
+      const r = px(block.rect, w, h);
+      const rx = block.radius ? ` rx="${block.radius}" ry="${block.radius}"` : '';
+      const stroke = block.stroke ? ` stroke="${block.stroke}" stroke-width="${block.strokeWidth ?? 1}"` : '';
+      const rot = block.rotationDeg ? ` transform="rotate(${block.rotationDeg} ${r.x + r.width / 2} ${r.y + r.height / 2})"` : '';
+      const shadow = block.offsetShadow ? ' filter="url(#fp-soft-shadow)"' : '';
+      return `<rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" fill="${block.fill}"${rx}${stroke}${rot}${shadow}/>`;
+    }
     case 'text':
       return renderTextBlock(block.spec);
     case 'badge': {
@@ -129,6 +144,9 @@ function renderBlock(block: PlannedBlock, plan: LayoutPlan): string {
       return renderCta(block.spec);
     case 'underline': {
       const r = px(block.rect, w, h);
+      if (block.rotationDeg) {
+        return `<g transform="rotate(${block.rotationDeg} ${r.x + r.width / 2} ${r.y})">${renderHandDrawnLine(r.x, r.y, r.width, block.stroke, block.strokeWidth)}</g>`;
+      }
       return renderHandDrawnLine(r.x, r.y, r.width, block.stroke, block.strokeWidth);
     }
     case 'divider': {
@@ -146,6 +164,19 @@ function renderBlock(block: PlannedBlock, plan: LayoutPlan): string {
     }
     case 'texture':
       return renderTexture(block.texture, w, h);
+    case 'tape': {
+      const r = px(block.rect, w, h);
+      return renderTape(r.x, r.y, r.width, r.height, block.rotationDeg ?? 0, block.color ?? '#f5f0e1', block.opacity ?? 0.82);
+    }
+    case 'stamp': {
+      const r = px(block.rect, w, h);
+      const defaultFontSize = Math.round(Math.min(r.width, r.height) * 0.16);
+      return renderStamp(r.x, r.y, r.width, r.height, block.text, block.rotationDeg ?? -10, block.borderStyle ?? 'double', block.fill ?? 'none', block.stroke ?? '#e11d48', block.fontFamily ?? 'sans-serif', block.fontSize ?? defaultFontSize);
+    }
+    case 'handwritten-note': {
+      const r = px(block.rect, w, h);
+      return renderHandwrittenNote(r.x, r.y + (block.fontSize ?? 18) * 0.85, block.text, block.fontFamily ?? 'cursive, sans-serif', block.rotationDeg ?? -3, block.fill ?? '#e11d48', block.fontSize ?? 18);
+    }
     case 'logo':
       return '';
   }
@@ -199,6 +230,8 @@ export interface RenderCreativeOptions {
   styleDnaVariant?: number;
   /** Fetched once by the caller and reused here — the actual brand logo file, composited pixel-exact, never redrawn. */
   logoImage?: { mimeType: string; data: string };
+  /** Image capabilities: cutout, transparency, aspect ratio. */
+  capabilities?: ImageCapabilities;
 }
 
 export interface RenderedCreative {
@@ -225,9 +258,15 @@ export async function renderCreative({
   styleDna,
   styleDnaVariant,
   logoImage,
+  capabilities,
 }: RenderCreativeOptions): Promise<RenderedCreative> {
   const { width, height } = resolveCanvasSize(direction.aspectRatio);
-  const { recipe, source: recipeSource } = resolveDesignRecipe(direction, creativeDna, { styleDna, styleDnaVariant, referenceStyle });
+  const { recipe, source: recipeSource } = resolveDesignRecipe(direction, creativeDna, {
+    styleDna,
+    styleDnaVariant,
+    referenceStyle,
+    capabilities,
+  });
   const palette = resolvePalette(creativeDna.brandColors, recipe.colorPalette, direction.palette);
   const content = buildContent(direction, Boolean(logoImage));
 
@@ -251,6 +290,11 @@ export async function renderCreative({
     copyZoneTone,
     typography: typography.baseFontStack,
     accentFontFamily: typography.accentFont,
+    compositionArchetype: recipe.compositionArchetype,
+    capabilities,
+    graphicConcept: direction.graphicConcept,
+    compositionIntent: direction.compositionIntent,
+    seed: styleDnaVariant,
   });
 
   const validation = validateDesign(plan, content);
@@ -265,25 +309,45 @@ export async function renderCreative({
     });
   }
 
-  const overlayBody = plan.blocks.map((block) => renderBlock(block, plan)).join('');
-  const overlaySvg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${renderDefs()}${overlayBody}</svg>`;
+  const underBlocks = plan.blocks.filter((block) => block.kind === 'panel' && !(block as any).overImage);
+  const overBlocks = plan.blocks.filter((block) => block.kind !== 'panel' || (block as any).overImage);
 
+  let underPng: Buffer | null = null;
+  if (underBlocks.length > 0) {
+    const underSvg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${renderDefs()}${underBlocks.map((b) => renderBlock(b, plan)).join('')}</svg>`;
+    underPng = rasterizeTextOverlay(underSvg, typography.facesUsed);
+  }
+
+  const overSvg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">${renderDefs()}${overBlocks.map((b) => renderBlock(b, plan)).join('')}</svg>`;
   // Rasterized with the REAL selected font files (spec §6) — never the AI
   // image model, never whatever fonts happen to be installed on this host.
-  const overlayPng = rasterizeTextOverlay(overlaySvg, typography.facesUsed);
+  const overlayPng = rasterizeTextOverlay(overSvg, typography.facesUsed);
 
   const imagePx = px(plan.imageRect, width, height);
-  // Flattened onto paper first: a visual with real transparency must never
-  // leak alpha (or a checkerboard look) into the finished creative.
-  const background = await sharp(Buffer.from(visualImage.data, 'base64'))
-    .flatten({ background: plan.paper })
-    .resize(Math.round(imagePx.width), Math.round(imagePx.height), { fit: 'cover' })
-    .toBuffer();
+  let imgPipeline = sharp(Buffer.from(visualImage.data, 'base64'))
+    .resize(Math.round(imagePx.width), Math.round(imagePx.height), { fit: 'cover' });
 
-  const composites: OverlayOptions[] = [
-    { input: background, top: Math.round(imagePx.y), left: Math.round(imagePx.x) },
-    { input: overlayPng, top: 0, left: 0 },
-  ];
+  let imgTop = Math.round(imagePx.y);
+  let imgLeft = Math.round(imagePx.x);
+
+  if (plan.imageRotationDeg) {
+    imgPipeline = imgPipeline.ensureAlpha().rotate(plan.imageRotationDeg, { background: '#00000000' });
+    const { width: rotW, height: rotH } = await imgPipeline.metadata();
+    if (rotW && rotH) {
+      imgTop = Math.round(imagePx.y - (rotH - imagePx.height) / 2);
+      imgLeft = Math.round(imagePx.x - (rotW - imagePx.width) / 2);
+    }
+  } else {
+    imgPipeline = imgPipeline.flatten({ background: plan.paper });
+  }
+  const background = await imgPipeline.toBuffer();
+
+  const composites: OverlayOptions[] = [];
+  if (underPng) {
+    composites.push({ input: underPng, top: 0, left: 0 });
+  }
+  composites.push({ input: background, top: imgTop, left: imgLeft });
+  composites.push({ input: overlayPng, top: 0, left: 0 });
 
   if (logoImage) {
     for (const block of plan.blocks) {

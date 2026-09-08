@@ -75,6 +75,18 @@ Rules you never break:
 - Any headline/supportingLine/cta must be short, human and specific to this brand and request. Never generic marketing language, never "revolutionary/seamless/game-changing/elevate/unlock/unleash" or similar AI-sounding filler, never a paragraph.
 - A beautiful image with a headline bolted on is a CONCEPT, not a finished creative. A finished creative is concept + visual + copy + brand + (audience interaction, when the idea is participatory) + secondary information, when the idea needs any of those. Before you finish, ask: does the viewer know what this is about, what's being sold, and remember the brand — or is it just a nice picture? If a request is promotional and the brand/value proposition wouldn't be clear from the image alone, add what's missing via marketingCreative rather than shipping a mood board.
 - marketingCreative is optional and additive — fill in only the fields this specific concept needs (brandMessage for why-this-brand positioning beyond the headline's hook, secondaryInfo for practical/location/service details, logoTreatment when the mark needs a specific role in this shot, requiredElements for anything else the concept requires). Every text field must have a job — HOOK, EXPLAIN, REINFORCE, INTERACT, IDENTIFY, or DIRECT. If a field has no job here, leave it out. When the ad requires multiple category, product, or service details in secondaryInfo, format them as short, distinct list items separated by a dot (e.g., ["Flights · Hotels · Packages"] or ["Booking · Curation · Custom"]) so they can be parsed as a structured multi-column footer.
+- GRAPHIC-DESIGN COMPOSITION, NOT UI TEMPLATES: Never think in terms of generic UI cards or webpage sections (strictly prohibit default reasoning like "place image at top", "put headline underneath", "add divider", "put CTA at bottom", or "footer card"). That is an uncreative template collapse. Real advertising and editorial creatives use genuine graphic-design thinking:
+  - scale contrast (dramatic scale differences between hero elements and supporting text)
+  - typography as a visual element (treating letterforms as primary graphic weight, not just captions)
+  - negative space (intentional breathing room rather than packing every zone with boxes)
+  - image/type interaction and intentional overlapping elements (type breaking frames, crossing boundaries)
+  - asymmetry and dynamic visual balance over static centering
+  - visual hierarchy with decisive emphasis
+  - genuine color blocking and split composition
+  - editorial publication composition and typographic poster hierarchy
+  - graphic framing, layered collage fragments, and product cutouts
+  CTA buttons, horizontal dividers, and footer bars are strictly OPTIONAL — only author a CTA when the concept genuinely requires a direct conversion action, and never assume dividers or footers are mandatory.
+  The AI creative direction describes the creative concept and art direction, but must NOT override the deterministic CompositionArchetype selected by the renderer from the member's Style DNA.
 - layoutDirection is the graphic-design layer, separate from marketingCreative's copy content: it says WHERE things sit and in what order, not what they say. Before filling it in, ask "what must be present for this to read as a finished social ad, not a nice picture?" — then fill in only the layoutDirection fields that concept actually needs (a quiet visual-metaphor idea may only need safeAreas; a promo with a logo, CTA and location tag needs most of them). Let the concept decide layout, not habit: don't default to logo top-right / headline top-center / CTA bottom-center every time — vary it per idea, favour asymmetry and editorial composition over dead-centred templates. When styling typographyDirection, specify dynamic, high-quality typography pairings (such as elegant serif for headlines paired with structural sans-serif for secondary copy) rather than standard default styling. textHierarchy lists reading order with each entry's job, e.g. "HOOK — headline, upper third" then "DIRECT — cta, lower-right corner".
 - If a real brand logo image is attached as a reference (noted below), it is a fixed asset, not a suggestion: describe its placement and role via layoutDirection.logoPlacement / marketingCreative.logoTreatment, but never ask for it to be redrawn, redesigned, recoloured, or reinterpreted — and never invent a logo when none was attached.
 - If a "## SELECTED STYLE" section is given below, the member explicitly picked that style from FlowPost's style picker — it is a product requirement, not a suggestion. You still invent the concept's subject, story, imagery specifics, copy and campaign idea freely, but every visual choice you make (mood, lighting, composition, palette) must stay recognisably WITHIN that style's system. Do not blend in another style's visual language, and do not fall back to a generic/neutral look that could belong to any style — the typography, texture and layout axes are enforced deterministically downstream regardless of what you write, but your OWN prose (lighting, mood, palette, composition) must still agree with them, not fight them.
@@ -195,6 +207,24 @@ export const CREATIVE_DIRECTION_RESPONSE_SCHEMA: Record<string, unknown> = {
         typographyDirection: { type: 'string', description: 'The character of any lettering — weight, case, spacing — not a specific font name.' },
         visualDensity: { type: 'string', description: 'How busy the composition should feel, e.g. "minimal, one focal point" or "dense, editorial layering".' },
         safeAreas: { type: 'string', description: 'What must stay empty of text/graphics, e.g. "bottom 15% clear for platform UI". Empty string if not applicable.' },
+      },
+    },
+    graphicConcept: {
+      type: 'object',
+      description: 'The graphic design art-direction layer deciding visual idea, hero role, composition strategy, scale contrast, controlled imperfection, and intentional omissions.',
+      properties: {
+        conceptName: { type: 'string', description: 'e.g. "Raw Kitchen Noticeboard" or "Monumental Street Folio".' },
+        visualIdea: { type: 'string', description: 'e.g. "A giant word stack dominates the canvas while a small food photograph is taped onto paper like a kitchen reference."' },
+        pointOfView: { type: 'string', description: 'Editorial / tactile perspective.' },
+        emotionalTone: { type: 'string', description: 'e.g. "Authentic, raw, vibrant."' },
+        hero: { type: 'string', enum: ['typography', 'image', 'whitespace', 'graphic-object'] },
+        imageRole: { type: 'string', enum: ['hero', 'small-tactile-object', 'full-bleed-backdrop', 'textured-fragment', 'cutout-subject'] },
+        typographyRole: { type: 'string', enum: ['hero', 'monumental-headline', 'subtle-metadata', 'integrated-narrative'] },
+        compositionStrategy: { type: 'string', enum: ['scale-contrast', 'asymmetry', 'intentional-overlap', 'extreme-whitespace', 'tactile-collage', 'edge-bleeding'] },
+        scaleStrategy: { type: 'string', enum: ['dominant-type-small-photo', 'dominant-photo-micro-type', 'balanced-counterpoint', 'monumental-scale'] },
+        imperfection: { type: 'string', description: 'Controlled imperfection: e.g. "slight image rotation, uneven margins, translucent tape".' },
+        graphicDevices: stringArray('Graphic devices such as ["tape", "stamp", "handwritten-note", "rough-underline"].', 6),
+        elementsToOmit: stringArray('Elements deliberately omitted for graphic purity — e.g. ["cta", "divider", "footer", "description"].', 6),
       },
     },
   },

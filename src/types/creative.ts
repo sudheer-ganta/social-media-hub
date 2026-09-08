@@ -48,6 +48,40 @@ export interface LayoutDirection {
   safeAreas?: string;
 }
 
+export interface GraphicDesignConcept {
+  conceptName: string;
+  visualIdea: string;
+  pointOfView?: string;
+  emotionalTone?: string;
+  hero: 'typography' | 'image' | 'white-space' | 'graphic-object' | 'texture';
+  imageRole: 'small-tactile-object' | 'full-bleed-canvas' | 'offset-crop' | 'floating-fragment' | 'subordinate-texture' | 'edge-bleed';
+  typographyRole?: 'monumental-hero' | 'editorial-spine' | 'word-stack' | 'restrained-footnote' | 'kinetic-overlap';
+  compositionStrategy?: 'asymmetric-tension' | 'negative-space-field' | 'physical-collage' | 'typographic-sculpture' | 'boundary-crossover' | 'split-contrast';
+  scaleStrategy?: 'extreme-contrast' | 'dominant-hero' | 'editorial-restraint' | 'layered-hierarchy';
+  imperfection?: string;
+  graphicDevices?: string[];
+  elementsToOmit?: Array<'cta' | 'divider' | 'footer' | 'description' | 'secondaryInfo' | 'badge'>;
+}
+
+export interface CompositionIntent {
+  hero: 'typography' | 'image' | 'white-space' | 'graphic-object' | 'texture';
+  scaleContrast: 'extreme' | 'strong' | 'subtle';
+  whitespaceRatio: number;
+  asymmetry: 'extreme' | 'strong' | 'moderate' | 'subtle';
+  alignment: 'left-ragged' | 'asymmetric-balance' | 'edge-anchored' | 'deliberate-center';
+  imageTreatment: 'small-tactile-object' | 'full-bleed-canvas' | 'offset-crop' | 'floating-fragment' | 'edge-bleed';
+  imageRotationDeg?: number;
+  omissions: Array<'cta' | 'divider' | 'footer' | 'description' | 'secondaryInfo' | 'badge'>;
+  graphicDevices: string[];
+  imperfectionLevel: 'none' | 'subtle' | 'raw' | 'physical';
+  hasOversizedType?: boolean;
+  hasStackedWords?: boolean;
+  hasVerticalType?: boolean;
+  hasTape?: boolean;
+  hasStamp?: boolean;
+  hasHandwrittenNote?: boolean;
+}
+
 export interface CreativeDirection {
   concept: string;
   visualStory: string;
@@ -72,6 +106,8 @@ export interface CreativeDirection {
   interactionInstructions: string;
   marketingCreative?: MarketingCreative;
   layoutDirection?: LayoutDirection;
+  graphicConcept?: GraphicDesignConcept;
+  compositionIntent?: CompositionIntent;
 }
 
 /**
@@ -186,6 +222,7 @@ export interface ReferenceDesignRecipe {
   visualDensity: string;
   imperfectionLevel: string;
   imageTreatment: string;
+  compositionArchetype?: string;
 }
 
 /**

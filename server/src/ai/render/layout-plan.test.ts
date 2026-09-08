@@ -4,11 +4,20 @@
  * Run: cd server && npx vitest run src/ai/render/layout-plan.test.ts
  */
 import { describe, it, expect } from 'vitest';
-import { buildLayoutPlan, resolvePalette, validateLayoutPlan, type ContentInput, type LayoutPlanInput } from './layout-plan';
-import { deriveFallbackRecipe, normaliseDesignRecipe, resolveDesignRecipe } from './design-recipe';
+import {
+  buildLayoutPlan,
+  overlapArea,
+  resolvePalette,
+  validateCompositionDiversity,
+  validateLayoutPlan,
+  type ContentInput,
+  type LayoutPlan,
+  type LayoutPlanInput,
+} from './layout-plan';
+import { COMPOSITION_ARCHETYPES, deriveFallbackRecipe, normaliseDesignRecipe, resolveDesignRecipe } from './design-recipe';
 import { BASE_DIRECTION, BASE_RECIPE, EMPTY_DNA, profileWithRecipe } from './creative-renderer.test';
-import { getStyleDNA } from '../style-dna/style-dna';
-import type { ReferenceDesignRecipe } from '../types';
+import { chooseCompositionArchetype, getStyleDNA, STYLE_DNA_LIBRARY, styleDnaToRecipe } from '../style-dna/style-dna';
+import type { CompositionArchetype, ImageCapabilities, ReferenceDesignRecipe } from '../types';
 
 const CONTENT: ContentInput = {
   headline: 'Steam Rises, Weekend Begins',
@@ -224,3 +233,254 @@ describe('resolvePalette — no FlowPost house palette', () => {
     expect(palette.paper).toBe('#f7f4ee');
   });
 });
+
+function planForArchetype(
+  archetype: CompositionArchetype,
+  content: Partial<ContentInput> = {},
+  recipeOverrides: Partial<ReferenceDesignRecipe> = {},
+  capabilities?: ImageCapabilities,
+): LayoutPlan {
+  const mergedContent: ContentInput = { ...CONTENT, ...content };
+  if ('cta' in content && content.cta === undefined) delete (mergedContent as any).cta;
+  if ('support' in content && content.support === undefined) delete (mergedContent as any).support;
+  if ('secondaryInfo' in content && content.secondaryInfo === undefined) delete (mergedContent as any).secondaryInfo;
+  if ('brandMessage' in content && content.brandMessage === undefined) delete (mergedContent as any).brandMessage;
+
+  const input: LayoutPlanInput = {
+    width: 1280,
+    height: 1600,
+    recipe: { ...BASE_RECIPE, compositionArchetype: archetype, ...recipeOverrides },
+    content: mergedContent,
+    palette: resolvePalette([], BASE_RECIPE.colorPalette),
+    aspectRatio: '4:5',
+    typography: TEST_TYPOGRAPHY,
+    compositionArchetype: archetype,
+    capabilities,
+  };
+  return buildLayoutPlan(input);
+}
+
+describe('Composition Archetypes & Diversity System', () => {
+  it('1. Every archetype produces a valid layout with correct archetype property', () => {
+    for (const archetype of COMPOSITION_ARCHETYPES) {
+      const plan = planForArchetype(archetype);
+      expect(plan.archetype).toBe(archetype);
+      expect(plan.canvas.width).toBe(1280);
+      expect(plan.canvas.height).toBe(1600);
+      expect(plan.blocks.length).toBeGreaterThan(0);
+      expect(plan.imageRect.width).toBeGreaterThan(0);
+      expect(plan.imageRect.height).toBeGreaterThan(0);
+    }
+  });
+
+  it('2. Every archetype passes layout plan validation', () => {
+    for (const archetype of COMPOSITION_ARCHETYPES) {
+      const plan = planForArchetype(archetype);
+      const issues = validateLayoutPlan(plan, CONTENT);
+      expect(issues, `${archetype} failed validation: ${issues.join('; ')}`).toEqual([]);
+    }
+  });
+
+  it('3. EDITORIAL_OVERLAP allows intentional headline/image overlap', () => {
+    const plan = planForArchetype('EDITORIAL_OVERLAP');
+    const headline = plan.blocks.find((b) => b.kind === 'text' && b.role === 'headline');
+    expect(headline).toBeDefined();
+    if (!headline || !('rect' in headline)) throw new Error('headline expected');
+    const overlap = overlapArea(plan.imageRect, headline.rect);
+    expect(overlap).toBeGreaterThan(0.005);
+    const issues = validateLayoutPlan(plan, CONTENT);
+    expect(issues).toEqual([]);
+
+    // But if headline overlaps in NEGATIVE_SPACE, it is flagged
+    const negPlan = planForArchetype('NEGATIVE_SPACE');
+    const negHeadline = negPlan.blocks.find((b) => b.kind === 'text' && b.role === 'headline') as any;
+    if (negHeadline) {
+      negHeadline.rect = { ...negPlan.imageRect };
+      const negIssues = validateLayoutPlan(negPlan, CONTENT);
+      expect(negIssues.some((issue) => issue.includes('headline unexpectedly overlaps image'))).toBe(true);
+    }
+  });
+
+  it('4. Illegal text/text overlap still fails', () => {
+    const plan = planForArchetype('FULL_BLEED_TYPE');
+    const headline = plan.blocks.find((b) => b.kind === 'text' && b.role === 'headline');
+    if (!headline || !('rect' in headline)) throw new Error('headline expected');
+    const collidingText = { ...headline, role: 'support' as const };
+    const issues = validateLayoutPlan({ ...plan, blocks: [...plan.blocks, collidingText] }, CONTENT);
+    expect(issues.some((issue) => issue.includes('overlaps'))).toBe(true);
+  });
+
+  it('5. text/CTA overlap fails', () => {
+    const plan = planForArchetype('ASYMMETRIC_GRID');
+    const cta = plan.blocks.find((b) => b.kind === 'cta');
+    const headline = plan.blocks.find((b) => b.kind === 'text' && b.role === 'headline');
+    if (!cta || !headline || !('rect' in cta) || !('rect' in headline)) throw new Error('cta & headline expected');
+    const brokenPlan = {
+      ...plan,
+      blocks: plan.blocks.map((b) => (b.kind === 'cta' ? { ...b, rect: headline.rect } : b)),
+    };
+    const issues = validateLayoutPlan(brokenPlan, CONTENT);
+    expect(issues.some((issue) => issue.includes('overlaps'))).toBe(true);
+  });
+
+  it('6. FRAME_WITH_OVERLAP allows headline/frame overlap', () => {
+    const plan = planForArchetype('FRAME_WITH_OVERLAP');
+    const headline = plan.blocks.find((b) => b.kind === 'text' && b.role === 'headline');
+    expect(headline).toBeDefined();
+    expect(plan.blocks.some((b) => b.kind === 'border' && b.style === 'inset-frame')).toBe(true);
+    const issues = validateLayoutPlan(plan, CONTENT);
+    expect(issues).toEqual([]);
+  });
+
+  it('7. PRODUCT_CUTOUT respects image capabilities', () => {
+    const cutoutPlan = planForArchetype('PRODUCT_CUTOUT', {}, {}, { isCutout: true });
+    expect(cutoutPlan.structure).toContain('PRODUCT_CUTOUT/cutout-floating');
+
+    const nonCutoutPlan = planForArchetype('PRODUCT_CUTOUT', {}, {}, { isCutout: false });
+    expect(nonCutoutPlan.structure).toContain('PRODUCT_CUTOUT/spotlight');
+  });
+
+  it('8. Anti-template validator rejects a synthetic legacy layout', () => {
+    const syntheticLegacy: LayoutPlan = {
+      canvas: { width: 1080, height: 1080 },
+      paper: '#f8f7f4',
+      imageRect: { x: 0, y: 0.02, width: 0.95, height: 0.52 },
+      archetype: 'FULL_BLEED_TYPE',
+      structure: 'synthetic-legacy',
+      blocks: [
+        {
+          kind: 'text',
+          role: 'headline',
+          rect: { x: 0.1, y: 0.56, width: 0.8, height: 0.08 },
+          spec: {
+            lines: ['Top Headline'],
+            x: 540,
+            y: 600,
+            fontSize: 48,
+            lineHeight: 56,
+            fontFamily: 'Inter',
+            fill: '#1a1a1a',
+            align: 'center',
+          },
+        },
+        {
+          kind: 'divider',
+          rect: { x: 0.1, y: 0.68, width: 0.8, height: 0.002 },
+          stroke: '#1a1a1a',
+          opacity: 0.5,
+        },
+        {
+          kind: 'cta',
+          rect: { x: 0.65, y: 0.78, width: 0.25, height: 0.06 },
+          spec: {
+            text: 'Shop',
+            x: 700,
+            y: 840,
+            width: 200,
+            height: 50,
+            fontSize: 20,
+            fontFamily: 'Inter',
+            shape: 'rect',
+            fill: '#ff0000',
+            textFill: '#ffffff',
+          },
+        },
+        {
+          kind: 'footer',
+          rect: { x: 0, y: 0.86, width: 1, height: 0.14 },
+          style: 'solid-band',
+          fill: '#e5e5e5',
+        },
+      ],
+    };
+
+    const issues = validateCompositionDiversity(syntheticLegacy);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues[0]).toContain('LEGACY_TEMPLATE_COLLAPSE');
+  });
+
+  it('9. Anti-template validator accepts a modern graphic composition', () => {
+    for (const arch of COMPOSITION_ARCHETYPES) {
+      const plan = planForArchetype(arch);
+      const issues = validateCompositionDiversity(plan);
+      expect(issues, `${arch} had diversity issues: ${issues.join('; ')}`).toEqual([]);
+    }
+  });
+
+  it('10. Same style + same variant is deterministic', () => {
+    const style = getStyleDNA('minimalist')!;
+    const arch1 = chooseCompositionArchetype({ style, variant: 2 });
+    const arch2 = chooseCompositionArchetype({ style, variant: 2 });
+    expect(arch1).toBe(arch2);
+
+    const recipe1 = styleDnaToRecipe(style, 3);
+    const recipe2 = styleDnaToRecipe(style, 3);
+    expect(recipe1.compositionArchetype).toBe(recipe2.compositionArchetype);
+  });
+
+  it('11. Same style + different variants can produce different archetypes', () => {
+    const style = getStyleDNA('minimalist')!;
+    const pool = new Set(
+      [0, 1, 2, 3].map((v) => chooseCompositionArchetype({ style, variant: v }))
+    );
+    expect(pool.size).toBeGreaterThan(1);
+  });
+
+  it('12. Different Style DNAs use only their allowed archetypes', () => {
+    for (const style of STYLE_DNA_LIBRARY) {
+      for (let v = 0; v < 8; v++) {
+        const arch = chooseCompositionArchetype({ style, variant: v });
+        expect(style.renderer.compositionArchetypes).toContain(arch);
+      }
+    }
+  });
+
+  it('13. Different styles can produce materially different layouts', () => {
+    const minStyle = getStyleDNA('minimalist')!;
+    const boldStyle = getStyleDNA('bold-typography')!;
+
+    const minRecipe = styleDnaToRecipe(minStyle, 0);
+    const boldRecipe = styleDnaToRecipe(boldStyle, 0);
+
+    const minPlan = planForArchetype(minRecipe.compositionArchetype!, {}, minRecipe);
+    const boldPlan = planForArchetype(boldRecipe.compositionArchetype!, {}, boldRecipe);
+
+    expect(minPlan.structure).not.toBe(boldPlan.structure);
+    expect(minPlan.imageRect.y).not.toBe(boldPlan.imageRect.y);
+  });
+
+  it('14. NEGATIVE_SPACE actually produces substantial whitespace', () => {
+    const plan = planForArchetype('NEGATIVE_SPACE');
+    let occupiedArea = plan.imageRect.width * plan.imageRect.height;
+    for (const b of plan.blocks) {
+      if ('rect' in b && b.kind !== 'scrim' && b.kind !== 'texture') {
+        occupiedArea += b.rect.width * b.rect.height;
+      }
+    }
+    expect(occupiedArea).toBeLessThan(0.65);
+  });
+
+  it('15. New layouts do not automatically contain divider/footer/CTA when unrequested', () => {
+    const bareContent: ContentInput = {
+      headline: 'Simple Clean Statement',
+      hasLogo: false,
+      cta: undefined,
+      support: undefined,
+      secondaryInfo: undefined,
+    };
+    const archetypesToCheck: CompositionArchetype[] = [
+      'FULL_BLEED_TYPE',
+      'EDITORIAL_OVERLAP',
+      'NEGATIVE_SPACE',
+      'TYPOGRAPHIC_POSTER',
+      'SPLIT_COMPOSITION',
+    ];
+    for (const arch of archetypesToCheck) {
+      const plan = planForArchetype(arch, bareContent);
+      expect(plan.blocks.some((b) => b.kind === 'footer')).toBe(false);
+      expect(plan.blocks.some((b) => b.kind === 'divider')).toBe(false);
+      expect(plan.blocks.some((b) => b.kind === 'cta')).toBe(false);
+    }
+  });
+});
+

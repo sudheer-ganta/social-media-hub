@@ -1,6 +1,9 @@
 import { styleDnaToRecipe, type StyleDNA } from '../style-dna/style-dna';
 import type {
+  ArtDirectionFamily,
+  CompositionArchetype,
   CreativeDirection,
+  ImageCapabilities,
   RecipeBorderStyle,
   RecipeFooterStyle,
   RecipeImageTreatment,
@@ -23,6 +26,19 @@ import type {
  * references were analysed — so the renderer always executes ONE code path,
  * parameterized, never an if-recipe-else-legacy fork.
  */
+
+export const COMPOSITION_ARCHETYPES: CompositionArchetype[] = [
+  'FULL_BLEED_TYPE',
+  'EDITORIAL_OVERLAP',
+  'PRODUCT_CUTOUT',
+  'ASYMMETRIC_GRID',
+  'TYPOGRAPHIC_POSTER',
+  'COLLAGE_LAYERED',
+  'NEGATIVE_SPACE',
+  'SPLIT_COMPOSITION',
+  'IMAGE_AS_BACKGROUND',
+  'FRAME_WITH_OVERLAP',
+];
 
 const TYPOGRAPHY_FAMILIES: RecipeTypographyFamily[] = ['serif-editorial', 'sans-modern', 'condensed-display', 'geometric-sans', 'mixed'];
 const LAYOUT_BEHAVIOURS: RecipeLayoutBehaviour[] = ['asymmetric', 'centered', 'grid', 'stacked', 'diagonal'];
@@ -64,6 +80,11 @@ function asTextArray(value: unknown, maxItems: number): string[] {
 export function normaliseDesignRecipe(value: unknown): ReferenceDesignRecipe | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const r = value as Record<string, unknown>;
+  const rawArchetype = typeof r.compositionArchetype === 'string' ? r.compositionArchetype.trim() : undefined;
+  const compositionArchetype = rawArchetype && (COMPOSITION_ARCHETYPES as string[]).includes(rawArchetype)
+    ? (rawArchetype as CompositionArchetype)
+    : undefined;
+
   return {
     photographyStyle: asText(r.photographyStyle),
     illustrationStyle: asText(r.illustrationStyle),
@@ -84,6 +105,7 @@ export function normaliseDesignRecipe(value: unknown): ReferenceDesignRecipe | u
     visualDensity: asEnum(r.visualDensity, VISUAL_DENSITIES, 'balanced'),
     imperfectionLevel: asEnum(r.imperfectionLevel, IMPERFECTIONS, 'none'),
     imageTreatment: asEnum(r.imageTreatment, IMAGE_TREATMENTS, 'full-bleed'),
+    ...(compositionArchetype && { compositionArchetype }),
   };
 }
 
@@ -140,6 +162,26 @@ export function deriveFallbackRecipe(
           ? 'serif-editorial'
           : familyTypography;
 
+  let fallbackArchetype: CompositionArchetype = 'FULL_BLEED_TYPE';
+  if (typographic) {
+    fallbackArchetype = 'TYPOGRAPHIC_POSTER';
+  } else if (tactile) {
+    fallbackArchetype = 'COLLAGE_LAYERED';
+  } else if (studio) {
+    fallbackArchetype = 'PRODUCT_CUTOUT';
+  } else if (family === 'EDITORIAL_PHOTOGRAPHY' || family === 'CULTURAL_EDITORIAL') {
+    fallbackArchetype = 'EDITORIAL_OVERLAP';
+  } else if (family === 'MINIMAL_ART') {
+    fallbackArchetype = 'NEGATIVE_SPACE';
+  } else if (family === 'CINEMATIC') {
+    fallbackArchetype = 'IMAGE_AS_BACKGROUND';
+  } else if (
+    direction.layoutDirection?.compositionArchetype &&
+    (COMPOSITION_ARCHETYPES as string[]).includes(direction.layoutDirection.compositionArchetype)
+  ) {
+    fallbackArchetype = direction.layoutDirection.compositionArchetype;
+  }
+
   return {
     photographyStyle: creativeDna.photographyStyle,
     illustrationStyle: '',
@@ -160,6 +202,7 @@ export function deriveFallbackRecipe(
     visualDensity: /dense|busy/.test(prose) ? 'dense' : /minimal|airy/.test(prose) ? 'minimal' : 'balanced',
     imperfectionLevel: tactile ? 'subtle' : 'none',
     imageTreatment: studio ? 'inset' : 'full-bleed',
+    compositionArchetype: fallbackArchetype,
   };
 }
 
@@ -192,10 +235,21 @@ export interface ResolvedDesignRecipe {
 export function resolveDesignRecipe(
   direction: CreativeDirection,
   creativeDna: ResolvedCreativeDna,
-  options: { styleDna?: StyleDNA; styleDnaVariant?: number; referenceStyle?: ReferenceStyleProfile } = {},
+  options: {
+    styleDna?: StyleDNA;
+    styleDnaVariant?: number;
+    referenceStyle?: ReferenceStyleProfile;
+    capabilities?: ImageCapabilities;
+  } = {},
 ): ResolvedDesignRecipe {
   if (options.styleDna) {
-    return { recipe: styleDnaToRecipe(options.styleDna, options.styleDnaVariant ?? 0), source: 'style-dna' };
+    return {
+      recipe: styleDnaToRecipe(options.styleDna, options.styleDnaVariant ?? 0, {
+        concept: direction,
+        capabilities: options.capabilities,
+      }),
+      source: 'style-dna',
+    };
   }
   if (options.referenceStyle?.analysed && options.referenceStyle.designRecipe) {
     return { recipe: options.referenceStyle.designRecipe, source: 'reference-analysis' };

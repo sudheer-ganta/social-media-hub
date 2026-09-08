@@ -82,13 +82,12 @@ export interface TextBlockSpec {
   opacity?: number;
   rotationDeg?: number;
   shadow?: boolean;
+  isVertical?: boolean;
+  lineOffsets?: number[];
 }
 
 export function renderTextBlock(spec: TextBlockSpec): string {
   const anchor = spec.align === 'center' ? 'middle' : spec.align === 'right' ? 'end' : 'start';
-  const tspans = spec.lines
-    .map((line, i) => `<tspan x="${spec.x}" y="${spec.y + i * spec.lineHeight}">${esc(line)}</tspan>`)
-    .join('');
   const attrs = [
     `font-family="${spec.fontFamily}"`,
     `font-size="${spec.fontSize}"`,
@@ -103,6 +102,22 @@ export function renderTextBlock(spec: TextBlockSpec): string {
   ]
     .filter(Boolean)
     .join(' ');
+
+  if (spec.isVertical) {
+    const allChars = spec.lines.join(' ').split('');
+    const charH = spec.fontSize * 1.15;
+    const tspans = allChars
+      .map((ch, i) => `<tspan x="${spec.x}" y="${spec.y + i * charH}">${esc(ch)}</tspan>`)
+      .join('');
+    return `<text ${attrs}>${tspans}</text>`;
+  }
+
+  const tspans = spec.lines
+    .map((line, i) => {
+      const offsetX = spec.lineOffsets?.[i] ?? 0;
+      return `<tspan x="${spec.x + offsetX}" y="${spec.y + i * spec.lineHeight}">${esc(line)}</tspan>`;
+    })
+    .join('');
   return `<text ${attrs}>${tspans}</text>`;
 }
 
@@ -188,8 +203,8 @@ export interface CtaSpec {
   height: number;
   fontSize: number;
   fontFamily: string;
-  /** 'pill' for organic/soft languages, 'rect' for geometric, 'underline' for editorial-rules. */
-  shape: 'pill' | 'rect' | 'underline';
+  /** 'pill' for organic/soft languages, 'rect' for geometric, 'underline' for editorial-rules, 'annotation' for footnote, 'stamp' for badge stamp. */
+  shape: 'pill' | 'rect' | 'underline' | 'annotation' | 'stamp';
   fill: string;
   textFill: string;
 }
@@ -197,6 +212,22 @@ export interface CtaSpec {
 export function renderCta(spec: CtaSpec): string {
   const cx = spec.x + spec.width / 2;
   const textY = spec.y + spec.height / 2 + spec.fontSize * 0.35;
+  if (spec.shape === 'annotation') {
+    const textWidth = spec.text.length * spec.fontSize * 0.68;
+    const arrowX = spec.x + textWidth + 12;
+    const arrowY = spec.y + spec.height / 2 + 1;
+    const arrowLen = Math.max(14, spec.fontSize * 1.0);
+    return (
+      `<text x="${spec.x}" y="${textY}" font-family="${spec.fontFamily}" font-weight="600" font-size="${spec.fontSize}" fill="${spec.fill}" letter-spacing="1.2">${esc(spec.text.toUpperCase())}</text>` +
+      `<g stroke="${spec.fill}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">` +
+      `<line x1="${arrowX}" y1="${arrowY}" x2="${arrowX + arrowLen}" y2="${arrowY}"/>` +
+      `<polyline points="${arrowX + arrowLen - 4},${arrowY - 4} ${arrowX + arrowLen},${arrowY} ${arrowX + arrowLen - 4},${arrowY + 4}"/>` +
+      `</g>`
+    );
+  }
+  if (spec.shape === 'stamp') {
+    return renderStamp(spec.x, spec.y, spec.width, spec.height, spec.text, -4, 'solid', 'none', spec.fill, spec.fontFamily, spec.fontSize);
+  }
   if (spec.shape === 'underline') {
     // Editorial CTA: quiet text + a confident rule beneath — no button chrome.
     return (
@@ -282,3 +313,115 @@ export function renderBadge(
     `<text x="${x + w / 2}" y="${y + h / 2 + fontSize * 0.35}" font-family="${fontFamily}" font-weight="600" font-size="${fontSize}" fill="${textFill}" text-anchor="middle" letter-spacing="1">${esc(text.toUpperCase())}</text>`
   );
 }
+
+// ─── Graphic Design Primitives: Tape / Stamp / Handwritten Note ─────────────
+
+/**
+ * Semi-translucent masking/washi tape with realistic jagged/torn ends.
+ * Holds photographic fragments and papers onto the poster base.
+ */
+export function renderTape(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rotationDeg = 0,
+  color = '#f5f0e1',
+  opacity = 0.85,
+): string {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  // Jagged left and right torn edges for physical realism
+  const d = `M${x} ${y + 4} ` +
+    `L${x + 3} ${y} ` +
+    `L${x + w - 3} ${y} ` +
+    `L${x + w} ${y + 5} ` +
+    `L${x + w - 4} ${y + h * 0.3} ` +
+    `L${x + w + 1} ${y + h * 0.5} ` +
+    `L${x + w - 3} ${y + h * 0.75} ` +
+    `L${x + w} ${y + h - 4} ` +
+    `L${x + w - 3} ${y + h} ` +
+    `L${x + 3} ${y + h} ` +
+    `L${x} ${y + h - 5} ` +
+    `L${x + 4} ${y + h * 0.7} ` +
+    `L${x - 1} ${y + h * 0.45} ` +
+    `L${x + 3} ${y + h * 0.25} Z`;
+  return (
+    `<g transform="rotate(${rotationDeg} ${cx} ${cy})" filter="url(#fp-soft-shadow)">` +
+    `<path d="${d}" fill="${color}" fill-opacity="${opacity}" stroke="#ffffff" stroke-width="0.5" stroke-opacity="0.4"/>` +
+    `</g>`
+  );
+}
+
+/**
+ * Editorial postal/rubber ink stamp with circular, double-line, or dashed borders.
+ * Creates an authentic, tactile provenance seal.
+ */
+export function renderStamp(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  text: string,
+  rotationDeg = -10,
+  borderStyle: 'dashed' | 'solid' | 'circle' | 'double' = 'double',
+  fill = 'none',
+  stroke = '#e11d48',
+  fontFamily = 'sans-serif',
+  fontSize = 14,
+): string {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const rx = w / 2;
+  const ry = h / 2;
+  let border = '';
+  if (borderStyle === 'circle') {
+    const r = Math.min(rx, ry);
+    border =
+      `<circle cx="${cx}" cy="${cy}" r="${r - 2}" fill="${fill}" stroke="${stroke}" stroke-width="2.5" stroke-dasharray="6,3"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="${r - 6}" fill="none" stroke="${stroke}" stroke-width="1.2"/>`;
+  } else if (borderStyle === 'double') {
+    border =
+      `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>` +
+      `<rect x="${x + 6}" y="${y + 6}" width="${w - 12}" height="${h - 12}" rx="2" fill="none" stroke="${stroke}" stroke-width="1"/>`;
+  } else if (borderStyle === 'dashed') {
+    border = `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="2" stroke-dasharray="5,3"/>`;
+  } else {
+    border = `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>`;
+  }
+  const maxTextW = w - 24;
+  const estimatedCharW = 0.65;
+  const baseFontSize = fontSize > 14 ? fontSize : Math.round(Math.min(w, h) * 0.16);
+  const fittedFontSize = Math.min(
+    baseFontSize,
+    Math.floor(maxTextW / (Math.max(1, text.length) * estimatedCharW))
+  );
+  const actualFontSize = Math.max(12, fittedFontSize);
+  const textY = cy + actualFontSize * 0.35;
+  return (
+    `<g transform="rotate(${rotationDeg} ${cx} ${cy})" opacity="0.9">` +
+    border +
+    `<text x="${cx}" y="${textY}" font-family="${fontFamily}" font-size="${actualFontSize}" font-weight="700" fill="${stroke}" text-anchor="middle" letter-spacing="2">${esc(text.toUpperCase())}</text>` +
+    `</g>`
+  );
+}
+
+/**
+ * Organic handwritten note or annotation with slight tilt.
+ */
+export function renderHandwrittenNote(
+  x: number,
+  y: number,
+  text: string,
+  fontFamily = 'cursive, sans-serif',
+  rotationDeg = -3,
+  fill = '#e11d48',
+  fontSize = 18,
+): string {
+  return (
+    `<g transform="rotate(${rotationDeg} ${x} ${y})">` +
+    `<text x="${x}" y="${y}" font-family="${fontFamily}" font-style="italic" font-weight="600" font-size="${fontSize}" fill="${fill}" letter-spacing="0.5">${esc(text)}</text>` +
+    `</g>`
+  );
+}
+

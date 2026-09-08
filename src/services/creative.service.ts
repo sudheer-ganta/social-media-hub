@@ -1,4 +1,3 @@
-import { getSupabase } from "@/lib/supabase";
 import { API_BASE_URL } from "@/constants/api";
 import type { CreativeDna, FunnelStage, MarketingGoal } from "@/ai/types";
 import type {
@@ -9,7 +8,7 @@ import type {
   ScoredCreativeConcept,
   UnderstoodCreative,
 } from "@/types/creative";
-import { authenticatedFetch, getValidAccessToken } from "@/lib/auth-token";
+import { authenticatedFetch } from "@/lib/auth-token";
 
 /**
  * The browser's side of FlowPost's creative engine. Mirrors `ai.service.ts`

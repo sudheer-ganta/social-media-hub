@@ -1,19 +1,34 @@
-import { validateLayoutPlan, type BrandPalette, type ContentInput, type LayoutPlan, type Rect } from './layout-plan';
+import { validateCompositionDiversity, validateLayoutPlan, type BrandPalette, type ContentInput, type LayoutPlan, type Rect } from './layout-plan';
 import { getFontDefinition } from '../typography/font-catalog';
 import { paletteComplianceViolations } from '../style-dna/style-compliance';
 import type { TypographySelection } from '../typography/font-selector';
 import type { StyleDNA } from '../style-dna/style-dna';
 import type { ReferenceDesignRecipe } from '../types';
 
-export type DesignValidationCode = 'INVALID_CANVAS' | 'INVALID_GEOMETRY' | 'OUT_OF_BOUNDS' | 'OVERLAP' | 'EMPTY_TEXT' | 'PLACEHOLDER_TEXT' | 'MISSING_CONTENT' | 'SAFE_MARGIN' | 'INVALID_TYPOGRAPHY' | 'UNREADABLE_CONTRAST';
+export type DesignValidationCode =
+  | 'INVALID_CANVAS'
+  | 'INVALID_GEOMETRY'
+  | 'OUT_OF_BOUNDS'
+  | 'OVERLAP'
+  | 'EMPTY_TEXT'
+  | 'PLACEHOLDER_TEXT'
+  | 'MISSING_CONTENT'
+  | 'SAFE_MARGIN'
+  | 'INVALID_TYPOGRAPHY'
+  | 'UNREADABLE_CONTRAST'
+  | 'LEGACY_TEMPLATE_COLLAPSE';
+
 export interface DesignValidationIssue { code: DesignValidationCode; message: string; block?: string }
 export interface DesignValidationResult { valid: boolean; errors: DesignValidationIssue[]; warnings: DesignValidationIssue[] }
+
+export { validateCompositionDiversity };
 
 function codeFor(message: string): DesignValidationCode {
   if (message.includes('out of canvas')) return 'OUT_OF_BOUNDS';
   if (message.includes('overlaps')) return 'OVERLAP';
   if (message.includes('empty line')) return 'EMPTY_TEXT';
   if (message.includes('placeholder')) return 'PLACEHOLDER_TEXT';
+  if (message.includes('LEGACY_TEMPLATE_COLLAPSE') || message.includes('legacy repetitive template')) return 'LEGACY_TEMPLATE_COLLAPSE';
   return 'MISSING_CONTENT';
 }
 
@@ -44,6 +59,7 @@ export function validateDesign(plan: LayoutPlan, content: ContentInput): DesignV
   }
   if (!validRect(plan.imageRect)) errors.push({ code: 'INVALID_GEOMETRY', message: 'Image rectangle contains invalid geometry.', block: 'image' });
   for (const message of validateLayoutPlan(plan, content)) errors.push({ code: codeFor(message), message });
+  for (const message of validateCompositionDiversity(plan)) errors.push({ code: 'LEGACY_TEMPLATE_COLLAPSE', message });
   for (const block of plan.blocks) {
     if (!('rect' in block)) continue;
     if (!validRect(block.rect)) {
@@ -53,7 +69,7 @@ export function validateDesign(plan: LayoutPlan, content: ContentInput): DesignV
     if (block.kind === 'text' && (!Number.isFinite(block.spec.fontSize) || block.spec.fontSize <= 0 || !block.spec.fontFamily.trim())) {
       errors.push({ code: 'INVALID_TYPOGRAPHY', message: `${block.role} has invalid font metrics.`, block: block.role });
     }
-    if ((block.kind === 'cta' && block.spec.shape !== 'underline') || (block.kind === 'badge' && block.text.trim().length > 0)) {
+    if ((block.kind === 'cta' && block.spec.shape !== 'underline' && block.spec.shape !== 'annotation') || (block.kind === 'badge' && block.text.trim().length > 0)) {
       const ratio = block.kind === 'cta'
         ? contrast(block.spec.fill, block.spec.textFill)
         : contrast(block.fill, block.textFill);
@@ -136,6 +152,9 @@ export function validateStyleFidelity(input: {
   notAllowed('image treatment', recipe.imageTreatment, style.renderer.imageTreatment);
   notAllowed('spacing', recipe.spacingBehaviour, style.renderer.spacing);
   notAllowed('logo treatment', recipe.logoTreatment, style.renderer.logoTreatment);
+  if (recipe.compositionArchetype && style.renderer.compositionArchetypes) {
+    notAllowed('composition archetype', recipe.compositionArchetype, style.renderer.compositionArchetypes);
+  }
 
   // ── Palette (deterministic comparison where possible) ──
   violations.push(...paletteComplianceViolations([palette.ink, palette.paper, palette.accent], style, 'the final rendered palette'));

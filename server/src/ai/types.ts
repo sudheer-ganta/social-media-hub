@@ -1141,6 +1141,8 @@ export interface MarketingCreative {
 export interface LayoutDirection {
   /** The overall layout approach this concept calls for — e.g. "editorial vertical split, product foreground-left, copy right column". */
   layoutType?: string;
+  /** Suggested composition archetype (advisory from the concept stage; final archetype is strictly governed by Style DNA). */
+  compositionArchetype?: CompositionArchetype;
   /** Reading order, each entry naming its job — e.g. "HOOK — headline, top-left", "DIRECT — cta, bottom-right corner". */
   textHierarchy?: string[];
   headlinePlacement?: string;
@@ -1160,6 +1162,44 @@ export interface LayoutDirection {
   visualDensity?: string;
   /** What must stay clear of text/graphics — e.g. "bottom 15% clear for platform UI". */
   safeAreas?: string;
+}
+
+/**
+ * A true graphic-design concept: "What is the visual idea?"
+ * Precedes and drives all composition geometry, scale contrast, and omissions.
+ */
+export interface GraphicDesignConcept {
+  conceptName: string;
+  visualIdea: string;
+  pointOfView?: string;
+  emotionalTone?: string;
+  hero: 'typography' | 'image' | 'white-space' | 'graphic-object' | 'texture';
+  imageRole: 'small-tactile-object' | 'full-bleed-canvas' | 'offset-crop' | 'floating-fragment' | 'subordinate-texture' | 'edge-bleed';
+  typographyRole?: 'monumental-hero' | 'editorial-spine' | 'word-stack' | 'restrained-footnote' | 'kinetic-overlap';
+  compositionStrategy?: 'asymmetric-tension' | 'negative-space-field' | 'physical-collage' | 'typographic-sculpture' | 'boundary-crossover' | 'split-contrast';
+  scaleStrategy?: 'extreme-contrast' | 'dominant-hero' | 'editorial-restraint' | 'layered-hierarchy';
+  imperfection?: string;
+  graphicDevices?: string[];
+  elementsToOmit?: Array<'cta' | 'divider' | 'footer' | 'description' | 'secondaryInfo' | 'badge' | 'headline' | 'support' | 'logo'>;
+}
+
+export interface CompositionIntent {
+  hero: 'typography' | 'image' | 'white-space' | 'graphic-object' | 'texture';
+  scaleContrast: 'extreme' | 'strong' | 'subtle';
+  whitespaceRatio: number;
+  asymmetry: 'extreme' | 'strong' | 'moderate' | 'subtle';
+  alignment: 'left-ragged' | 'asymmetric-balance' | 'edge-anchored' | 'deliberate-center';
+  imageTreatment: 'small-tactile-object' | 'full-bleed-canvas' | 'offset-crop' | 'floating-fragment' | 'edge-bleed';
+  imageRotationDeg?: number;
+  omissions: Array<'cta' | 'divider' | 'footer' | 'description' | 'secondaryInfo' | 'badge' | 'headline' | 'support' | 'logo'>;
+  graphicDevices: string[];
+  imperfectionLevel: 'none' | 'subtle' | 'raw' | 'physical';
+  hasOversizedType?: boolean;
+  hasStackedWords?: boolean;
+  hasVerticalType?: boolean;
+  hasTape?: boolean;
+  hasStamp?: boolean;
+  hasHandwrittenNote?: boolean;
 }
 
 export interface CreativeDirection {
@@ -1192,6 +1232,10 @@ export interface CreativeDirection {
   marketingCreative?: MarketingCreative;
   /** Absent when the concept is simple enough that composition/copyTreatment already say where things go. */
   layoutDirection?: LayoutDirection;
+  /** Graphic design concept defining the primary visual idea and hero element before layout geometry. */
+  graphicConcept?: GraphicDesignConcept;
+  /** Dynamic composition intent derived from the concept and Style DNA. */
+  compositionIntent?: CompositionIntent;
 }
 
 /** What stage one hands the image call: the direction, and its provenance. */
@@ -1592,6 +1636,24 @@ export type RecipeImperfection = 'none' | 'subtle' | 'strong';
 export type RecipeImageTreatment = 'full-bleed' | 'framed' | 'inset';
 export type RecipeSpacing = 'tight' | 'generous' | 'airy';
 
+export type CompositionArchetype =
+  | 'FULL_BLEED_TYPE'
+  | 'EDITORIAL_OVERLAP'
+  | 'PRODUCT_CUTOUT'
+  | 'ASYMMETRIC_GRID'
+  | 'TYPOGRAPHIC_POSTER'
+  | 'COLLAGE_LAYERED'
+  | 'NEGATIVE_SPACE'
+  | 'SPLIT_COMPOSITION'
+  | 'IMAGE_AS_BACKGROUND'
+  | 'FRAME_WITH_OVERLAP';
+
+export interface ImageCapabilities {
+  isCutout?: boolean;
+  hasTransparency?: boolean;
+  aspectRatio?: string;
+}
+
 /**
  * The reference images turned into an actionable DESIGN SYSTEM, not adjectives.
  * Split by consumer: the free-text fields art-direct the VISUAL (they flow into
@@ -1628,6 +1690,8 @@ export interface ReferenceDesignRecipe {
   visualDensity: RecipeVisualDensity;
   imperfectionLevel: RecipeImperfection;
   imageTreatment: RecipeImageTreatment;
+  /** The deterministic composition archetype driving the layout geometry. */
+  compositionArchetype?: CompositionArchetype;
 }
 
 export interface ReferenceStyleProfile {
