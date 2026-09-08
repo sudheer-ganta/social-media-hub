@@ -866,7 +866,7 @@ function buildEditorialOverlapPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): 
       kind: 'underline',
       rect: norm(bodyX, headlineTopY + headlineBlockH + 6, underlineW, 3),
       stroke: palette.accent,
-      style: 'rough',
+      strokeWidth: 3,
     });
   }
 
@@ -1593,7 +1593,7 @@ function buildCollageLayeredPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): La
       kind: 'underline',
       rect: norm(headlineX, underlineY, underlineW, 4),
       stroke: palette.accent,
-      style: 'rough',
+      strokeWidth: 4,
       rotationDeg: -1.0,
     });
   }
