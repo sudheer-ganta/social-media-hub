@@ -130,13 +130,12 @@ Every one of them is optional. Requiring all of them produces an information car
 IMAGE POLICY
 ==================================================
 
-IMAGE IS OPTIONAL. Never include one because the canvas has space.
+Commercial advertising requires compelling visual proof and emotional resonance. 
 
-If imagery serves the mechanism, decide what it DOES — dominant object, fragment, ground, texture, evidence. If it does not, set imageRole to 'omitted' and let type, graphic form, material or emptiness carry the piece.
-
-If the member supplied an asset, its pixels are preserved and it is design material: crop, rotate, scale, overlap, offset, bleed, frame, layer. Supplying an asset is not an instruction to build a layout around a rectangle.
-
-Generated imagery must have a direct semantic relationship to the idea. Never generic atmosphere, generic interiors, generic people, generic product-on-gradient.
+- FULL-BLEED & IMMERSIVE: Imagery must immerse the viewer in the authentic reality of what is being advertised (e.g., breathtaking destination vistas, boutique hotel interiors, active flight window views, models wearing apparel, macro luxury textures, or clean living environments).
+- STRICT PROHIBITION ON WALL MOCKUPS: NEVER design a creative as a tiny picture frame hanging on an empty wall, a poster pinned to a concrete wall, or a flyer lying on a table. That is a lazy mockup, not an ad.
+- Generated imagery must have a direct semantic relationship to the brand and campaign. Never generic atmosphere, generic empty walls, or disconnected placeholders.
+- If the member supplied an asset, its pixels are preserved and it is design material: crop, rotate, scale, overlap, offset, bleed, frame, layer. Supplying an asset is not an instruction to build a layout around a rectangle.
 
 ==================================================
 LOGO POLICY

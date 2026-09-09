@@ -602,6 +602,21 @@ export function repairPlanMechanically(
     }
   }
 
+  // Prevent copy nodes from colliding or overlapping vertically
+  const copyNodes = plan.nodes.filter(n => n?.kind === 'copy');
+  copyNodes.sort((a, b) => a.y - b.y);
+  for (let i = 0; i < copyNodes.length - 1; i++) {
+    const current = copyNodes[i];
+    const next = copyNodes[i + 1];
+    const hOverlap = current.x < next.x + next.width && current.x + current.width > next.x;
+    if (hOverlap && next.y < current.y + current.height + 0.015) {
+      const neededShift = (current.y + current.height + 0.015) - next.y;
+      if (next.y + next.height + neededShift <= 0.94) {
+        next.y += neededShift;
+      }
+    }
+  }
+
   // Deterministically place logo into negative space with >=0.015 clearance
   const logoNode = plan.nodes.find(n => n?.kind === 'logo');
   if (logoNode) {
@@ -1013,12 +1028,13 @@ export function composeHighFidelityVisualPrompt(options: {
   ].filter((p): p is string => Boolean(p && p.trim().length > 0));
 
   const aestheticDirectives = [
-    'High-end commercial & editorial photography.',
-    'Rich tangible textures, natural lighting with soft directional shadows, realistic depth of field.',
-    'Prominently feature appetizing, concrete, real-world subjects and culinary craft (e.g., fresh dishes, glistening noodles, rising steam, authentic tableware, natural textures).',
-    'Avoid dark empty slates, artificial neon gradients, or generic AI voids unless explicitly requested.',
-    'Leave clean, elegant negative space for graphic overlay.',
-    'CRITICAL: Absolutely wordless and clean — NO text, NO lettering, NO typography, NO logos, NO watermark in the image.',
+    'High-end commercial and editorial visual aesthetics with impeccable craft, cinematic scale, and rich detail.',
+    'Full-bleed immersive photography with rich tangible textures, natural lighting, soft directional shadows, and realistic depth of field.',
+    'Depict concrete, vibrant, authentic real-world subjects and settings directly relevant to the brand, campaign subject, and environment.',
+    'STRICT PROHIBITION: Never generate a miniature picture frame hanging on an empty wall, a poster pinned to a concrete wall, a flyer on a table, or a blank room mockup. The visual MUST BE the direct, expansive, immersive subject or destination itself.',
+    'Avoid dark empty slates, sterile blank walls, artificial neon gradients, or generic AI voids.',
+    'Leave clean, balanced composition areas and natural breathing room for graphic overlay.',
+    'CRITICAL: Absolutely wordless and clean — NO text, NO lettering, NO numerals, NO typography, NO logos, NO watermark in the image.',
   ].join(' ');
 
   const styleInstructions = styleDna ? renderStyleDnaInstructions(styleDna) : '';

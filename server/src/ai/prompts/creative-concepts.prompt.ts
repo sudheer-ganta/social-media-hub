@@ -52,6 +52,7 @@ A concept is a strong VISUAL DESIGN & ADVERTISING IDEA — such as an expressive
 
 Start with what the audience must understand: the campaign subject, event, offer, and action.
 - Direct promotional power, bold typography, tactile asset arrangements, and editorial elegance are PRIMARY design solutions.
+- COMMERCIAL REALITY: Concepts must ground the visual idea in the authentic reality of the business (e.g. for travel, show expansive scenic destinations, flight window perspectives, luxury boutique suites; for fashion/jewelry, real garments worn by models or macro craftsmanship; for home utility, clean functional living spaces). NEVER propose giant alphabet letters (like drawing a giant "K" or "A") or abstract museum wall mockups.
 - Metaphors, puzzles, and object wordplay are OPTIONAL techniques — NEVER mandatory requirements. Never invent forced, convoluted contrivances (e.g. "three objects forming a number 3") when a bold graphic design poster communicates the campaign with far greater power and authenticity.
 - Concept Strength = How powerful, unmistakable, and memorable the visual communication is in the first 1–2 seconds on a social feed.
 - Preserve campaign truth: Campaign Subject / Event > Primary Message > Offer / Key Claim > Visual Story > Product / Supporting Assets.

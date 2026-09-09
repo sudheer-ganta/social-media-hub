@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 import { env } from '../config/env';
 import { prisma } from '../config/prisma';
 import {
@@ -1071,10 +1072,23 @@ async function finishGeneration({
       throw new CreativeError('Your style references could not all be read. Re-upload the missing references.', 422);
     }
     if (!renderContext) throw new CreativeError('The campaign context is missing. Start a new creative.', 422);
+
+    let logoAsset = logos.images[0];
+    if (!logoAsset) {
+      const brandName = renderContext?.brand?.name || direction.headline || 'BRAND';
+      const cleanName = brandName.replace(/[^\w\s.-]/g, '').trim() || 'BRAND';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="160" viewBox="0 0 600 160">
+        <rect width="600" height="160" fill="none"/>
+        <text x="300" y="100" font-family="sans-serif" font-weight="800" font-size="52" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">${cleanName.toUpperCase()}</text>
+      </svg>`;
+      const buf = await sharp(Buffer.from(svg)).png().toBuffer();
+      logoAsset = { mimeType: 'image/png', data: buf.toString('base64') };
+    }
+
     const result = await timed(metrics, 'render', () => designCreative({
       direction, context: { ...renderContext, creativeDna, referenceStyle }, styleDna,
       canonicalBrief, graphicConcept,
-      products: products.images, references: references.images, logo: logos.images[0], priorVisual: previous.images[0],
+      products: products.images, references: references.images, logo: logoAsset, priorVisual: previous.images[0],
       textProvider: providerForRole('creative'), imageProvider,
       onCall: kind => { if (metrics) { if (kind === 'text') metrics.textCalls += 1; else metrics.imageCalls += 1; } },
       onStageTiming: (stage, durationMs) => {
