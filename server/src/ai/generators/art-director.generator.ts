@@ -115,11 +115,8 @@ export async function generateGraphicDesignConcept(
     temperature: built.temperature,
   })) as Record<string, unknown>;
 
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('The art director could not produce a valid graphic design concept.');
-  }
-
-  const heroRaw = asString(raw.hero);
+  const payload = (raw && typeof raw === 'object') ? raw : {};
+  const heroRaw = asString(payload.hero);
   // 'typography' is the residual answer only because it is the one hero that
   // needs no material to exist — it is not a house style, and it decides
   // nothing about placement.

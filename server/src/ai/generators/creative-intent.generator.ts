@@ -99,11 +99,10 @@ export async function generateCreativeIntent({
       temperature: built.temperature,
   })) as RawCreativeIntentPayload;
 
-    if (!payload || !Array.isArray(payload.requiredClaims)) throw new Error('The campaign requirements could not be extracted.');
-    const intent = normaliseIntent(payload);
-    // Literal discount offers cannot disappear because the model omitted a field.
-    const discounts = request.match(/\d+(?:\.\d+)?\s*%\s*(?:off|discount)\b/gi) ?? [];
-    intent.requiredClaims = [...new Set([...intent.requiredClaims, ...discounts])];
+  const intent = normaliseIntent((payload && typeof payload === 'object') ? payload : { requiredClaims: [] });
+  // Literal discount offers cannot disappear because the model omitted a field.
+  const discounts = request.match(/\d+(?:\.\d+)?\s*%\s*(?:off|discount)\b/gi) ?? [];
+  intent.requiredClaims = [...new Set([...intent.requiredClaims, ...discounts])];
     console.info('[creative] intent extracted', {
       model: provider.model,
       durationMs: Date.now() - startedAt,

@@ -2,20 +2,23 @@
  * Two prompts for one research operation:
  *
  *   buildResearchQuery       the grounded call — Gemini + Google Search,
- *                            free text out, asked to research technique,
- *                            never to reproduce a specific ad.
- *   buildResearchSynthesis   the ordinary JSON call — turns that free text
- *                            (or, absent grounding, nothing) into the
- *                            structured CreativeResearch patterns.
+ *                            free text out. Now searches THREE tracks:
+ *                            1. Brand-type × Occasion: "how restaurants do Diwali marketing"
+ *                            2. Visual design patterns for the selected style: "editorial social design typography 2024"
+ *                            3. Engagement & composition best practices for this platform/occasion combo
+ *
+ *   buildResearchSynthesis   the ordinary JSON call — turns that free text into the
+ *                            structured CreativeResearch object, now with richer
+ *                            font/layout/engagement signals the composer will use.
  *
  * See `ai/research/gemini-grounded-search.ts` for why these are two separate
  * Gemini calls rather than one.
  */
 
-export const CREATIVE_RESEARCH_PROMPT_VERSION = 2;
+export const CREATIVE_RESEARCH_PROMPT_VERSION = 3;
 
 export interface CreativeResearchContext {
-  /** The member's raw request — what drives the query, not a generic category search. */
+  /** The member's raw request — drives the query, not a generic category search. */
   request: string;
   brandName?: string;
   industry?: string;
@@ -24,59 +27,85 @@ export interface CreativeResearchContext {
   funnelStage: string;
   platforms: string[];
   products?: string[];
+  /** The FlowPost style name (e.g. "Editorial", "Minimal Doodles") — used to search real visual references for this style. */
+  selectedStyleName?: string;
+  /** Extracted event/occasion from the request (e.g. "Diwali", "Christmas", "product launch") */
+  occasion?: string;
 }
 
 function renderContextLines(context: CreativeResearchContext): string[] {
   return [
     context.brandName && `Brand: ${context.brandName}`,
-    context.industry && `Industry: ${context.industry}`,
+    context.industry && `Industry/Brand type: ${context.industry}`,
     context.products?.length && `Product/service: ${context.products.join(', ')}`,
     context.audience && `Audience: ${context.audience}`,
     `Goal: ${context.goal}`,
     `Funnel stage: ${context.funnelStage}`,
     context.platforms.length && `Platform: ${context.platforms.join(', ')}`,
+    context.selectedStyleName && `Design style: ${context.selectedStyleName}`,
+    context.occasion && `Occasion/Campaign: ${context.occasion}`,
     `Request: "${context.request}"`,
   ].filter((line): line is string => typeof line === 'string' && line.length > 0);
 }
 
 // ─── Stage 1: the grounded call ───────────────────────────────────────────────
 
-const GROUNDED_SYSTEM_INSTRUCTION = `You are FlowPost's creative research director.
+const GROUNDED_SYSTEM_INSTRUCTION = `You are FlowPost's creative research director. Your job is to find real-world design intelligence before a creative is made.
 
-Research current, publicly available advertising and visual-design patterns relevant to this campaign. You are researching CREATIVE TECHNIQUES, not copying campaigns.
+Research THREE tracks simultaneously using Google Search:
 
-Study multiple relevant sources. Extract abstract patterns such as:
-- visual metaphors
-- unexpected scale
-- juxtaposition
-- editorial composition
-- typography treatment
-- color relationships
-- whitespace
-- product presentation
-- storytelling mechanisms
-- cultural visual cues
-- campaign formats
+TRACK 1 — BRAND × OCCASION RESEARCH
+How do brands in this specific industry/category actually market for this occasion or campaign type?
+- Search: "[industry] [occasion] marketing campaign design visual"
+- What visual approaches, moods, copy styles do these brands use?
+- What makes their creatives actually connect with people vs feel generic?
+- What content do consumers respond to in this category for this occasion?
 
-Do NOT:
-- reproduce a specific advertisement
-- reproduce a Pinterest composition
-- copy another brand's logo
-- copy exact campaign wording
-- recreate a single reference
-- instruct anyone to imitate one source
+TRACK 2 — DESIGN STYLE RESEARCH (if a style is selected)
+How do professional designers actually execute this visual style for social media?
+- Search: "[style name] social media design typography composition 2024"
+- What fonts, color approaches, layout patterns are genuinely associated with this style?
+- What does outstanding execution look like vs mediocre template execution?
+- Real designer insights, not Pinterest boards.
 
-Return an abstraction of the creative landscape — patterns and mechanisms in your own words, in plain prose. The goal is to help FlowPost create something ORIGINAL for the selected brand.`;
+TRACK 3 — ENGAGEMENT & COMPOSITION INTELLIGENCE
+What composition and typography decisions drive highest engagement on social media for this type of content?
+- Search: "social media marketing design engagement typography [platform]"
+- How much copy performs best for this platform and goal?
+- What visual hierarchy decisions (size contrast, whitespace, focal point) drive stops and clicks?
+- What makes someone stop scrolling vs scroll past?
+
+Extract PATTERNS and PRINCIPLES — never reproduce a specific ad, headline, or brand's exact treatment.
+Return rich prose covering all three tracks. The AI composer will use this to make every single design decision.`;
 
 export function buildResearchQuery(context: CreativeResearchContext): {
   systemInstruction: string;
   prompt: string;
 } {
+  const tracks: string[] = [];
+
+  // Track 1: Brand × Occasion (always)
+  const brandContext = [context.industry, context.brandName].filter(Boolean).join(' ');
+  const occasionContext = context.occasion || context.request;
+  tracks.push(`TRACK 1 — BRAND × OCCASION: How do ${brandContext || 'brands'} market for ${occasionContext}? What visual and creative approaches actually connect with people?`);
+
+  // Track 2: Style references (when a style is selected)
+  if (context.selectedStyleName) {
+    tracks.push(`TRACK 2 — STYLE REFERENCES: How is "${context.selectedStyleName}" design style executed in professional social media marketing? Real font choices, composition patterns, color approaches for this style — not template descriptions.`);
+  }
+
+  // Track 3: Engagement intelligence (always)
+  const platformStr = context.platforms.join('/') || 'social media';
+  tracks.push(`TRACK 3 — ENGAGEMENT INTELLIGENCE: For a ${context.goal.replace(/_/g, ' ')} creative on ${platformStr} — what composition, copy volume, and visual hierarchy decisions drive the strongest engagement? What stops scrolling?`);
+
   const prompt = [
     '## Campaign context',
     ...renderContextLines(context),
     '',
-    'Research creative advertising concepts for this category, current visual campaign patterns, and relevant design inspiration — derived from the actual request above, not a generic search. Summarise what you find as abstracted patterns and mechanisms, in a few short paragraphs.',
+    '## Research tracks to cover',
+    ...tracks.map((t, i) => `${i + 1}. ${t}`),
+    '',
+    'Search all three tracks. Return your findings as rich prose covering each track. The downstream AI composer will read this and make ALL design decisions from it.',
   ].join('\n');
 
   return { systemInstruction: GROUNDED_SYSTEM_INSTRUCTION, prompt };
@@ -84,13 +113,24 @@ export function buildResearchQuery(context: CreativeResearchContext): {
 
 // ─── Stage 2: normalise into CreativeResearch ─────────────────────────────────
 
-const SYNTHESIS_SYSTEM_INSTRUCTION = `You are a research analyst turning creative-research notes into a structured brief. You extract patterns, never content to reproduce.
+const SYNTHESIS_SYSTEM_INSTRUCTION = `You are a research analyst turning creative-research notes into a structured brief for an AI graphic designer.
+
+The AI designer will read your output and make ALL of these decisions:
+- Which fonts to use (from a fixed list of 26 available families)
+- How much text to place on the design
+- What font sizes and scale contrast to use
+- Where to place elements
+- What visual approach to take
+
+Your job: extract the PATTERNS and PRINCIPLES that will guide those decisions.
 
 Rules you never break:
-- Extract the mechanism, not the content. "Product used as visual metaphor" is a pattern. A specific composition, headline or brand's exact treatment is not something to repeat.
-- Actively flag generic AI-template patterns (centered product + gradient, giant headline, floating 3D objects, generic stock-office scenes, glowing dashboards) as ideasToAvoid when relevant — the goal is a memorable creative, not another one of those.
-- If no research notes were provided, reason from general knowledge of advertising and design craft for this category — do not invent specific campaigns or attribute a pattern to a named brand you were not shown.
-- Return only the JSON object described. No commentary, no markdown fences.`;
+- Extract the mechanism, not the content. "Product used as visual metaphor" is a pattern. A specific headline or brand treatment is not.
+- Make your typographyInsights genuinely useful — if research shows editorial designs use large serif headlines at 3-5x the body size, SAY THAT.
+- Make your engagementInsights actionable — "minimal text, 1-3 words at extreme scale" is useful. "Use good typography" is not.
+- Flag generic AI-template patterns (centered product + gradient, giant headline, floating 3D objects, generic stock scenes) as ideasToAvoid.
+- If no research was available, reason from strong knowledge of advertising craft for this category.
+- Return only the JSON. No commentary, no markdown fences.`;
 
 const stringArray = (description: string, maxItems: number) => ({
   type: 'array',
@@ -106,17 +146,31 @@ export const CREATIVE_RESEARCH_RESPONSE_SCHEMA: Record<string, unknown> = {
       'The underlying creative mechanism behind strong examples — e.g. "unexpected scale", "product as metaphor", "editorial storytelling".',
       8,
     ),
-    visualPatterns: stringArray('Recurring visual patterns — not tied to any one reference.', 8),
-    typographyPatterns: stringArray('Recurring typography/layout character, if relevant to this request.', 4),
-    compositionPatterns: stringArray('Recurring composition/framing choices.', 6),
-    productTreatmentPatterns: stringArray('Recurring ways a product/subject is presented.', 6),
-    ideasToAvoid: stringArray('Generic/overused patterns to actively avoid for this request.', 6),
+    visualPatterns: stringArray('Recurring visual patterns observed — color moods, lighting, textures, not tied to any one reference.', 8),
+    typographyInsights: stringArray(
+      'SPECIFIC typography insights: font character (elegant serif vs bold display vs clean sans), scale relationships seen (headline 4x body, etc.), case treatment, tracking. Make this actionable for font selection.',
+      6,
+    ),
+    compositionInsights: stringArray(
+      'Specific composition patterns: where focal points sit, how negative space is used, how image and text relate. Actionable for layout decisions.',
+      6,
+    ),
+    engagementInsights: stringArray(
+      'What drives engagement for this brand type + occasion + platform: how much copy, what visual hierarchy, what emotional tone, what stops scrolling. Be specific.',
+      6,
+    ),
+    brandOccasionPatterns: stringArray(
+      'How this specific brand category approaches this occasion in their marketing: mood, cultural references, what resonates with their audience.',
+      6,
+    ),
+    productTreatmentPatterns: stringArray('Recurring ways a product/subject is presented in strong examples.', 4),
+    ideasToAvoid: stringArray('Generic/overused patterns to actively avoid — template looks, AI clichés, category defaults.', 6),
     originalityDirection: {
       type: 'string',
-      description: 'One sentence: how this request\'s creative should differ from what was studied.',
+      description: 'One sentence: what would make a creative for THIS brand/occasion/style genuinely memorable and different from the category average.',
     },
   },
-  required: ['creativeMechanisms', 'originalityDirection'],
+  required: ['creativeMechanisms', 'typographyInsights', 'engagementInsights', 'originalityDirection'],
 };
 
 export interface BuiltResearchSynthesisPrompt {
@@ -136,18 +190,18 @@ export function buildResearchSynthesis(
     ...renderContextLines(context),
     '',
     groundedText
-      ? `## Research notes\n${groundedText}`
-      : 'No live research was available for this request — reason from your own knowledge of strong advertising and design craft for this category instead.',
+      ? `## Research findings\n${groundedText}`
+      : 'No live research was available — reason from strong knowledge of advertising craft, visual design, and engagement patterns for this specific brand category and occasion.',
     '',
-    'Cluster what you notice into abstracted patterns per the schema, and give one clear direction for how an original creative for THIS request should differ from what was studied.',
-    'Return a single JSON object matching the provided schema. Nothing else.',
+    'Extract the patterns per the schema. Make typography and engagement insights SPECIFIC and ACTIONABLE — the AI designer reading this will make all font and layout decisions from your output.',
+    'Return a single JSON object matching the provided schema.',
   ].join('\n');
 
   return {
     systemInstruction: SYNTHESIS_SYSTEM_INSTRUCTION,
     prompt,
     responseSchema: CREATIVE_RESEARCH_RESPONSE_SCHEMA,
-    temperature: 0.6,
+    temperature: 0.5,
     version: CREATIVE_RESEARCH_PROMPT_VERSION,
   };
 }

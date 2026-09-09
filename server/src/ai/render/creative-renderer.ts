@@ -29,6 +29,7 @@ import {
 } from './primitives';
 import { rasterizeTextOverlay } from './text-rasterizer';
 import { selectTypography, type TypographySelection } from '../typography/font-selector';
+import type { AiTextProvider } from '../providers';
 import type { CreativeDirection, GraphicDesignConcept, ImageCapabilities, ReferenceStyleProfile, ResolvedCreativeDna } from '../types';
 import type { StyleDNA } from '../style-dna/style-dna';
 
@@ -232,6 +233,8 @@ export interface RenderCreativeOptions {
   logoImage?: { mimeType: string; data: string };
   /** Image capabilities: cutout, transparency, aspect ratio. */
   capabilities?: ImageCapabilities;
+  /** Optional AI text provider for AI-driven font selection. When absent, uses safe editorial defaults. */
+  textProvider?: AiTextProvider;
 }
 
 export interface RenderedCreative {
@@ -259,6 +262,7 @@ export async function renderCreative({
   styleDnaVariant,
   logoImage,
   capabilities,
+  textProvider,
 }: RenderCreativeOptions): Promise<RenderedCreative> {
   const { width, height } = resolveCanvasSize(direction.aspectRatio);
   const { recipe, source: recipeSource } = resolveDesignRecipe(direction, creativeDna, {
@@ -275,10 +279,16 @@ export async function renderCreative({
       ? await measureCopyZoneTone(Buffer.from(visualImage.data, 'base64'), recipe.layoutBehaviour === 'stacked')
       : 'dark';
 
-  // The automatic typography engine (spec: the user never selects a font) —
-  // scores FlowPost's curated Google Fonts catalog against this generation's
-  // style, brand, industry, copy and language, once, before layout.
-  const typography = selectTypography({ direction, creativeDna, recipe, styleDna });
+  // AI-driven typography selection — the AI reads the brand, style, and creative
+  // context and picks the best fonts from the available 26 families.
+  // Falls back to safe editorial defaults when no provider is available.
+  const typography = await selectTypography({
+    direction,
+    creativeDna,
+    recipe,
+    styleDna,
+    provider: textProvider,
+  });
 
   const plan = buildLayoutPlan({
     width,

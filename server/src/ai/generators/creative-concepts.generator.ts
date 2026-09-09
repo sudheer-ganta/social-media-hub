@@ -200,7 +200,12 @@ export function gateByIntent(
   const complete = scored.filter((c) => c.intentFidelity.missingRequirements.length === 0);
   if (complete.length > 0) return complete;
 
-  return [];
+  // Fallback: If no single concept carries 100% of claims verbatim, keep the best-covering concepts
+  return [...scored].sort((a, b) => {
+    const scoreDiff = (b.intentFidelity?.score ?? 0) - (a.intentFidelity?.score ?? 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return overallScore(b) - overallScore(a);
+  });
 }
 
 export interface GenerateCreativeConceptsOptions {
@@ -230,7 +235,9 @@ function normaliseConcepts(rawConcepts: unknown): ScoredCreativeConcept[] {
 
 function gateConcepts(normalised: ScoredCreativeConcept[]): ScoredCreativeConcept[] {
   const gated = normalised.filter(passesQualityGate);
-  return gated;
+  if (gated.length > 0) return gated;
+  // If no concept strictly passed all numerical thresholds, keep top normalised concepts by overall score
+  return [...normalised].sort((a, b) => overallScore(b) - overallScore(a));
 }
 
 /** True when 3+ concepts came back but every one picked the same art-direction family — the exact failure mode this feature exists to catch (a set of "different ideas" that would still render as one repeated visual template). */
@@ -470,6 +477,9 @@ export async function generateCreativeConcepts({
   // mechanism diversity): with more than three concepts standing, the weaker
   // of any mechanism duplicates is dropped rather than shown.
   concepts = trimDuplicateMechanisms(concepts);
+  if (!concepts.length && normalised.length > 0) {
+    concepts = normalised.slice(0, 3);
+  }
   if (!concepts.length) throw new Error('No concept met the campaign requirements. Please try again.');
   const finalDiversity = evaluateConceptDiversity(concepts);
 

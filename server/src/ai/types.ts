@@ -1817,8 +1817,18 @@ export interface CreativeResearch {
   referenceCount: number;
   creativeMechanisms: string[];
   visualPatterns: string[];
+  /** Legacy alias — use typographyInsights. */
   typographyPatterns: string[];
+  /** Specific typography intelligence: font character, scale relationships, case, tracking — actionable for AI font selection. */
+  typographyInsights: string[];
+  /** Legacy alias — use compositionInsights. */
   compositionPatterns: string[];
+  /** Specific composition intelligence: focal point placement, negative space usage, image-text relationship. */
+  compositionInsights: string[];
+  /** How this brand type approaches this occasion in their marketing — mood, cultural cues, what resonates. */
+  brandOccasionPatterns: string[];
+  /** What drives engagement for this brand type + occasion + platform: copy volume, visual hierarchy, emotional tone. */
+  engagementInsights: string[];
   productTreatmentPatterns: string[];
   /** Generic AI-template patterns to avoid for this request specifically. */
   ideasToAvoid: string[];
@@ -1979,7 +1989,11 @@ export interface RawCreativeResearchPayload {
   creativeMechanisms?: unknown;
   visualPatterns?: unknown;
   typographyPatterns?: unknown;
+  typographyInsights?: unknown;
   compositionPatterns?: unknown;
+  compositionInsights?: unknown;
+  brandOccasionPatterns?: unknown;
+  engagementInsights?: unknown;
   productTreatmentPatterns?: unknown;
   ideasToAvoid?: unknown;
   originalityDirection?: unknown;

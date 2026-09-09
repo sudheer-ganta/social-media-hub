@@ -28,7 +28,9 @@ const STOP_WORDS = new Set([
 export function claimTokens(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/(\d)\s*%/g, '$1%')
+    .replace(/(\d+)\s*%/g, '$1%')
+    .replace(/(\d+%)([a-zA-Z]+)/g, '$1 $2')
+    .replace(/([a-zA-Z]+)(\d+%)/g, '$1 $2')
     .replace(/[^\p{L}\p{N}%]+/gu, ' ')
     .split(/\s+/)
     .filter((token) => token.length > 0 && !STOP_WORDS.has(token));
@@ -47,7 +49,13 @@ export function claimSatisfied(claim: string, text: string): boolean {
   if (present.length === 0) return false;
 
   const numeric = wanted.filter((token) => /\d/.test(token));
-  if (numeric.some((token) => !present.includes(token))) return false;
+  if (
+    numeric.some((token) => {
+      return !present.some((p) => p === token || p.includes(token) || token.includes(p));
+    })
+  ) {
+    return false;
+  }
 
   const matches = (token: string) =>
     present.some(

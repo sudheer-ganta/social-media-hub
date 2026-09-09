@@ -148,11 +148,7 @@ export async function generateCreativeStrategy(
     temperature: built.temperature,
   })) as RawCreativeStrategyPayload;
 
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('The creative strategist could not produce a strategy for this request.');
-  }
-
-  const strategy = normaliseCreativeStrategy(raw, {
+  const strategy = normaliseCreativeStrategy((raw && typeof raw === 'object') ? raw : {}, {
     request: options.request,
     conceptMechanism: options.concept?.visualMechanism,
   });

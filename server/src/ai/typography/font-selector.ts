@@ -16,13 +16,14 @@ import {
   type TypographyStyleProfile,
 } from './style-profiles';
 import { detectScriptsAcross } from './language';
-import type { ArtDirectionFamily, CreativeDirection, ReferenceDesignRecipe, ResolvedCreativeDna } from '../types';
+import type { ArtDirectionFamily, CreativeDirection, CreativeResearch, ReferenceDesignRecipe, ResolvedCreativeDna } from '../types';
 import type { StyleDNA } from '../style-dna/style-dna';
+import type { AiTextProvider } from '../providers';
 
 /**
  * FlowPost's automatic typography engine (spec: the user never selects a
  * font). Scores every candidate in the curated catalog against the full
- * generation context — creative style, brand, industry, copy, language —
+ * generation context ΓÇö creative style, brand, industry, copy, language ΓÇö
  * rather than a fixed "style X -> font Y" lookup, so two requests in the
  * same ArtDirectionFamily can land on genuinely different fonts (see the
  * "editorial fashion" vs "editorial tech announcement" cases in
@@ -32,18 +33,18 @@ import type { StyleDNA } from '../style-dna/style-dna';
 export interface RoleTypography {
   family: string;
   weight: number;
-  fontSize: number; // multiplier of canvas width — same convention as LAYOUT_CONFIG in render/layout-plan.ts
+  fontSize: number; // multiplier of canvas width ΓÇö same convention as LAYOUT_CONFIG in render/layout-plan.ts
   letterSpacing: number;
   lineHeightMult: number;
   caseTransform: CaseHint;
   italic: boolean;
 }
 
-/** The FontStack shape render/layout-plan.ts already builds its geometry from — kept so that module barely changes. */
+/** The FontStack shape render/layout-plan.ts already builds its geometry from ΓÇö kept so that module barely changes. */
 export interface BaseFontStack {
   headline: string;
   body: string;
-  /** The weight the catalog actually has a file for (see nearestAvailableWeight) — a single-weight display font like Anton never gets asked to render a "700" it doesn't have. */
+  /** The weight the catalog actually has a file for (see nearestAvailableWeight) ΓÇö a single-weight display font like Anton never gets asked to render a "700" it doesn't have. */
   headlineWeight: number;
   bodyWeight: number;
   headlineCharWidth: number;
@@ -62,18 +63,29 @@ export interface TypographySelection {
   hierarchy: Record<FontRole, RoleTypography>;
   /** Render-ready stack for the existing layout geometry (render/layout-plan.ts). */
   baseFontStack: BaseFontStack;
-  /** Every distinct (family, weight, style) the renderer must load — see render/text-rasterizer.ts. */
+  /** Every distinct (family, weight, style) the renderer must load ΓÇö see render/text-rasterizer.ts. */
   facesUsed: Array<{ family: string; weight: number; style: 'normal' | 'italic' }>;
 }
+
+export const AVAILABLE_FONTS = FONT_CATALOG.map((f) => ({
+  family: f.family,
+  weights: f.weights,
+  styles: f.styles,
+  category: f.category,
+}));
+
+export const AVAILABLE_FAMILY_NAMES = AVAILABLE_FONTS.map((f) => f.family);
 
 export interface FontSelectionInput {
   direction: CreativeDirection;
   creativeDna: ResolvedCreativeDna;
   recipe: ReferenceDesignRecipe;
   styleDna?: StyleDNA;
+  research?: CreativeResearch;
+  provider?: AiTextProvider;
 }
 
-// ─── Prose signal extraction ────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Prose signal extraction ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 const CATALOG_PERSONALITY_WORDS = [...new Set(FONT_CATALOG.flatMap((f) => f.personality))];
 
@@ -117,7 +129,7 @@ function extractPersonalitySignals(prose: string): Set<string> {
 
 const INDUSTRY_KEYWORDS: Record<string, RegExp> = {
   tech: /\b(tech|technology|software|saas|app|startup|digital|ai\b)/i,
-  food: /\b(restaurant|food|cafe|caf[ée]|coffee|menu|dining|cuisine|kitchen|momo|snack|beverage|drink)/i,
+  food: /\b(restaurant|food|cafe|caf[├⌐e]|coffee|menu|dining|cuisine|kitchen|momo|snack|beverage|drink)/i,
   fashion: /\b(fashion|apparel|clothing|couture|style|outfit|wear)/i,
   beauty: /\b(beauty|skincare|cosmetic|makeup|salon|spa)/i,
   fitness: /\b(fitness|gym|workout|athlet|sport)/i,
@@ -148,7 +160,7 @@ function formalityTarget(personality: string[]): number {
   return Math.max(1, Math.min(5, target));
 }
 
-// ─── Scoring ─────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Scoring ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 interface ScoreContext {
   role: FontRole;
@@ -168,7 +180,7 @@ function supportsScripts(font: FontDefinition, required: ScriptTag[]): boolean {
 function scoreFont(font: FontDefinition, ctx: ScoreContext): number {
   if (!supportsScripts(font, ctx.requiredScripts)) return -Infinity;
 
-  // A display-only face is illegible at body/metadata/disclaimer/cta sizes —
+  // A display-only face is illegible at body/metadata/disclaimer/cta sizes ΓÇö
   // excluded outright rather than merely penalized.
   const needsReadableBody = ctx.role === 'body' || ctx.role === 'metadata' || ctx.role === 'disclaimer' || ctx.role === 'cta';
   if (needsReadableBody && font.readability === 'display-only') return -Infinity;
@@ -188,7 +200,7 @@ function scoreFont(font: FontDefinition, ctx: ScoreContext): number {
   if (ctx.industry && font.compatibleIndustries.includes(ctx.industry)) score += 4;
 
   // An accent exists to be a distinctive flourish (eyebrow/annotation), not a
-  // third helping of the same neutral sans as headline/body — without this,
+  // third helping of the same neutral sans as headline/body ΓÇö without this,
   // a well-matched geometric sans can out-score the handwritten/display faces
   // an accent role is actually for.
   if (ctx.role === 'accent' && (font.category === 'handwritten' || font.category === 'display')) score += 3;
@@ -203,13 +215,13 @@ function scoreFont(font: FontDefinition, ctx: ScoreContext): number {
 }
 
 /**
- * A style's `preferredCategories` is authoritative — the member's selected
+ * A style's `preferredCategories` is authoritative ΓÇö the member's selected
  * style (or, absent one, the concept's ArtDirectionFamily profile) must not
  * be silently reinterpreted by typography. This filters candidates BEFORE
  * scoring, so nothing downstream (pairing, brand-family boost, personality
  * match) can ever resurrect a category the style excludes. Previously this
  * was only a +2 scoring bonus, which a strong pairing/personality match
- * could outweigh — e.g. a sans-only style still ending up with a serif body
+ * could outweigh ΓÇö e.g. a sans-only style still ending up with a serif body
  * font because it was in the headline font's `pairsWith` list.
  */
 function categoryAllowed(font: FontDefinition, ctx: ScoreContext): boolean {
@@ -227,12 +239,12 @@ function rankCandidates(role: FontRole, ctx: ScoreContext): FontDefinition[] {
   const constrained = rank(FONT_CATALOG.filter((font) => categoryAllowed(font, ctx)));
   // Only widen back to the full catalog when the hard constraint leaves
   // nothing at all for this role (e.g. a required script has no family in
-  // the allowed categories) — never to let a well-paired or well-scored font
+  // the allowed categories) ΓÇö never to let a well-paired or well-scored font
   // from an excluded category win anyway.
   return constrained.length > 0 ? constrained : rank(FONT_CATALOG);
 }
 
-// ─── Geometry helpers (feeds render/layout-plan.ts's existing char-count wrapper) ──
+// ΓöÇΓöÇΓöÇ Geometry helpers (feeds render/layout-plan.ts's existing char-count wrapper) ΓöÇΓöÇ
 
 const CHAR_WIDTH_BY_CATEGORY: Record<FontCategory, number> = {
   serif: 0.54,
@@ -300,7 +312,7 @@ function roleTypography(font: FontDefinition, role: FontRole, profile: Typograph
   };
 }
 
-// ─── Main entry ──────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Main entry ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 export function selectTypography({ direction, creativeDna, recipe, styleDna }: FontSelectionInput): TypographySelection {
   const familyProfile = STYLE_PROFILES[direction.artDirectionFamily] ?? DEFAULT_STYLE_PROFILE;
@@ -353,7 +365,7 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
 
   const baseCtx = { styleProfile, desiredPersonality, desiredFormality, industry, namedStyles, requiredScripts };
 
-  // ── Headline ──
+  // ΓöÇΓöÇ Headline ΓöÇΓöÇ
   const headlineCandidates = rankCandidates('headline', {
     ...baseCtx,
     role: 'headline',
@@ -361,7 +373,7 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
   });
   const headlineFont = headlineCandidates[0] ?? getFontDefinition('Inter')!;
 
-  // ── Body — prefers the headline's own paired partners, brand body font still the strongest signal ──
+  // ΓöÇΓöÇ Body ΓÇö prefers the headline's own paired partners, brand body font still the strongest signal ΓöÇΓöÇ
   const bodyCandidates = rankCandidates('body', {
     ...baseCtx,
     role: 'body',
@@ -370,8 +382,8 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
   const pairedBody = bodyCandidates.find((f) => headlineFont.pairsWith.includes(f.family));
   const bodyFont = pairedBody ?? bodyCandidates.find((f) => f.family !== headlineFont.family) ?? bodyCandidates[0] ?? getFontDefinition('Inter')!;
 
-  // ── Accent — only when the style calls for one and the concept has a role for it (eyebrow/interactive annotation).
-  // Ranked on its own terms (personality/category/bestFor/compatibleStyles), NOT by headline/body pairing —
+  // ΓöÇΓöÇ Accent ΓÇö only when the style calls for one and the concept has a role for it (eyebrow/interactive annotation).
+  // Ranked on its own terms (personality/category/bestFor/compatibleStyles), NOT by headline/body pairing ΓÇö
   // an accent is a decorative flourish (often handwritten), and pairsWith is curated for headline+body legibility,
   // so preferring pairsWith membership here previously picked a plain sans partner over a genuine accent face.
   let accentFont: FontDefinition | undefined;
@@ -421,7 +433,7 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
   const reasonParts = [
     `Headline: ${headlineFont.family} (${headlineFont.personality.slice(0, 3).join('/')}) for its ${headlineFont.category} character`,
     industry ? `matched to a ${industry} context` : undefined,
-    `Body: ${bodyFont.family}, a neutral, readable partner${headlineFont.pairsWith.includes(bodyFont.family) ? ' from the headline’s own pairing list' : ''}`,
+    `Body: ${bodyFont.family}, a neutral, readable partner${headlineFont.pairsWith.includes(bodyFont.family) ? ' from the headlineΓÇÖs own pairing list' : ''}`,
     accentFont ? `Accent: ${accentFont.family} for eyebrow/annotation flourishes the style calls for` : undefined,
     creativeDna.headlineFont || creativeDna.bodyFont ? 'brand typography honoured where the requested style allowed it' : undefined,
   ].filter(Boolean);

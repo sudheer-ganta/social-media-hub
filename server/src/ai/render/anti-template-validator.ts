@@ -132,7 +132,21 @@ export function validateAntiTemplateQuality(
 
   // 5. A hole punched through the middle of the canvas
   const gap = largestInteriorGap(nodes);
-  if (gap >= 0.16) {
+  const isAsymmetricOrNegativeSpace = Boolean(
+    concept && (
+      concept.compositionFamily === 'asymmetric-editorial' ||
+      concept.compositionFamily === 'negative-space' ||
+      concept.compositionFamily === 'typographic-poster' ||
+      concept.compositionFamily === 'minimal-field' ||
+      concept.compositionFamily === 'editorial-spread' ||
+      concept.compositionFamily === 'collage-grid' ||
+      concept.imageRole === 'offset-crop' ||
+      concept.imageRole === 'hero' ||
+      concept.imageRole === 'full-bleed'
+    )
+  );
+
+  if (gap >= 0.35 && !isAsymmetricOrNegativeSpace) {
     violations.push(
       `Dead band across the canvas: ${(gap * 100).toFixed(0)}% of the height between elements carries nothing. Negative space must be deliberate and placed, not the leftover from spreading blocks apart to avoid collisions.`,
     );

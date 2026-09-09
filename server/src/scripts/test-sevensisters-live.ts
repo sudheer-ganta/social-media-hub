@@ -10,7 +10,7 @@ import { buildCanonicalCreativeBrief } from '../ai/brand/creative-brief';
 import { generateGraphicDesignConcept } from '../ai/generators/art-director.generator';
 import { generateCreativeDirection } from '../ai/generators/creative-direction.generator';
 import { designCreative } from '../ai/render/designer-composition';
-import { getStyleDNA } from '../ai/style-dna/style-dna';
+import { getStyleDNA, resolveStyleDNA } from '../ai/style-dna/style-dna';
 import { resolveBrandProfile } from '../ai/brand/brand-profile';
 import { resolveCreativeDna } from '../ai/brand/creative-dna';
 
@@ -44,17 +44,22 @@ async function main() {
   console.log('=== Starting SevenSisters 3rd Anniversary Generation ===');
   const userPrompt = 'SevenSisters 3rd Anniversary. Celebrating three years of culinary craft and welcoming our community.';
   const brand = resolveBrandProfile({
-    name: 'SevenSisters',
-    tagline: 'Asian Culinary Craft',
-    description: 'Contemporary Asian dining celebrating culinary heritage with modern craft.',
-    voice: { tone: 'warm, elevated, editorial', vocabulary: ['craft', 'heritage', 'table', 'season'] },
+    brand: {
+      name: 'SevenSisters',
+      description: 'Contemporary Asian dining celebrating culinary heritage with modern craft.',
+      tone: 'warm, elevated, editorial',
+      wordsToUse: ['craft', 'heritage', 'table', 'season'],
+    },
   });
   const creativeDna = resolveCreativeDna({
-    palette: ['#0f0f11', '#c2410c', '#f5f0e8', '#d97706'],
-    tone: 'editorial, warm, elevated',
+    creativeDna: {
+      brandColors: ['#0f0f11', '#c2410c', '#f5f0e8', '#d97706'],
+      mood: 'editorial, warm, elevated',
+    },
   });
 
-  const styleDna = getStyleDNA('editorial');
+  const styleDna = getStyleDNA('editorial')!;
+  const resolvedStyleDna = resolveStyleDNA({ styleId: 'editorial', prompt: userPrompt })!;
 
   const foodData = await getFoodAsset();
   const logoData = await getLogoAsset();
@@ -70,7 +75,7 @@ async function main() {
     funnelStage: 'MOFU',
     brand,
     creativeDna,
-    styleDna: { id: styleDna.id, variant: 'default', source: 'style-dna', style: styleDna },
+    styleDna: resolvedStyleDna,
     productAssetUrls: ['https://example.com/sevensisters-dish.png'],
     logoAssetUrl: 'https://example.com/sevensisters-logo.png',
   });
@@ -130,7 +135,7 @@ async function main() {
       canonicalBrief,
       graphicConcept,
     },
-    styleDna: { id: styleDna.id, variant: 'default', source: 'style-dna', style: styleDna },
+    styleDna: resolvedStyleDna,
     canonicalBrief,
     graphicConcept,
     products: [productAsset],

@@ -301,6 +301,21 @@ export async function fetchImageBytes(
   const allowedMimeTypes = options.allowedMimeTypes ?? SUPPORTED_MIME_TYPES;
   const maxBytes = options.maxBytes ?? MAX_IMAGE_BYTES;
 
+  if (url.startsWith('data:image/')) {
+    const match = url.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+    if (match) {
+      const mimeType = match[1];
+      const buffer = Buffer.from(match[2], 'base64');
+      if (buffer.byteLength === 0) {
+        throw new ImageFetchError('The image was empty.', 'data-uri', 'size');
+      }
+      if (buffer.byteLength > maxBytes) {
+        throw new ImageFetchError('The image is too large.', `${buffer.byteLength} bytes`, 'size');
+      }
+      return { mimeType, buffer };
+    }
+  }
+
   let parsed: URL;
   try {
     parsed = new URL(url);

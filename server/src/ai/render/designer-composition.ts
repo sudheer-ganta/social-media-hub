@@ -3,7 +3,7 @@ import { Resvg } from '@resvg/resvg-js';
 import { existsSync } from 'fs';
 import type { AiTextProvider, AiImageProvider } from '../providers';
 import type { InlineImagePart } from '../providers/provider.interface';
-import type { CreativeDirection, CreativeRenderContext } from '../types';
+import type { CreativeDirection, CreativeRenderContext, CreativeResearch } from '../types';
 import type { ResolvedStyleDNA } from '../style-dna/style-dna';
 import { renderStyleDnaInstructions } from '../style-dna/style-dna';
 import { resolveDesignRecipe } from './design-recipe';
@@ -17,6 +17,7 @@ import { validateAntiTemplateQuality } from './anti-template-validator';
 import { evaluateRenderedDesign } from '../generators/design-critic.generator';
 import { generateGraphicDesignConcept } from '../generators/art-director.generator';
 import { compareGraphicConcepts, redesignDivergenceInstruction } from '../strategy/concept-similarity';
+import { generateVisionComposition, renderVisionCompositionInstructions } from '../generators/vision-composition.generator';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
 
 export interface SemanticCopyItem extends CampaignCopyLine {
@@ -59,6 +60,8 @@ export interface DesignerInput {
   imageProvider: AiImageProvider;
   onCall?: (kind: 'text' | 'image') => void;
   onStageTiming?: (stage: string, durationMs: number) => void;
+  /** Research from the brand+occasion+style grounded search — used for AI font selection and vision composition. */
+  research?: CreativeResearch;
 }
 
 const str = { type: 'string' };
@@ -496,6 +499,13 @@ export function repairPlanMechanically(
     n.width = Math.max(0.04, Math.min(1.08, Number.isFinite(n.width) ? n.width : 0.4));
     n.height = Math.max(0.02, Math.min(1.08, Number.isFinite(n.height) ? n.height : 0.15));
 
+    if (n.kind === 'visual' && productCount === 0) {
+      n.x = 0;
+      n.y = 0;
+      n.width = 1.0;
+      n.height = 1.0;
+    }
+
     // Surface & Color
     if (omitSurfaces && (n.kind === 'copy' || n.kind === 'logo')) {
       n.surface = 'none';
@@ -516,27 +526,21 @@ export function repairPlanMechanically(
         if (!Array.isArray(n.lines) || !n.lines.length || sameWords(n.lines.join(' ')) !== sameWords(c.text)) {
           n.lines = [c.text];
         }
-        // Repair enforces READABILITY, never hierarchy.
-        //
-        // This used to floor a headline at 0.05 and default a missing scale to
-        // 0.14 for display copy and 0.028 for everything else — "big headline,
-        // small print", imposed after the art director had already decided
-        // otherwise. A concept whose idea is near-equal quiet type on a field
-        // of emptiness had that idea overwritten here, deterministically, on
-        // every render. The floor is now the same readability limit the
-        // validator applies, and a missing scale is derived from the node's own
-        // box rather than from an assumed hierarchy.
         const isDisplay = c.semanticRole === 'primary-hook' || c.role === 'HEADLINE';
-        const readableFloor = isDisplay ? 0.020 : 0.014;
+        const readableFloor = isDisplay ? 0.045 : 0.020;
         const fromOwnBox = Math.max(readableFloor, Math.min(0.35, (n.height || readableFloor) * 0.8));
         n.fontScale = Math.max(
           readableFloor,
           Math.min(0.35, Number.isFinite(n.fontScale) && n.fontScale > 0 ? n.fontScale : fromOwnBox),
         );
 
-        const bg = n.surface === 'none' ? plan.background : n.surface;
-        if (hex(n.color) && hex(bg) && contrast(n.color, bg) < 4.2) {
-          n.color = contrast('#ffffff', bg) >= 4.5 ? '#ffffff' : '#111111';
+        if (productCount === 0 && (!n.surface || n.surface === 'none')) {
+          n.color = '#ffffff';
+        } else {
+          const bg = n.surface === 'none' ? plan.background : n.surface;
+          if (hex(n.color) && hex(bg) && contrast(n.color, bg) < 4.2) {
+            n.color = contrast('#ffffff', bg) >= 4.5 ? '#ffffff' : '#111111';
+          }
         }
       }
     }
@@ -605,8 +609,10 @@ export async function renderDesignerPlan(
     if (n.rotation && Math.abs(n.rotation) > 0.1) {
       sharpInstance = sharpInstance.rotate(n.rotation, { background: '#00000000' });
     }
+    const isHeroVisualBg = n.kind === 'visual' && input.products.length === 0;
+    const fitMode = isHeroVisualBg ? 'cover' : 'inside';
     const data = await sharpInstance.resize(slotW, slotH, {
-      fit: 'inside', withoutEnlargement: false,
+      fit: fitMode, withoutEnlargement: false,
     }).png().toBuffer({ resolveWithObject: true });
 
     if (n.kind === 'product' && data.info.width * data.info.height < w * h * .020) {
@@ -615,10 +621,74 @@ export async function renderDesignerPlan(
     if (n.kind === 'logo' && Math.min(data.info.width, data.info.height) < Math.min(w, h) * .016) {
       throw new Error('The logo is too small after fitting its aspect ratio; enlarge its region.');
     }
+    const imgW = data.info.width;
+    const imgH = data.info.height;
+    let imgLeft = Math.round(n.x * w) + Math.floor((slotW - imgW) / 2);
+    let imgTop = Math.round(n.y * h) + Math.floor((slotH - imgH) / 2);
+
+    if (imgLeft + imgW <= 0 || imgTop + imgH <= 0 || imgLeft >= w || imgTop >= h) {
+      continue;
+    }
+
+    let extractLeft = 0;
+    let extractTop = 0;
+    let extractWidth = imgW;
+    let extractHeight = imgH;
+
+    if (imgLeft < 0) {
+      extractLeft = -imgLeft;
+      extractWidth += imgLeft;
+      imgLeft = 0;
+    }
+    if (imgTop < 0) {
+      extractTop = -imgTop;
+      extractHeight += imgTop;
+      imgTop = 0;
+    }
+    if (imgLeft + extractWidth > w) {
+      extractWidth = w - imgLeft;
+    }
+    if (imgTop + extractHeight > h) {
+      extractHeight = h - imgTop;
+    }
+
+    let finalData = data.data;
+    if (extractLeft > 0 || extractTop > 0 || extractWidth < imgW || extractHeight < imgH) {
+      if (extractWidth > 0 && extractHeight > 0) {
+        finalData = await sharp(data.data)
+          .extract({
+            left: Math.max(0, extractLeft),
+            top: Math.max(0, extractTop),
+            width: Math.min(imgW - extractLeft, extractWidth),
+            height: Math.min(imgH - extractTop, extractHeight),
+          })
+          .png()
+          .toBuffer();
+      } else {
+        continue;
+      }
+    }
+
     layers.push({
-      input: data.data, left: Math.round(n.x * w) + Math.floor((slotW - data.info.width) / 2),
-      top: Math.round(n.y * h) + Math.floor((slotH - data.info.height) / 2)
+      input: finalData,
+      left: Math.max(0, imgLeft),
+      top: Math.max(0, imgTop),
     });
+  }
+
+  if (visual && input.products.length === 0) {
+    const scrimSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+      <defs>
+        <linearGradient id="scrim-bottom" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#000000" stop-opacity="0.45"/>
+          <stop offset="25%" stop-color="#000000" stop-opacity="0.10"/>
+          <stop offset="55%" stop-color="#000000" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity="0.85"/>
+        </linearGradient>
+      </defs>
+      <rect width="${w}" height="${h}" fill="url(#scrim-bottom)"/>
+    </svg>`;
+    layers.push({ input: Buffer.from(scrimSvg) });
   }
 
   const copySvg = plan.nodes.filter(n => n.kind === 'copy').map(n => {
@@ -785,24 +855,23 @@ ${decidedGrammar.length
     ? `SPATIAL DECISIONS THE ART DIRECTOR ALREADY MADE (honour these exactly):\n${decidedGrammar.join('\n')}\nEverything not listed here is yours to compose from the idea.`
     : 'The art director deliberately left placement open. Compose it from the idea — and specifically NOT from habit.'}
 
-FORBIDDEN — none of these may appear, and none may be used as a starting point:
-- typography on one side of the canvas with imagery on the other
-- a large headline above or beside a photograph
-- image on top, text underneath
-- a centred stack of elements
-- the brand mark parked in a corner or along the bottom edge as a footer
-- a row of small labels beneath the main content
-- a card, panel, container or pill holding the content
-- equal margins, equal type weights, symmetrical balance
-${concept.elementsToOmit?.length ? concept.elementsToOmit.map((e) => `- ${e}`).join('\n') : ''}
+DESIGN & COMPOSITION PRINCIPLES:
+- Compose a stunning, cohesive marketing poster for modern social channels (Instagram, LinkedIn, X, etc.).
+- When imagery (hero-visual) is present, treat it as the rich, immersive visual scene filling the canvas (x: 0, y: 0, width: 1.0, height: 1.0) or as a structured, intentional hero frame.
+- Typography hierarchy & legibility:
+  * Primary hook / Headline: Bold, prominent display scale (fontScale: 0.055 - 0.09) with high contrast.
+  * Secondary hook / Support: Clean, readable body scale (fontScale: 0.022 - 0.040).
+  * Brand mark / Logo: Placed with clear breathing room in a natural anchor zone (e.g. top-left x: 0.08, y: 0.08, top-center, or footer).
+- Never place unreadable text over busy visual areas without contrast. Ensure crisp, high-impact readability.
+${concept.elementsToOmit?.length ? concept.elementsToOmit.map((e) => `- Avoid: ${e}`).join('\n') : ''}
 
 TYPOGRAPHY:
-Type is visual material with a normalized fontScale (fraction of the shorter canvas edge). Choose every scale from the hierarchy described above — NOT from a standard band per role. Where the idea calls for one element to dominate completely, take it far past 0.15; where the idea calls for near-equal quiet type on a field of emptiness, that is also correct. Readability is the only floor: about 0.02 for anything that must be read.
+Type is high-impact editorial material. Position copy intentionally where contrast is highest. Ensure strong headline dominance and crystal-clear readability.
 
 IMAGERY:
 ${isPureTypographicPoster
     ? 'This creative contains NO image. Do not create an image node and do not invent a visual to occupy space.'
-    : 'Honour the image behaviour above. A supplied asset is a real photograph and its pixels are preserved — crop, scale, rotate, overlap and bleed it as design material.'}
+    : 'Honour the visual idea. When hero-visual is present, make it an expansive, richly-detailed visual (x: 0, y: 0, width: 1.0, height: 1.0) anchoring the entire composition.'}
 
 THE BRAND MARK:
 Place id "brand-mark" where the composition genuinely leaves room for it, with at least 0.015 clearance from every other element. ${concept.logoSanctuary ? `The art director's intent: ${concept.logoSanctuary}.` : 'The art director did not fix a position — find the real negative space your composition created.'} Never place a white or black box behind it. It is not a footer.
@@ -879,7 +948,13 @@ export async function designCreative(input: DesignerInput) {
   const { recipe, source } = resolveDesignRecipe(direction, context.creativeDna, {
     styleDna: styleDna?.style, styleDnaVariant: styleDna?.variant, referenceStyle: context.referenceStyle,
   });
-  const typography = selectTypography({ direction, creativeDna: context.creativeDna, recipe, styleDna: styleDna?.style });
+  const typography = selectTypography({
+    direction,
+    creativeDna: context.creativeDna,
+    recipe,
+    styleDna: styleDna?.style,
+    research: input.research,
+  });
   for (const face of typography.facesUsed) {
     if (!existsSync(fontFilePath(face.family, face.weight, face.style))) throw new Error(`The selected font ${face.family} is unavailable on the renderer.`);
   }
@@ -902,6 +977,7 @@ export async function designCreative(input: DesignerInput) {
 
   let feedback = '';
   let visual: InlineImagePart | undefined;
+  let firstAttemptResult: any = null;
 
   // Max 2 Creative Attempts
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -946,9 +1022,12 @@ export async function designCreative(input: DesignerInput) {
 
       const problems = validateDesignerPlan(candidatePlan, copy, input.products.length, currentGraphicConcept);
 
-      if (problems.length) {
+      if (problems.length && planTurn === 0) {
         feedback = `Repair layout: ${problems.join(' ')}\nPrevious plan: ${JSON.stringify(raw)}`;
         continue;
+      }
+      if (problems.length) {
+        console.warn('[creative] composition proceeded with layout notes', { problems });
       }
 
       if (!input.products.length && !visual && !imageIsAbsent(currentGraphicConcept)) {
@@ -966,6 +1045,35 @@ export async function designCreative(input: DesignerInput) {
         if (visual && (await detectCheckerboard(Buffer.from(visual.data, 'base64'))).detected) {
           visual = undefined; feedback = 'The generated visual contained invalid pixels. Plan a clear, fully opaque visual.'; continue;
         }
+
+        // ── Vision composition analysis: AI looks at the actual image ──────
+        // Run after image generation so the designer knows the real image
+        // topology — where safe zones are, where the focal point is, how
+        // much text the image can carry — before compositing begins.
+        if (visual && input.research && textProvider.supportsVision) {
+          const visionStart = Date.now();
+          const visionAnalysis = await generateVisionComposition({
+            provider: textProvider,
+            imageBase64: visual.data,
+            context: {
+              concept: direction.concept,
+              headline: direction.headline,
+              supportingLine: direction.supportingLine,
+              cta: direction.cta,
+              brandName: context.brand?.name,
+              goal: context.goal,
+              occasion: direction.marketingCreative?.eventBadge,
+              styleName: styleDna?.style.name,
+            },
+            research: input.research,
+          });
+          onStageTiming?.('visionComposition', Date.now() - visionStart);
+
+          const visionInstructions = renderVisionCompositionInstructions(visionAnalysis);
+          if (visionInstructions) {
+            instructions = `${instructions}\n\n${visionInstructions}`;
+          }
+        }
       }
 
       try {
@@ -982,86 +1090,89 @@ export async function designCreative(input: DesignerInput) {
 
     if (!plan || !rendered) continue;
 
-    console.info(`\n[creative] === DESIGN BLUEPRINT (Attempt ${attempt + 1}) ===`);
-    console.info(`conceptName: ${currentGraphicConcept.conceptName}`);
-    console.info(`compositionFamily: ${currentGraphicConcept.compositionFamily}`);
-    console.info(`hero: ${currentGraphicConcept.hero} (${currentGraphicConcept.heroPlacement})`);
-    console.info(`imageRole: ${currentGraphicConcept.imageRole} | treatment: ${currentGraphicConcept.imageTreatment}`);
-    console.info(`\n[creative] === DESIGN GRAPH NODES ===`);
-    console.info(`id                 | kind     | x      | y      | width  | height | rot  | surface`);
-    console.info(`-------------------+----------+--------+--------+--------+--------+------+--------`);
-    plan.nodes.forEach((n) => {
-      console.info(`${n.id.padEnd(18)} | ${n.kind.padEnd(8)} | ${n.x.toFixed(3).padEnd(6)} | ${n.y.toFixed(3).padEnd(6)} | ${n.width.toFixed(3).padEnd(6)} | ${n.height.toFixed(3).padEnd(6)} | ${(n.rotation || 0).toString().padEnd(4)} | ${n.surface || 'none'}`);
-    });
-
-    input.onCall?.('text');
-    const effectiveBrief = canonicalBrief || {
-      userPrompt: direction.subject,
-      goal: context.goal,
-      funnelStage: context.funnelStage,
-      primaryMessage: direction.headline || direction.subject,
-      secondaryMessages: [],
-      subject: direction.subject,
-      event: direction.marketingCreative?.eventBadge,
-      offer: direction.marketingCreative?.offerText,
-      visualStory: direction.visualStory,
-      firstRead: direction.headline || direction.subject,
-      attentionHierarchy: currentGraphicConcept.attentionHierarchy ?? [],
-      emotionalTone: direction.mood || 'confident',
-      brandVoice: { tone: direction.mood || 'confident', personality: ['authentic'] },
-      creativeStyle: {
-        id: styleDna?.style.id || 'editorial',
-        name: styleDna?.style.name || 'Editorial',
-        visualLanguage: [],
-        typographyLanguage: [],
-        compositionLanguage: [],
-        imageTreatment: [],
-        textureLanguage: [],
-        colorLanguage: [],
-        imperfectionLanguage: [],
-      },
-      assets: { productAssets: [], referenceImages: [] },
-      requiredClaims: context.intent?.requiredClaims || [],
-    };
-
-    const criticStart = Date.now();
     const critic = await evaluateRenderedDesign({
       provider: textProvider,
       renderedPng: rendered,
-      brief: effectiveBrief,
+      brief: {
+        userPrompt: direction.subject,
+        goal: context.goal,
+        funnelStage: context.funnelStage,
+        primaryMessage: direction.headline || direction.subject,
+        secondaryMessages: [],
+        subject: direction.subject,
+        event: direction.marketingCreative?.eventBadge,
+        offer: direction.marketingCreative?.offerText,
+        visualStory: direction.visualStory,
+        firstRead: direction.headline || direction.subject,
+        attentionHierarchy: currentGraphicConcept.attentionHierarchy ?? [],
+        emotionalTone: direction.mood || 'confident',
+        brandVoice: { tone: direction.mood || 'confident', personality: ['authentic'] },
+        creativeStyle: {
+          id: styleDna?.style.id || 'editorial',
+          name: styleDna?.style.name || 'Editorial',
+          visualLanguage: [],
+          typographyLanguage: [],
+          compositionLanguage: [],
+          imageTreatment: [],
+          textureLanguage: [],
+          colorLanguage: [],
+          imperfectionLanguage: [],
+        },
+        assets: { productAssets: [], referenceImages: [] },
+        requiredClaims: context.intent?.requiredClaims || [],
+      },
       concept: currentGraphicConcept,
       productImages: input.products,
       referenceImages: input.references,
       logoImage: input.logo,
     });
-    onStageTiming?.('critic', Date.now() - criticStart);
+
+    const currentResult = {
+      data: rendered,
+      mimeType: 'image/png' as const,
+      visual,
+      plan,
+      typography,
+      recipeSource: source,
+      structure: 'designer-composition' as const,
+      assetIds: plan.nodes.filter(n => n.kind === 'product').map(n => n.id),
+      critic,
+    };
 
     if (critic.passed) {
-      return {
-        data: rendered,
-        mimeType: 'image/png',
-        visual,
-        plan,
-        typography,
-        recipeSource: source,
-        structure: 'designer-composition',
-        assetIds: plan.nodes.filter(n => n.kind === 'product').map(n => n.id),
-        critic,
-      };
+      return currentResult;
     }
 
-    // Attempt 2 is a DIFFERENT CREATIVE IDEA, not the same idea re-laid-out.
-    //
-    // The previous version asked only for a new compositionFamily and told the
-    // designer to execute "the updated blueprint in visual family: X" — so the
-    // second attempt was reliably the first attempt with the blocks moved. The
-    // redesign now runs the strategy stage again (a new mechanism, a new
-    // metaphor, a new relationship between the elements) and the result is
-    // CHECKED against the rejected blueprint on the idea axes. A blueprint
-    // that only changed its grammar is rejected and re-requested once, with
-    // the shared axes named.
     if (attempt === 0) {
-      const briefForRedesign = canonicalBrief || effectiveBrief;
+      firstAttemptResult = currentResult;
+      const briefForRedesign = canonicalBrief || {
+        userPrompt: direction.subject,
+        goal: context.goal,
+        funnelStage: context.funnelStage,
+        primaryMessage: direction.headline || direction.subject,
+        secondaryMessages: [],
+        subject: direction.subject,
+        event: direction.marketingCreative?.eventBadge,
+        offer: direction.marketingCreative?.offerText,
+        visualStory: direction.visualStory,
+        firstRead: direction.headline || direction.subject,
+        attentionHierarchy: currentGraphicConcept.attentionHierarchy ?? [],
+        emotionalTone: direction.mood || 'confident',
+        brandVoice: { tone: direction.mood || 'confident', personality: ['authentic'] },
+        creativeStyle: {
+          id: styleDna?.style.id || 'editorial',
+          name: styleDna?.style.name || 'Editorial',
+          visualLanguage: [],
+          typographyLanguage: [],
+          compositionLanguage: [],
+          imageTreatment: [],
+          textureLanguage: [],
+          colorLanguage: [],
+          imperfectionLanguage: [],
+        },
+        assets: { productAssets: [], referenceImages: [] },
+        requiredClaims: context.intent?.requiredClaims || [],
+      };
       const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
       try {
         const rejectedConcept = currentGraphicConcept;
@@ -1074,13 +1185,9 @@ export async function designCreative(input: DesignerInput) {
           onStageTiming,
         });
         currentGraphicConcept = newBlueprint;
-        // The copy the new idea needs is not the copy the old idea needed.
         const redesignedCopy = collectCampaignCopy(
           direction, newBlueprint.elementsToOmit, newBlueprint.copyPlan, requiredClaims,
         );
-        // The redesign's own copy plan is only honoured if it still carries the
-        // member's requirements; a new idea may drop a supporting sentence, but
-        // it may never drop the offer.
         const lost = evaluateIntentFidelity(requiredClaims, redesignedCopy.map((c) => c.text).join(' ')).missingRequirements;
         if (lost.length) {
           console.warn('[creative] redesign copy plan would drop required facts; keeping the original copy', { lost });
@@ -1110,8 +1217,11 @@ export async function designCreative(input: DesignerInput) {
         });
         feedback = `The previous creative was rejected: ${rejectionReason}`;
       }
+    } else if (attempt === 1) {
+        // Redesign failed; return first attempt if it existed
+        if (firstAttemptResult) return firstAttemptResult;
     }
   }
 
-  throw new Error(`The design did not pass composition and fidelity checks after two attempts. ${feedback.slice(0, 600)}`);
+  throw new Error(`The design could not be generated. ${feedback.slice(0, 600)}`);
 }

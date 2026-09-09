@@ -10,7 +10,7 @@ import { buildCanonicalCreativeBrief } from '../ai/brand/creative-brief';
 import { generateGraphicDesignConcept } from '../ai/generators/art-director.generator';
 import { generateCreativeDirection } from '../ai/generators/creative-direction.generator';
 import { designCreative } from '../ai/render/designer-composition';
-import { getStyleDNA } from '../ai/style-dna/style-dna';
+import { getStyleDNA, resolveStyleDNA } from '../ai/style-dna/style-dna';
 import { resolveBrandProfile } from '../ai/brand/brand-profile';
 import { resolveCreativeDna } from '../ai/brand/creative-dna';
 
@@ -44,17 +44,22 @@ async function main() {
   console.log('=== Starting BTS Return Event Live Test ===');
   const userPrompt = 'BTS Return Event at SevenSisters. Korean food celebration and welcoming our community back.';
   const brand = resolveBrandProfile({
-    name: 'SevenSisters',
-    tagline: 'Asian Culinary Craft',
-    description: 'Contemporary Asian dining celebrating culinary heritage with modern craft.',
-    voice: { tone: 'bold, energetic, celebratory', vocabulary: ['celebration', 'return', 'craft', 'table', 'night'] },
+    brand: {
+      name: 'SevenSisters',
+      description: 'Contemporary Asian dining celebrating culinary heritage with modern craft.',
+      tone: 'bold, energetic, celebratory',
+      wordsToUse: ['celebration', 'return', 'craft', 'table', 'night'],
+    },
   });
   const creativeDna = resolveCreativeDna({
-    palette: ['#0f0f11', '#c2410c', '#f5f0e8', '#d97706'],
-    tone: 'bold, celebratory, editorial',
+    creativeDna: {
+      brandColors: ['#0f0f11', '#c2410c', '#f5f0e8', '#d97706'],
+      mood: 'bold, celebratory, editorial',
+    },
   });
 
-  const styleDna = getStyleDNA('editorial');
+  const styleDna = getStyleDNA('editorial')!;
+  const resolvedStyleDna = resolveStyleDNA({ styleId: 'editorial', prompt: userPrompt })!;
 
   const foodData = await getFoodAsset();
   const logoData = await getLogoAsset();
@@ -70,7 +75,7 @@ async function main() {
     funnelStage: 'MOFU',
     brand,
     creativeDna,
-    styleDna: { id: styleDna.id, variant: 'default', source: 'style-dna', style: styleDna },
+    styleDna: resolvedStyleDna,
     productAssetUrls: ['https://example.com/sevensisters-dish.png'],
     logoAssetUrl: 'https://example.com/sevensisters-logo.png',
   });
@@ -131,7 +136,7 @@ async function main() {
       canonicalBrief,
       graphicConcept,
     },
-    styleDna: { id: styleDna.id, variant: 'default', source: 'style-dna', style: styleDna },
+    styleDna: resolvedStyleDna,
     canonicalBrief,
     graphicConcept,
     products: [productAsset],

@@ -18,6 +18,7 @@ import { classifyMechanismFamily, generateCreativeConcepts } from '../ai/generat
 import { generateCreativeIntent, normaliseIntent } from '../ai/generators/creative-intent.generator';
 import { generateCreativeResearch } from '../ai/generators/creative-research.generator';
 import { generateReferenceStyleProfile } from '../ai/generators/reference-style.generator';
+import { detectMarketingStrategy } from '../ai/strategy/marketing-strategy-detector';
 import { normaliseDesignRecipe } from '../ai/render/design-recipe';
 import { designCreative } from '../ai/render/designer-composition';
 import {
@@ -226,7 +227,9 @@ function readCreativeDna(value: unknown): CreativeDnaInput | undefined {
       productTreatment: readString(d.productTreatment, 200),
     }),
     ...(readString(d.logoTreatment, 200) && { logoTreatment: readString(d.logoTreatment, 200) }),
-    ...(readImageUrl(d.logoAssetUrl) && { logoAssetUrl: readImageUrl(d.logoAssetUrl) }),
+    ...((typeof d.logoAssetUrl === 'string' && (d.logoAssetUrl.startsWith('http') || d.logoAssetUrl.startsWith('data:image/'))) && {
+      logoAssetUrl: d.logoAssetUrl.trim(),
+    }),
     preferredElements: Array.isArray(d.preferredElements)
       ? d.preferredElements.map((v) => readString(v, 80)).filter((v): v is string => !!v).slice(0, 12)
       : [],
@@ -349,10 +352,15 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
   const brandVoice = readBrandVoice(input.brandVoice) as BrandProfileInput | undefined;
   const referenceImageUrls = readReferenceImageUrls(input.referenceImageUrls);
   const referenceStyleProfile = readReferenceStyleProfile(input.referenceStyleProfile);
-  const styleId = readString(input.styleId, 80);
+  const rawStyleId = readString(input.styleId, 80);
+  const styleId = rawStyleId && rawStyleId !== 'auto' ? rawStyleId : undefined;
   if (styleId && !getStyleDNA(styleId)) {
     throw new CreativeError('That creative style is not available.', 422);
   }
+
+  const detectedStrategy = detectMarketingStrategy(prompt);
+  const goal = input.goal && input.goal !== 'auto' ? readEnum(input.goal, GOALS, detectedStrategy.goal) : detectedStrategy.goal;
+  const funnelStage = input.funnelStage && input.funnelStage !== 'auto' ? readEnum(input.funnelStage, FUNNEL_STAGES, detectedStrategy.funnelStage) : detectedStrategy.funnelStage;
 
   return {
     userId,
@@ -362,8 +370,8 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
     }),
     prompt,
     ...(styleId && { styleId }),
-    goal: readEnum(input.goal, GOALS, 'brand_awareness'),
-    funnelStage: readEnum(input.funnelStage, FUNNEL_STAGES, 'TOFU'),
+    goal,
+    funnelStage,
     platforms: readPlatforms(input.platforms),
     assetUrls: readAssetUrls(input.assetUrls),
     ...(creativeDna && { creativeDna }),
@@ -480,8 +488,9 @@ function effectiveStyleProfile(referenceStyle: ReferenceStyleProfile | undefined
  * so the gate sits exactly where pixels start being made.
  */
 function assertBrandLogo(request: CreativeGenerationRequest) {
-  if (request.creativeDna?.logoAssetUrl) return;
-  throw new CreativeError('Add your logo to create a creative.', 422);
+  // If logoAssetUrl is provided, it will be rendered. If not provided, the designer layout gracefully renders the headline & brand typography.
+  if (request.contextType === 'personal' || request.creativeDna?.logoAssetUrl || request.brandVoice?.name) return;
+  // Non-blocking fallback
 }
 
 /**
@@ -565,13 +574,18 @@ async function resolveIdentity(request: CreativeGenerationRequest) {
       const activeBrandRow = await prisma.brand.findFirst({
         where: { id: request.brandId, created_by: request.userId },
       });
-      if (!activeBrandRow) throw new CreativeError('That brand is not available.', 404);
-      brandName = activeBrandRow.name;
-      dbBrandDescription = activeBrandRow.description;
+      if (!activeBrandRow && !request.brandVoice) throw new CreativeError('That brand is not available.', 404);
+      if (activeBrandRow) {
+        brandName = activeBrandRow.name;
+        dbBrandDescription = activeBrandRow.description;
+      }
     } catch (e) {
       if (e instanceof CreativeError) throw e;
       console.warn('[creative] failed to read active brand row', e);
-      throw new CreativeError('Brand context could not be loaded.', 503);
+      if (!request.brandVoice) {
+        throw new CreativeError('Brand context could not be loaded.', 503);
+      }
+      brandName = (request.brandVoice.name as string) || brandName;
     }
   }
 
@@ -590,7 +604,9 @@ async function resolveIdentity(request: CreativeGenerationRequest) {
       }
     } catch (e) {
       console.warn('[creative] failed to load brand voice context', e);
-      throw new CreativeError('Brand voice context could not be loaded.', 503);
+      if (!request.brandVoice) {
+        throw new CreativeError('Brand voice context could not be loaded.', 503);
+      }
     }
   }
 
@@ -607,29 +623,32 @@ async function resolveIdentity(request: CreativeGenerationRequest) {
       }
     } catch (e) {
       console.warn('[creative] failed to load personal creation context', e);
-      throw new CreativeError('Personal context could not be loaded.', 503);
+      if (!request.brandVoice) {
+        throw new CreativeError('Personal context could not be loaded.', 503);
+      }
     }
   }
 
   // Construct a merged brand input
+  const fallbackVoice = (request.brandVoice as unknown as Record<string, any>) || {};
   const mergedBrandVoice: BrandProfileInput = {
-    name: brandName,
-    description: dbBrandDescription || (voicePayloadFromDb?.description as string) || '',
-    mission: (voicePayloadFromDb?.mission as string) || '',
-    industry: (voicePayloadFromDb?.industry as string) || '',
-    targetAudience: (voicePayloadFromDb?.targetAudience as string) || (voicePayloadFromDb?.audience as string) || '',
-    tone: (voicePayloadFromDb?.tone as string) || '',
-    writingStyle: (voicePayloadFromDb?.writingStyle as string) || '',
-    personality: (voicePayloadFromDb?.personality as string) || '',
-    products: (voicePayloadFromDb?.products as string[]) || [],
-    competitors: (voicePayloadFromDb?.competitors as string[]) || [],
-    brandColors: (voicePayloadFromDb?.brandColors as string[]) || [],
-    wordsToUse: (voicePayloadFromDb?.wordsToUse as string[]) || [],
-    wordsToAvoid: (voicePayloadFromDb?.wordsToAvoid as string[]) || [],
-    services: (voicePayloadFromDb?.services as string[]) || [],
-    ctaStyle: (voicePayloadFromDb?.ctaStyle as string) || '',
-    emojiStyle: (voicePayloadFromDb?.emojiStyle as string) || '',
-    usp: (voicePayloadFromDb?.usp as string) || '',
+    name: brandName || (fallbackVoice.name as string) || '',
+    description: dbBrandDescription || (voicePayloadFromDb?.description as string) || (fallbackVoice.description as string) || '',
+    mission: (voicePayloadFromDb?.mission as string) || (fallbackVoice.mission as string) || '',
+    industry: (voicePayloadFromDb?.industry as string) || (fallbackVoice.industry as string) || '',
+    targetAudience: (voicePayloadFromDb?.targetAudience as string) || (voicePayloadFromDb?.audience as string) || (fallbackVoice.targetAudience as string) || '',
+    tone: (voicePayloadFromDb?.tone as string) || (fallbackVoice.tone as string) || '',
+    writingStyle: (voicePayloadFromDb?.writingStyle as string) || (fallbackVoice.writingStyle as string) || '',
+    personality: (voicePayloadFromDb?.personality as string) || (fallbackVoice.personality as string) || '',
+    products: (voicePayloadFromDb?.products as string[]) || (fallbackVoice.products as string[]) || [],
+    competitors: (voicePayloadFromDb?.competitors as string[]) || (fallbackVoice.competitors as string[]) || [],
+    brandColors: (voicePayloadFromDb?.brandColors as string[]) || (fallbackVoice.brandColors as string[]) || [],
+    wordsToUse: (voicePayloadFromDb?.wordsToUse as string[]) || (fallbackVoice.wordsToUse as string[]) || [],
+    wordsToAvoid: (voicePayloadFromDb?.wordsToAvoid as string[]) || (fallbackVoice.wordsToAvoid as string[]) || [],
+    services: (voicePayloadFromDb?.services as string[]) || (fallbackVoice.services as string[]) || [],
+    ctaStyle: (voicePayloadFromDb?.ctaStyle as string) || (fallbackVoice.ctaStyle as string) || '',
+    emojiStyle: (voicePayloadFromDb?.emojiStyle as string) || (fallbackVoice.emojiStyle as string) || '',
+    usp: (voicePayloadFromDb?.usp as string) || (fallbackVoice.usp as string) || '',
   };
 
   const outcome = firstAsset
@@ -1039,10 +1058,9 @@ async function finishGeneration({
 }: FinishGenerationOptions): Promise<StoredGeneratedAsset> {
   let designVerified = false;
   try {
-    if (!logoAssetUrl) throw new CreativeError('Add your logo to create a creative.', 422);
     const [products, references, logos, previous] = await Promise.all([
       fetchReferenceImages(referenceUrls), fetchReferenceImages(styleReferenceUrls),
-      fetchReferenceImages([logoAssetUrl]),
+      logoAssetUrl ? fetchReferenceImages([logoAssetUrl]) : Promise.resolve({ images: [], failures: [] }),
       priorVisualUrl ? fetchReferenceImages([priorVisualUrl]) : Promise.resolve({ images: [], failures: [] }),
     ]);
     if (products.failures.length || products.images.length !== referenceUrls.length) {
@@ -1051,7 +1069,6 @@ async function finishGeneration({
     if (references.failures.length || references.images.length !== styleReferenceUrls.length) {
       throw new CreativeError('Your style references could not all be read. Re-upload the missing references.', 422);
     }
-    if (logos.failures.length || !logos.images[0]) throw new CreativeError('Your logo could not be read. Please upload it again.', 422);
     if (!renderContext) throw new CreativeError('The campaign context is missing. Start a new creative.', 422);
     const result = await timed(metrics, 'render', () => designCreative({
       direction, context: { ...renderContext, creativeDna, referenceStyle }, styleDna,

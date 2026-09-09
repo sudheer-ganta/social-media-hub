@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Sparkles, Wand2, X, Camera, Palette, Compass, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -25,6 +25,7 @@ import { useBrandVoices } from "@/hooks/useBrandVoices";
 import { useCreativeDna } from "@/hooks/useCreativeDna";
 import { useBrands } from "@/hooks/useBrands";
 import { GOAL_META, FUNNEL_META } from "@/ai/prompts/modules";
+import { detectMarketingStrategy } from "@/ai/strategy/marketing-strategy-detector";
 import type { FunnelStage, MarketingGoal } from "@/ai/types";
 import type {
   CreativeIntentBrief,
@@ -34,6 +35,7 @@ import type {
 } from "@/types/creative";
 import type { PostMediaItem } from "@/types";
 import { ReferenceImagesUploader, type ReferenceImage } from "./ReferenceImagesUploader";
+import { GenerationMatrixProgress } from "./GenerationMatrixProgress";
 
 /**
  * "Create with FlowPost" — the AI creative-generation flow.
@@ -220,8 +222,14 @@ export function CreateWithFlowPostDialog({
 }: CreateWithFlowPostDialogProps) {
   const [step, setStep] = useState<Step>("input");
   const [prompt, setPrompt] = useState("");
-  const [goal, setGoal] = useState<MarketingGoal>("brand_awareness");
-  const [funnelStage, setFunnelStage] = useState<FunnelStage>("TOFU");
+  const [customStrategyOverride, setCustomStrategyOverride] = useState(false);
+  const [manualGoal, setManualGoal] = useState<MarketingGoal>("brand_awareness");
+  const [manualFunnelStage, setManualFunnelStage] = useState<FunnelStage>("TOFU");
+
+  const detectedStrategy = useMemo(() => detectMarketingStrategy(prompt), [prompt]);
+  const activeGoal = customStrategyOverride ? manualGoal : detectedStrategy.goal;
+  const activeFunnelStage = customStrategyOverride ? manualFunnelStage : detectedStrategy.funnelStage;
+
   const [styleId, setStyleId] = useState("auto");
   const [styles, setStyles] = useState<CreativeStyleSummary[]>([]);
   const [assets, setAssets] = useState<ReferenceAsset[]>([]);
@@ -277,6 +285,7 @@ export function CreateWithFlowPostDialog({
   function reset() {
     setStep("input");
     setPrompt("");
+    setCustomStrategyOverride(false);
     setStyleId("auto");
     setAssets([]);
     setReferenceImages([]);
@@ -299,8 +308,8 @@ export function CreateWithFlowPostDialog({
       ...(styleId !== "auto" && { styleId }),
       contextType,
       ...(contextType === "brand" && brandId && { brandId }),
-      goal,
-      funnelStage,
+      goal: activeGoal,
+      funnelStage: activeFunnelStage,
       platforms: [],
       assetUrls: assets.map((a) => a.url),
       ...(brandVoiceProfile && {
@@ -500,7 +509,7 @@ export function CreateWithFlowPostDialog({
         if (!next) reset();
       }}
     >
-      <DialogContent className={cn("p-0 overflow-hidden", step === "concepts" ? "max-w-2xl" : "max-w-lg")}>
+      <DialogContent className={cn("p-0 overflow-hidden", (step === "concepts" || step === "generating" || step === "discovering") ? "max-w-2xl" : "max-w-lg")}>
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2 font-display text-lg">
             <Sparkles className="h-4 w-4" />
@@ -509,12 +518,14 @@ export function CreateWithFlowPostDialog({
           <DialogDescription className="text-xs">
             {step === "concepts"
               ? "FlowPost found these creative directions. Pick the idea, not just a look."
+              : step === "generating" || step === "discovering"
+              ? "FlowPost AI is crafting your bespoke visual identity and campaign composition."
               : "Describe the creative you want. FlowPost brings your brand's visual identity to it."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto scrollbar-thin">
-          {(step === "input" || step === "discovering") && (
+        <div className="px-6 py-5 space-y-4 max-h-[75vh] overflow-y-auto scrollbar-thin">
+          {step === "input" && (
             <>
               <div className="space-y-1.5">
                 <Label htmlFor="fp-prompt" className="text-sm font-semibold">
@@ -530,29 +541,72 @@ export function CreateWithFlowPostDialog({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Goal</Label>
-                  <Select value={goal} onValueChange={(v) => setGoal(v as MarketingGoal)} disabled={busy}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {GOALS.map((g) => (
-                        <SelectItem key={g} value={g}>{GOAL_META[g].label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                    <span className="text-xs font-medium text-foreground">
+                      Marketing Strategy
+                    </span>
+                    {!customStrategyOverride && (
+                      <span className="text-[10px] bg-primary/10 text-primary font-medium px-2 py-0.5 rounded-full">
+                        Auto-detected
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setCustomStrategyOverride(!customStrategyOverride)}
+                    disabled={busy}
+                  >
+                    {customStrategyOverride ? "Use Auto-detection" : "Customize"}
+                  </Button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Funnel stage</Label>
-                  <Select value={funnelStage} onValueChange={(v) => setFunnelStage(v as FunnelStage)} disabled={busy}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {FUNNEL_STAGES.map((f) => (
-                        <SelectItem key={f} value={f}>{FUNNEL_META[f].label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+                {!customStrategyOverride ? (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-foreground">Goal:</span>
+                      <span className="bg-background/80 px-2 py-0.5 rounded border text-[11px] font-medium text-foreground">
+                        {GOAL_META[activeGoal]?.label || activeGoal}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-foreground">Funnel:</span>
+                      <span className="bg-background/80 px-2 py-0.5 rounded border text-[11px] font-medium text-foreground">
+                        {FUNNEL_META[activeFunnelStage]?.label || activeFunnelStage}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Goal</Label>
+                      <Select value={manualGoal} onValueChange={(v) => setManualGoal(v as MarketingGoal)} disabled={busy}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {GOALS.map((g) => (
+                            <SelectItem key={g} value={g}>{GOAL_META[g].label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Funnel stage</Label>
+                      <Select value={manualFunnelStage} onValueChange={(v) => setManualFunnelStage(v as FunnelStage)} disabled={busy}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {FUNNEL_STAGES.map((f) => (
+                            <SelectItem key={f} value={f}>{FUNNEL_META[f].label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -680,7 +734,19 @@ export function CreateWithFlowPostDialog({
             </>
           )}
 
-          {(step === "concepts" || step === "generating") && (
+          {step === "discovering" && (
+            <div className="py-2">
+              <GenerationMatrixProgress initialStage="Analyzing brief & discovering directions" />
+            </div>
+          )}
+
+          {step === "generating" && (
+            <div className="py-2">
+              <GenerationMatrixProgress initialStage="Sketching it out" />
+            </div>
+          )}
+
+          {step === "concepts" && (
             <div className="space-y-3">
               {referenceStyle && referenceStyle.analysed && (
                 <div className="rounded-md border border-dashed px-3 py-2">

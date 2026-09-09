@@ -4,16 +4,21 @@ import type { AiTextProvider } from '../providers';
 import type { CreativeResearch, RawCreativeResearchPayload } from '../types';
 
 /**
- * Stage zero of a generation, ahead of the creative-direction call: research
- * how real campaigns are art-directed for this specific brand/request via
- * Gemini + Google Search grounding, then abstract it into patterns before
- * anything is generated. Purely additive context for the direction prompt.
+ * Stage zero of a generation — research the brand type, occasion, style, and
+ * engagement patterns BEFORE any creative decision is made.
  *
- * Never throws. A blank research object with `researchPerformed: false`
- * degrades the direction to "reason from craft knowledge alone" — the exact
- * tolerance `analyseImage` has for a failed fetch. Grounding failing,
- * `GEMINI_API_KEY` being unset, or the synthesis call itself failing all land
- * in the same place: generation proceeds without it.
+ * Three parallel research tracks are now built into the grounded query:
+ *   1. Brand × Occasion: how this type of brand actually markets for this event
+ *   2. Style references: how the selected design style is executed by professionals
+ *   3. Engagement intelligence: what composition/copy decisions drive stops and clicks
+ *
+ * The structured output feeds directly into:
+ *   - Font selection (typographyInsights drive AI font choice)
+ *   - Copy decisions (engagementInsights set copy volume targets)
+ *   - Composition (compositionInsights inform layout decisions)
+ *   - Direction (brandOccasionPatterns keep the creative on-brand for the occasion)
+ *
+ * Never throws. A blank research object degrades gracefully.
  */
 
 function asStringArray(value: unknown, maxItems: number, max = 200): string[] {
@@ -34,7 +39,11 @@ export const EMPTY_CREATIVE_RESEARCH: CreativeResearch = {
   creativeMechanisms: [],
   visualPatterns: [],
   typographyPatterns: [],
+  typographyInsights: [],
   compositionPatterns: [],
+  compositionInsights: [],
+  brandOccasionPatterns: [],
+  engagementInsights: [],
   productTreatmentPatterns: [],
   ideasToAvoid: [],
   originalityDirection: '',
@@ -44,14 +53,21 @@ function normalise(
   payload: RawCreativeResearchPayload,
   extra: { researchPerformed: boolean; sources: CreativeResearch['sources'] },
 ): CreativeResearch {
+  const typographyInsights = asStringArray(payload.typographyInsights, 6);
+  const compositionInsights = asStringArray(payload.compositionInsights, 6);
   return {
     researchPerformed: extra.researchPerformed,
     sources: extra.sources,
     referenceCount: extra.sources.length,
     creativeMechanisms: asStringArray(payload.creativeMechanisms, 8),
     visualPatterns: asStringArray(payload.visualPatterns, 8),
-    typographyPatterns: asStringArray(payload.typographyPatterns, 4),
-    compositionPatterns: asStringArray(payload.compositionPatterns, 6),
+    // Legacy fields kept for backward compat — populated from new fields when possible
+    typographyPatterns: typographyInsights.length > 0 ? typographyInsights : asStringArray(payload.typographyPatterns, 4),
+    typographyInsights,
+    compositionPatterns: compositionInsights.length > 0 ? compositionInsights : asStringArray(payload.compositionPatterns, 6),
+    compositionInsights,
+    brandOccasionPatterns: asStringArray(payload.brandOccasionPatterns, 6),
+    engagementInsights: asStringArray(payload.engagementInsights, 6),
     productTreatmentPatterns: asStringArray(payload.productTreatmentPatterns, 6),
     ideasToAvoid: asStringArray(payload.ideasToAvoid, 6),
     originalityDirection:
@@ -60,15 +76,14 @@ function normalise(
 }
 
 export interface GenerateCreativeResearchOptions {
-  /** The text-only provider used for the ungrounded synthesis call. Grounding itself always uses GEMINI_RESEARCH_MODEL — see gemini-grounded-search.ts. */
+  /** The text-only provider used for the ungrounded synthesis call. Grounding itself always uses GEMINI_RESEARCH_MODEL. */
   provider: AiTextProvider;
   context: CreativeResearchContext;
 }
 
 /**
- * One research operation: one grounded call (Gemini decides how many search
- * queries it needs) followed by one synthesis call — never three independent
- * requests, and never mandatory for generation to proceed.
+ * One research operation: one grounded call (three tracks) followed by one
+ * synthesis call. Never mandatory for generation to proceed.
  */
 export async function generateCreativeResearch({
   provider,
@@ -90,8 +105,6 @@ export async function generateCreativeResearch({
       temperature: built.temperature,
     })) as RawCreativeResearchPayload;
   } catch (error) {
-    // Research is an enhancement, not a requirement — a failed synthesis call
-    // must not block generation any more than a failed grounding call does.
     console.warn('[creative] research synthesis failed, generating without it', {
       detail: error instanceof Error ? error.message : String(error),
     });
@@ -110,6 +123,9 @@ export async function generateCreativeResearch({
     researchPerformed: research.researchPerformed,
     referenceCount: research.referenceCount,
     mechanisms: research.creativeMechanisms.length,
+    typographyInsights: research.typographyInsights.length,
+    engagementInsights: research.engagementInsights.length,
+    brandOccasionPatterns: research.brandOccasionPatterns.length,
   });
 
   return research;
