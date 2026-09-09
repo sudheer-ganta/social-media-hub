@@ -413,7 +413,8 @@ function resolvedStyleFor(request: CreativeGenerationRequest, variationKey?: str
 }
 
 function enrichConcept(request: CreativeGenerationRequest, concept: ScoredCreativeConcept, styleDna?: ResolvedStyleDNA): Omit<PersistedConcept, 'generatedAsset' | 'generationStatus'> {
-  const style = styleDna?.style;
+  const isExplicit = Boolean(request.styleId && request.styleId !== 'auto');
+  const style = isExplicit ? styleDna?.style : undefined;
   const pVersion = promptVersion(request);
   const cVersion = contextVersion(request);
   const conceptId = digest({ userId: request.userId, contextType: request.contextType, brandId: request.brandId ?? null, pVersion, cVersion, style: style?.id ?? null, version: CONCEPT_VERSION, concept });

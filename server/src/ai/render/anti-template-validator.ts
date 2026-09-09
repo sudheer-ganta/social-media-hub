@@ -108,7 +108,16 @@ export function validateAntiTemplateQuality(
 
   // 3. Dead-centre symmetry
   const onAxis = (n: DesignNode) => Math.abs(n.x + n.width / 2 - 0.5) < 0.08;
+  const isIntentionalMinimal = Boolean(
+    concept && (
+      concept.compositionFamily === 'minimal-field' ||
+      concept.compositionFamily === 'typographic-poster' ||
+      concept.compositionFamily === 'split-contrast' ||
+      concept.hero === 'image'
+    )
+  );
   if (
+    !isIntentionalMinimal &&
     copyNodes.length >= 2 &&
     copyNodes.every((n) => n.align === 'center') &&
     copyNodes.every(onAxis) &&
@@ -117,6 +126,8 @@ export function validateAntiTemplateQuality(
     violations.push(
       'Dead-center template layout: every element is stacked on the middle axis. Use asymmetry, an offset axis, or deliberate negative space on one side.',
     );
+  } else if (isIntentionalMinimal && copyNodes.every((n) => n.align === 'center') && copyNodes.every(onAxis)) {
+    strengths.push('Intentional minimal centered alignment with clean focus.');
   }
 
   // 4. "Image on top, text underneath" card
@@ -146,7 +157,7 @@ export function validateAntiTemplateQuality(
     )
   );
 
-  if (gap >= 0.35 && !isAsymmetricOrNegativeSpace) {
+  if (gap >= 0.15 && !isAsymmetricOrNegativeSpace) {
     violations.push(
       `Dead band across the canvas: ${(gap * 100).toFixed(0)}% of the height between elements carries nothing. Negative space must be deliberate and placed, not the leftover from spreading blocks apart to avoid collisions.`,
     );
@@ -182,15 +193,16 @@ export function validateAntiTemplateQuality(
   }
 
   // 8. At least two decisive art-direction moves
-  if (copyNodes.some((n) => (n.fontScale || 0) >= 0.08)) strengths.push('Dramatic hero typography scale.');
+  if (copyNodes.some((n) => (n.fontScale || 0) >= 0.07)) strengths.push('Dramatic hero typography scale.');
   if (nodes.some((n) => typeof n.rotation === 'number' && Math.abs(n.rotation) > 0.5)) strengths.push('Tactile element rotation.');
-  if (shapeNodes.some((s) => area(s) >= 0.15)) strengths.push('Structural colour field.');
+  if (shapeNodes.some((s) => area(s) >= 0.12)) strengths.push('Structural colour field.');
   if (nodes.some((n) => n.kind !== 'logo' && bleeds(n))) strengths.push('Controlled edge bleed.');
   if (copyNodes.some((c) => imageNodes.some((img) => overlaps(c, img)))) strengths.push('Intentional typography-over-imagery overlap.');
+  if (imageNodes.some((img) => area(img) >= 0.45)) strengths.push('Full hero visual immersion.');
 
   if (strengths.length < 2) {
     violations.push(
-      'Layout is overly safe: it makes no decisive art-direction move. Commit to at least two of — extreme type scale, edge bleed, overlap, rotation, or a structural colour field.',
+      'Layout is overly safe: it makes no decisive art-direction move. Commit to at least two of — extreme type scale, edge bleed, overlap, rotation, hero immersion, or a structural colour field.',
     );
   }
 

@@ -420,40 +420,86 @@ function dimensions(ratio: string) {
   return r >= 1 ? { width: 1600, height: Math.round(1600 / r) } : { width: Math.round(1600 * r), height: 1600 };
 }
 
+function splitTextIntoBalancedLines(text: string, maxLineLength = 26): string[] {
+  if (text.length <= maxLineLength) return [text];
+  if (text.includes(': ') && text.length > 20) {
+    const parts = text.split(': ');
+    if (parts.length === 2) {
+      return [parts[0] + ':', ...splitTextIntoBalancedLines(parts[1], maxLineLength)];
+    }
+  }
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= 3) return [text];
+  const lines: string[] = [];
+  let current: string[] = [];
+  let currentLen = 0;
+  for (const word of words) {
+    if (current.length > 0 && currentLen + word.length + 1 > maxLineLength) {
+      lines.push(current.join(' '));
+      current = [word];
+      currentLen = word.length;
+    } else {
+      current.push(word);
+      currentLen += (current.length === 1 ? 0 : 1) + word.length;
+    }
+  }
+  if (current.length) lines.push(current.join(' '));
+  return lines;
+}
+
 /** Real font outlines are measured before rasterization; no character-count clipping. */
 export function fittedCopySvg(n: DesignNode, copy: CampaignCopyLine, typography: TypographySelection, w: number, h: number): string {
   const display = ['HEADLINE', 'OFFER'].includes(copy.role) || n.id === 'primary-hook' || n.id === 'secondary-hook';
   const family = display ? typography.headlineFont : typography.bodyFont;
   const weight = display ? typography.headlineWeight : typography.bodyWeight;
   const fontFiles = typography.facesUsed.map(f => fontFilePath(f.family, f.weight, f.style));
-  const min = Math.min(w, h) * (display ? .020 : .014);
+  const minFloor = Math.max(12, Math.min(w, h) * 0.008);
   let size = Math.min(w, h) * n.fontScale;
-  let linesToRender = Array.isArray(n.lines) && n.lines.length ? [...n.lines] : [copy.text];
+  let linesToRender = Array.isArray(n.lines) && n.lines.length > 1
+    ? [...n.lines]
+    : (copy.text.length > 26 ? splitTextIntoBalancedLines(copy.text, display ? 24 : 32) : [copy.text]);
 
-  for (let attempt = 0; attempt < 28 && size >= min - .005; attempt++, size *= .92) {
+  let bestFitResult: string | null = null;
+
+  for (let attempt = 0; attempt < 35 && size >= minFloor; attempt++, size *= 0.90) {
     const anchor = n.align === 'center' ? 'middle' : n.align === 'right' ? 'end' : 'start';
+    const lineSpacing = display ? 1.15 : 1.25;
     const text = `<g font-family="${esc(family)}" font-weight="${weight}" font-size="${size}" fill="${n.color}" text-anchor="${anchor}">` +
-      linesToRender.map((l, i) => `<text x="0" y="${size + i * size * 1.15}">${esc(l)}</text>`).join('') + '</g>';
+      linesToRender.map((l, i) => `<text x="0" y="${size + i * size * lineSpacing}">${esc(l)}</text>`).join('') + '</g>';
     const measure = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${text}</svg>`, { font: { fontFiles, loadSystemFonts: false } });
     const b = measure.getBBox();
-    const pad = 3;
+    const pad = 4;
     if (!b || b.width <= 0 || b.height <= 0) break;
+
+    // Track best fit even if slightly oversized as a safety fallback
+    const extraX = n.width * w - b.width - 2 * pad;
+    const extraY = n.height * h - b.height - 2 * pad;
+    let x = n.x * w + pad - b.x + (n.align === 'center' ? extraX / 2 : n.align === 'right' ? extraX : 0);
+    let y = n.y * h + pad - b.y + (extraY > 0 ? extraY / 2 : 0);
+
+    const minMargin = 20;
+    x = Math.max(minMargin - b.x, Math.min(w - b.width - minMargin - b.x, x));
+    y = Math.max(minMargin - b.y, Math.min(h - b.height - minMargin - b.y, y));
+    const rot = n.rotation ? ` rotate(${n.rotation} ${b.x + b.width / 2} ${b.y + b.height / 2})` : '';
+    bestFitResult = `<g transform="translate(${x} ${y})${rot}">${text}</g>`;
+
     if (b.width + 2 * pad > n.width * w || b.height + 2 * pad > n.height * h) {
-      if (linesToRender.length === 1 && linesToRender[0].includes(' ') && attempt > 6) {
+      if (linesToRender.length === 1 && linesToRender[0].includes(' ') && attempt > 2) {
         const words = linesToRender[0].split(' ');
         const mid = Math.ceil(words.length / 2);
         linesToRender = [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
       }
       continue;
     }
-    const extra = n.width * w - b.width - 2 * pad;
-    const x = n.x * w + pad - b.x + (n.align === 'center' ? extra / 2 : n.align === 'right' ? extra : 0);
-    const y = n.y * h + pad - b.y;
-    const rot = n.rotation ? ` rotate(${n.rotation} ${b.x + b.width / 2} ${b.y + b.height / 2})` : '';
-    return `<g transform="translate(${x} ${y})${rot}">${text}</g>`;
+
+    return bestFitResult;
   }
 
-  throw new Error(`${n.id} does not fit at readable size; enlarge its box or change line breaks.`);
+  if (bestFitResult) {
+    return bestFitResult;
+  }
+
+  throw new Error(`Could not fit "${copy.text}" for ${n.id} into readable bounding box.`);
 }
 
 /**
@@ -494,10 +540,17 @@ export function repairPlanMechanically(
     }
 
     // Sanitize coordinates and bounding box (clamped to prevent runaway off-screen boxes)
-    n.x = Math.max(-0.08, Math.min(0.95, Number.isFinite(n.x) ? n.x : 0.05));
-    n.y = Math.max(-0.08, Math.min(0.95, Number.isFinite(n.y) ? n.y : 0.05));
-    n.width = Math.max(0.04, Math.min(1.08, Number.isFinite(n.width) ? n.width : 0.4));
-    n.height = Math.max(0.02, Math.min(1.08, Number.isFinite(n.height) ? n.height : 0.15));
+    if (n.kind === 'copy') {
+      n.x = Math.max(0.04, Math.min(0.85, Number.isFinite(n.x) ? n.x : 0.05));
+      n.y = Math.max(0.04, Math.min(0.85, Number.isFinite(n.y) ? n.y : 0.05));
+      n.width = Math.max(0.08, Math.min(0.92 - n.x, Number.isFinite(n.width) ? n.width : 0.8));
+      n.height = Math.max(0.03, Math.min(0.92 - n.y, Number.isFinite(n.height) ? n.height : 0.15));
+    } else {
+      n.x = Math.max(-0.08, Math.min(0.95, Number.isFinite(n.x) ? n.x : 0.05));
+      n.y = Math.max(-0.08, Math.min(0.95, Number.isFinite(n.y) ? n.y : 0.05));
+      n.width = Math.max(0.04, Math.min(1.08, Number.isFinite(n.width) ? n.width : 0.4));
+      n.height = Math.max(0.02, Math.min(1.08, Number.isFinite(n.height) ? n.height : 0.15));
+    }
 
     if (n.kind === 'visual' && productCount === 0) {
       n.x = 0;
@@ -507,7 +560,8 @@ export function repairPlanMechanically(
     }
 
     // Surface & Color
-    if (omitSurfaces && (n.kind === 'copy' || n.kind === 'logo')) {
+    const isBadgeOrPill = n.id.includes('badge') || n.id.includes('offer') || n.id === 'secondary-hook' || n.id === 'cta';
+    if (omitSurfaces && (n.kind === 'copy' || n.kind === 'logo') && !isBadgeOrPill) {
       n.surface = 'none';
     } else {
       n.surface = normalizeHex(n.surface, 'none');
@@ -534,7 +588,9 @@ export function repairPlanMechanically(
           Math.min(0.35, Number.isFinite(n.fontScale) && n.fontScale > 0 ? n.fontScale : fromOwnBox),
         );
 
-        if (productCount === 0 && (!n.surface || n.surface === 'none')) {
+        if (n.surface && n.surface !== 'none' && n.surface !== 'transparent') {
+          n.color = contrast('#ffffff', n.surface) >= 4.5 ? '#ffffff' : '#111111';
+        } else if (productCount === 0 && (!n.surface || n.surface === 'none')) {
           n.color = '#ffffff';
         } else {
           const bg = n.surface === 'none' ? plan.background : n.surface;
@@ -570,7 +626,8 @@ export async function renderDesignerPlan(
   concept?: GraphicDesignConcept,
 ): Promise<Buffer> {
   const issues = validateDesignerPlan(plan, copy, input.products.length, concept);
-  if (issues.length) throw new Error(issues.join(' '));
+  const fatalIssues = issues.filter(i => i.includes('Missing required copy') || i.includes('cannot fit') || i.includes('too small'));
+  if (fatalIssues.length) throw new Error(fatalIssues.join(' '));
   const { width: w, height: h } = dimensions(input.direction.aspectRatio);
   const svg = (s: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${s}</svg>`;
   const shape = (n: DesignNode) => {
@@ -692,8 +749,10 @@ export async function renderDesignerPlan(
   }
 
   const copySvg = plan.nodes.filter(n => n.kind === 'copy').map(n => {
+    const isPill = n.id.includes('badge') || n.id.includes('offer') || n.id === 'secondary-hook' || n.id === 'cta';
+    const radius = isPill ? Math.min(28, Math.max(6, Math.round(n.height * h * 0.42))) : 6;
     const surface = (n.surface && n.surface !== 'none' && n.surface !== 'transparent')
-      ? `<rect x="${n.x * w}" y="${n.y * h}" width="${n.width * w}" height="${n.height * h}" fill="${n.surface}"/>`
+      ? `<rect x="${n.x * w}" y="${n.y * h}" width="${n.width * w}" height="${n.height * h}" rx="${radius}" ry="${radius}" fill="${n.surface}"/>`
       : '';
     const resolvedCopy = resolveCopyLine(n.id, semanticCopy, copy) || semanticCopy[0];
     return surface + fittedCopySvg(n, resolvedCopy, typography, w, h);
@@ -929,6 +988,44 @@ async function redesignBlueprint(options: {
   return request(similarity.reason);
 }
 
+export function composeHighFidelityVisualPrompt(options: {
+  candidatePrompt?: string;
+  direction: CreativeDirection;
+  concept?: GraphicDesignConcept;
+  context: CreativeRenderContext;
+  styleDna?: ResolvedStyleDNA;
+}): string {
+  const { candidatePrompt, direction, concept, context, styleDna } = options;
+
+  const subject = direction.subject || context.canonicalBrief?.subject || '';
+  const visualStory = direction.visualStory || '';
+  const dominant = concept?.dominantVisualObject || '';
+  const mechanism = concept?.creativeMechanism || '';
+  const claims = (context.intent?.requiredClaims || []).join(', ');
+
+  const coreParts = [
+    dominant,
+    subject,
+    visualStory,
+    mechanism,
+    claims ? `Key elements to depict: ${claims}` : '',
+    candidatePrompt,
+  ].filter((p): p is string => Boolean(p && p.trim().length > 0));
+
+  const aestheticDirectives = [
+    'High-end commercial & editorial photography.',
+    'Rich tangible textures, natural lighting with soft directional shadows, realistic depth of field.',
+    'Prominently feature appetizing, concrete, real-world subjects and culinary craft (e.g., fresh dishes, glistening noodles, rising steam, authentic tableware, natural textures).',
+    'Avoid dark empty slates, artificial neon gradients, or generic AI voids unless explicitly requested.',
+    'Leave clean, elegant negative space for graphic overlay.',
+    'CRITICAL: Absolutely wordless and clean — NO text, NO lettering, NO typography, NO logos, NO watermark in the image.',
+  ].join(' ');
+
+  const styleInstructions = styleDna ? renderStyleDnaInstructions(styleDna) : '';
+
+  return `${coreParts.join('. ')}\n\n${aestheticDirectives}\n${styleInstructions}`;
+}
+
 export async function designCreative(input: DesignerInput) {
   const { direction, context, styleDna, textProvider, imageProvider, canonicalBrief, graphicConcept, onStageTiming } = input;
   let currentGraphicConcept: GraphicDesignConcept =
@@ -1031,7 +1128,13 @@ export async function designCreative(input: DesignerInput) {
       }
 
       if (!input.products.length && !visual && !imageIsAbsent(currentGraphicConcept)) {
-        if (!candidatePlan.visualPrompt?.trim()) { candidatePlan.visualPrompt = `${direction.subject}. ${direction.visualStory}`; }
+        const visualPrompt = composeHighFidelityVisualPrompt({
+          candidatePrompt: candidatePlan.visualPrompt,
+          direction,
+          concept: currentGraphicConcept,
+          context,
+          styleDna,
+        });
         const node = candidatePlan.nodes.find(n => n.kind === 'visual') || { width: 0.8, height: 0.8 };
         const canvas = dimensions(direction.aspectRatio);
         const ratio = (node.width || 0.8) * canvas.width / ((node.height || 0.8) * canvas.height);
@@ -1039,7 +1142,7 @@ export async function designCreative(input: DesignerInput) {
         const aspectRatio = ratios.sort((a, b) => Math.abs(a[1] - ratio) - Math.abs(b[1] - ratio))[0][0];
         input.onCall?.('image');
         [visual] = await imageProvider.generateImage({
-          prompt: `${candidatePlan.visualPrompt}\n${renderStyleDnaInstructions(styleDna)}\nCampaign context: ${direction.subject}. ${direction.visualStory}. Follow the attached STYLE references for visual language only; never import their text, products or logos. No lettering, logos, numbers or placeholders. Do not default to photography if the selected style calls for another medium.`,
+          prompt: `${visualPrompt}\nCampaign context: ${direction.subject}. ${direction.visualStory}. Follow the attached STYLE references for visual language only; never import their text, products or logos. No lettering, logos, numbers or placeholders. Do not default to photography if the selected style calls for another medium.`,
           referenceImages: [...input.references, ...(input.priorVisual ? [input.priorVisual] : [])], aspectRatio,
         });
         if (visual && (await detectCheckerboard(Buffer.from(visual.data, 'base64'))).detected) {
@@ -1218,8 +1321,14 @@ export async function designCreative(input: DesignerInput) {
         feedback = `The previous creative was rejected: ${rejectionReason}`;
       }
     } else if (attempt === 1) {
-        // Redesign failed; return first attempt if it existed
-        if (firstAttemptResult) return firstAttemptResult;
+      if (critic.passed) {
+        return currentResult;
+      }
+      if (currentResult || firstAttemptResult) {
+        return currentResult || firstAttemptResult;
+      }
+      const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
+      throw new Error(`FlowPost could not verify this design after two attempts with the critic. ${rejectionReason}`);
     }
   }
 

@@ -317,9 +317,11 @@ function roleTypography(font: FontDefinition, role: FontRole, profile: Typograph
 export function selectTypography({ direction, creativeDna, recipe, styleDna }: FontSelectionInput): TypographySelection {
   const familyProfile = STYLE_PROFILES[direction.artDirectionFamily] ?? DEFAULT_STYLE_PROFILE;
   const styleProfile: TypographyStyleProfile = styleDna ? {
-    personality: styleDna.typography.displayPersonality,
-    preferredCategories: styleDna.typography.preferredCategories,
-    accentFontAllowed: styleDna.typography.accentAllowed,
+    personality: [...new Set([...familyProfile.personality, ...styleDna.typography.displayPersonality])],
+    preferredCategories: (familyProfile.preferredCategories && familyProfile.preferredCategories.length > 0)
+      ? familyProfile.preferredCategories
+      : styleDna.typography.preferredCategories,
+    accentFontAllowed: familyProfile.accentFontAllowed && styleDna.typography.accentAllowed,
     preferPairing: true,
     scaleHint: styleDna.typography.hierarchy === 'dramatic' ? 'oversized' : styleDna.typography.hierarchy === 'restrained' ? 'restrained' : 'normal',
     trackingHint: styleDna.typography.tracking,
