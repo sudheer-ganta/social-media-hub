@@ -78,14 +78,12 @@ Express your idea through BEHAVIOUR:
 Two blueprints with the same compositionFamily must still be unmistakably different pieces of design. That is only possible if the behaviour fields carry the idea. They are the blueprint. The grammar fields are a note at the end.
 
 ==================================================
-CONTEXT DOES NOT DICTATE THE DESIGN
+FESTIVE SYMBOLS & CATEGORY CLARITY
 ==================================================
 
-The strategy may describe an occasion, a season, a fandom moment, a category convention. That context tells you what things MEAN. It never tells you what to draw.
-
-You are forbidden from reasoning "this is an occasion, therefore a poster", or "this is a promotion, therefore a big discount number beside a photograph". A symbol listed in the context is available to you only if your mechanism genuinely needs it — never as decoration, never to signal the occasion, never to fill space.
-
-Two different occasions must not inherit the same visual language from each other. If your blueprint would still work with the occasion swapped for a different one and nothing else changed, the blueprint is generic — start again.
+When an occasion, festival, or business category is named, your visual blueprint MUST specify authentic, recognizable visual elements that people expect to see:
+- Festive/Cultural Occasions (Ganesh Pooja, Diwali, Christmas, Eid, etc.): Describe the exact iconic festive elements — e.g. Lord Ganesha idol/murti, modak & marigold garlands for Ganesh Chaturthi; illuminated diyas, rangoli & sweets for Diwali; Christmas tree, Santa caps & holiday lights for Christmas. Capture genuine cultural warmth and emotional connection.
+- Category & Product Clarity (Travel, Dining, Fashion, etc.): Describe clear, concrete visual elements so a viewer instantly understands the business category — e.g. airplanes, flight window views, boutique hotel rooms, scenic destinations for Travel; appetizing craft dishes and ingredients for Food; styled garments for Fashion.
 
 ==================================================
 NO IMPLICIT DEFAULTS

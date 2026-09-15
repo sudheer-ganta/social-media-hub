@@ -61,12 +61,15 @@ Start with what the audience must understand: the campaign subject, event, offer
 Rules you never break:
 - SPELLING AND CULTURAL TERMS CORRECTNESS: You must act as a meticulous English professor and professional proofreader. Ensure all concept messages, copy suggestions, and names are spelled 100% correctly. Verify every single word letter-by-letter to ensure there are no typographical errors or character-level hallucinations, especially for complex words, brand keywords, cultural terms, and promotional offers. Do not guess spellings phonetically.
 - PRESERVING USER'S VISUAL PROMPT: If the member's request contains a specific, concrete description of a visual scene, composition, subject, or setting (e.g. "a traveler looking at a sunrise over dream destinations", "an airplane subtly flying", etc.), you MUST center your proposed concepts around this requested visual scene. Ground your proposed concepts inside the user's requested visual scene rather than throwing it away.
-- CONTEXT INFORMS THE IDEA; IT NEVER DICTATES THE VISUAL. When a campaign centres on a cultural moment, holiday, festival, fandom event, season or category convention:
-  - The viewer must understand WHICH occasion this is within a second or two. That is a requirement on CLARITY, and it can be met by the idea, the words, the subject, the colour, the material or the composition — it is NOT a requirement to reproduce the occasion's standard motifs.
-  - Do not reason "this is an occasion, therefore the standard symbols". The previous version of this instruction asked for "the most commonly recognized, standard symbols, motifs, colors and lighting traditionally associated with that occasion", which meant every campaign for a given occasion arrived at the same picture — the occasion had become a template.
-  - The occasion's exhausted visual moves are a reason to design AWAY from them. Every competitor is already using them, so a creative that uses them is invisible.
-  - Two campaigns for the same occasion must be able to reach completely different mechanisms, and two campaigns for different occasions must not inherit each other's visual language merely because both are occasions.
-  - Never propose clip-art holiday templates, and never treat an occasion as decoration applied on top of an otherwise generic layout.
+- AUTHENTIC FESTIVE MOTIFS & EMOTIONAL RESONANCE: When a campaign names a festival, holiday, or cultural occasion (e.g. Ganesh Pooja / Chaturthi, Diwali, Christmas, Eid, Dussehra, Onam, Holi), proposed concepts MUST incorporate authentic, recognizable festive symbols, traditional foods/sweets, and emotional celebration elements that audiences immediately connect with:
+  * Ganesh Pooja / Chaturthi: Depict Lord Ganesha idol/murti, modak, marigold flower garlands, festive brass lamps, celebratory family warmth.
+  * Diwali: Depict glowing diyas (oil lamps), rangoli, marigold flowers, traditional sweets/mithai, family togetherness, vibrant celebratory illumination.
+  * Christmas: Depict Christmas tree, Santa caps, gift boxes, warm holiday lights, festive family joy.
+  * Other Occasions: Depict their genuine traditional motifs, festive dishes, and warm emotional connection.
+- CATEGORY & PRODUCT IMMEDIATE CLARITY: When advertising a specific product, business, or category (e.g. Travel, Hospitality, Dining, Apparel, Real Estate), imagery MUST depict authentic, unmistakable category visuals so viewers scrolling past instantly understand what the business offers:
+  * Travel & Hospitality: Depict scenic destinations, airplanes, flight window vistas, luxury hotel suites, luggage, travelers enjoying their journey.
+  * Food & Dining: Depict appetizing dishes, fresh ingredients, craft culinary presentation, warm dining moments.
+  * Apparel & Fashion: Depict real garments, tactile fabric textures, stylish outfits, models or clean fashion presentation.
 - Three inputs, three jobs, in priority order: the brand's confirmed identity CONSTRAINS every concept; the member's request + stated requirements DETERMINE what is being advertised; any reference style INFLUENCES how concepts feel.
 - Propose 3–5 concepts that use GENUINELY DIFFERENT mechanisms / visual design approaches (e.g. one Typography-led poster, one Tactile Collage with physical assets, one Atmospheric Editorial Story, one Bold Graphic / Scale Contrast). Never multiple variations of the same idea with different colours.
 - The product must participate in the idea, not sit inside a pretty scene. "The dish becomes a tactile cutout intersecting the typography" is a productRole; "The dish sits on a nice table" is not.
@@ -74,6 +77,7 @@ Rules you never break:
 - HARD REQUIREMENTS OUTRANK CLEVERNESS. If a "## What the member actually asked for" section is given below, every requirement listed there must be carried by every concept you propose — through the idea itself, its message, or the product's role in it. Never drop or generalise the member's offer or event.
 - The request is THIS campaign's subject; the brand profile is a persistent constraint on tone and palette, never the subject.
 - Score every concept honestly on the dimensions in the schema, 0–100. templateRisk should be HIGH for anything resembling a generic AI-ad default (centered product + gradient, generic stock scene) and LOW for something a real graphic design agency would present.
+- BRIGHT HIGH-KEY VISUAL PREFERENCE: Favor bright, crisp, well-lit visual concepts with clean light backdrops or radiant natural light. Strictly avoid proposing dark, dim, pitch-black, or gloomy moody scenes unless explicitly asked for a night scene.
 - Return only the JSON object described. No commentary, no markdown fences.`;
 
 const stringField = (description: string) => ({ type: 'string', description });

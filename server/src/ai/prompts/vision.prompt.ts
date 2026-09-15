@@ -82,7 +82,7 @@ export const VISION_RESPONSE_SCHEMA: Record<string, unknown> = {
     lighting: {
       type: 'string',
       description:
-        'The quality and direction of light — e.g. "low warm side-light, deep shadows".',
+        'The quality and direction of light — e.g. "bright natural daylight, soft directional light".',
     },
     mood: {
       type: 'string',

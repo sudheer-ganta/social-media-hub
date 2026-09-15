@@ -501,17 +501,17 @@ function placeArchetypeLogo(
   const candidates =
     preferredCorner === 'top-right'
       ? [
-          { x: w - m - size, y: m * 0.8 },
-          { x: m, y: m * 0.8 },
-          { x: w - m - size, y: h - m - size - bottomSafe },
-          { x: m, y: h - m - size - bottomSafe },
-        ]
+        { x: w - m - size, y: m * 0.8 },
+        { x: m, y: m * 0.8 },
+        { x: w - m - size, y: h - m - size - bottomSafe },
+        { x: m, y: h - m - size - bottomSafe },
+      ]
       : [
-          { x: m, y: m * 0.8 },
-          { x: w - m - size, y: m * 0.8 },
-          { x: m, y: h - m - size - bottomSafe },
-          { x: w - m - size, y: h - m - size - bottomSafe },
-        ];
+        { x: m, y: m * 0.8 },
+        { x: w - m - size, y: m * 0.8 },
+        { x: m, y: h - m - size - bottomSafe },
+        { x: w - m - size, y: h - m - size - bottomSafe },
+      ];
 
   const occupied = blocks.filter((b): b is Extract<PlannedBlock, { rect: Rect }> => 'rect' in b && SOLID_KINDS.has(b.kind));
   const spot = candidates.find((c) => {
@@ -2453,12 +2453,12 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
           const itemGap = gap * 1.2;
           const totalAvailW = rightEdge - m;
           const targetItemW = (totalAvailW - (items.length - 1) * itemGap) / items.length;
-          
+
           let currentX = m;
           items.forEach((item, idx) => {
             const fit = fitText(item, targetItemW, secondarySize * 0.95, 1, BODY_CHAR_WIDTH);
             const itemW = fit.lines[0].length * fit.fontSize * BODY_CHAR_WIDTH;
-            
+
             // Draw a tiny circular indicator badge (organic shape) before the text
             const bulletSize = fit.fontSize * 0.35;
             blocks.push({
@@ -2470,7 +2470,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
               fill: palette.accent,
               textFill: palette.paper,
             });
-            
+
             const textX = currentX + bulletSize + gap * 0.35;
             const textW = targetItemW - (bulletSize + gap * 0.35);
             blocks.push({
@@ -2489,9 +2489,9 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
                 letterSpacing: 0.5,
               },
             });
-            
+
             currentX += targetItemW;
-            
+
             // Draw a vertical divider line between columns
             if (idx < items.length - 1) {
               const dividerX = currentX + itemGap / 2;

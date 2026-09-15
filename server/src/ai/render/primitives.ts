@@ -259,29 +259,45 @@ export function renderHandDrawnLine(x: number, y: number, w: number, stroke: str
 
 // ─── Texture layers ─────────────────────────────────────────────────────────
 
-/** Controlled grain — art direction, not a defect. Kept subtle by opacity. */
+/** Controlled grain — art direction, not a defect. Dynamically scaled with canvas resolution and customizable. */
 export function renderTexture(
   kind: 'paper-grain' | 'film-grain' | 'halftone' | 'noise',
   w: number,
   h: number,
+  options?: { opacity?: number; baseFrequency?: number; octaves?: number },
 ): string {
+  // Normalize scaling relative to standard 1080px canvas baseline
+  const scaleRatio = Math.max(0.1, Math.min(w, h) / 1080);
+
   if (kind === 'halftone') {
+    const dotRadius = Number((1.3 * Math.max(0.8, scaleRatio)).toFixed(2));
+    const patternSize = Math.round(14 * Math.max(0.8, scaleRatio));
+    const opacity = options?.opacity ?? 0.06;
     return (
-      '<defs><pattern id="fp-halftone" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(15)">' +
-      '<circle cx="4" cy="4" r="1.3" fill="#000"/></pattern></defs>' +
-      `<rect x="0" y="0" width="${w}" height="${h}" fill="url(#fp-halftone)" opacity="0.06"/>`
+      `<defs><pattern id="fp-halftone" width="${patternSize}" height="${patternSize}" patternUnits="userSpaceOnUse" patternTransform="rotate(15)">` +
+      `<circle cx="${(patternSize / 3.5).toFixed(1)}" cy="${(patternSize / 3.5).toFixed(1)}" r="${dotRadius}" fill="#000"/></pattern></defs>` +
+      `<rect x="0" y="0" width="${w}" height="${h}" fill="url(#fp-halftone)" opacity="${opacity}"/>`
     );
   }
-  const params =
+
+  const defaultParams =
     kind === 'paper-grain'
-      ? { baseFrequency: 0.9, opacity: 0.07 }
+      ? { baseFrequency: 0.85, octaves: 3, opacity: 0.035 }
       : kind === 'film-grain'
-        ? { baseFrequency: 0.65, opacity: 0.09 }
-        : { baseFrequency: 0.5, opacity: 0.05 };
+        ? { baseFrequency: 0.65, octaves: 2, opacity: 0.04 }
+        : { baseFrequency: 0.5, octaves: 2, opacity: 0.03 };
+
+  const opacity = options?.opacity ?? defaultParams.opacity;
+  const octaves = options?.octaves ?? defaultParams.octaves;
+  
+  // Scale baseFrequency dynamically with canvas resolution so noise density stays visually consistent
+  const rawBaseFreq = options?.baseFrequency ?? defaultParams.baseFrequency;
+  const baseFrequency = Number((rawBaseFreq / Math.max(0.2, scaleRatio)).toFixed(3));
+
   return (
-    `<defs><filter id="fp-grain-${kind}"><feTurbulence type="fractalNoise" baseFrequency="${params.baseFrequency}" numOctaves="2" stitchTiles="stitch"/>` +
-    '<feColorMatrix type="matrix" values="0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0.9 0"/></filter></defs>' +
-    `<rect x="0" y="0" width="${w}" height="${h}" filter="url(#fp-grain-${kind})" opacity="${params.opacity}"/>`
+    `<defs><filter id="fp-grain-${kind}"><feTurbulence type="fractalNoise" baseFrequency="${baseFrequency}" numOctaves="${octaves}" stitchTiles="stitch"/>` +
+    '<feColorMatrix type="matrix" values="0 0 0 0 0.15 0 0 0 0 0.15 0 0 0 0 0.15 0 0 0 0.35 0"/></filter></defs>' +
+    `<rect x="0" y="0" width="${w}" height="${h}" filter="url(#fp-grain-${kind})" opacity="${opacity}"/>`
   );
 }
 

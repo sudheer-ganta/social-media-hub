@@ -325,17 +325,16 @@ export async function generateCreativeDirection({
     });
     const problems = [
       uncommunicative &&
-        `it shipped no headline and no brand message — for a ${goal.replace(/_/g, ' ')} request, the viewer needs to know what's being sold. Add a headline, brandMessage, or secondaryInfo — whichever actually fits this idea.`,
+      `it shipped no headline and no brand message — for a ${goal.replace(/_/g, ' ')} request, the viewer needs to know what's being sold. Add a headline, brandMessage, or secondaryInfo — whichever actually fits this idea.`,
       missing.length > 0 &&
-        `it left ${missing.length === 1 ? 'a requirement the member stated' : 'requirements the member stated'} off the creative entirely: ${missing
-          .map((claim) => `"${claim}"`)
-          .join(', ')}. ${
-          refinementOf
-            ? 'Keep the refinement instruction, and keep every other field as the prior direction had it — but the copy must still carry these.'
-            : 'Keep the idea.'
-        } Put each one into the words of the creative — headline, supportingLine, cta, marketingCreative.offerText, marketingCreative.brandMessage or marketingCreative.secondaryInfo — using the member's own phrasing. The image is wordless, so the copy is the only place these can live.`,
+      `it left ${missing.length === 1 ? 'a requirement the member stated' : 'requirements the member stated'} off the creative entirely: ${missing
+        .map((claim) => `"${claim}"`)
+        .join(', ')}. ${refinementOf
+        ? 'Keep the refinement instruction, and keep every other field as the prior direction had it — but the copy must still carry these.'
+        : 'Keep the idea.'
+      } Put each one into the words of the creative — headline, supportingLine, cta, marketingCreative.offerText, marketingCreative.brandMessage or marketingCreative.secondaryInfo — using the member's own phrasing. The image is wordless, so the copy is the only place these can live.`,
       styleIssues.length > 0 &&
-        `it contradicted the SELECTED STYLE (mandatory, not inspiration): ${styleIssues.join(' ')}`,
+      `it contradicted the SELECTED STYLE (mandatory, not inspiration): ${styleIssues.join(' ')}`,
     ].filter((problem): problem is string => typeof problem === 'string');
 
     directionAttempts += 1;
@@ -424,7 +423,7 @@ export function summariseCreativeDirection(
     direction.headline && `Headline: "${direction.headline}"`,
     direction.marketingCreative?.brandMessage && `Brand message: "${direction.marketingCreative.brandMessage}"`,
     direction.marketingCreative?.secondaryInfo?.length &&
-      `Details: ${direction.marketingCreative.secondaryInfo.join(', ')}`,
+    `Details: ${direction.marketingCreative.secondaryInfo.join(', ')}`,
     context.brandName && `Brand: ${context.brandName}`,
     `Goal: ${context.goal.replace(/_/g, ' ')} · Funnel: ${context.funnelStage}`,
     context.platforms.length && `Platforms: ${context.platforms.join(', ')}`,

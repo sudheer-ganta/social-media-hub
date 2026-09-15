@@ -509,7 +509,7 @@ export function CreateWithFlowPostDialog({
         if (!next) reset();
       }}
     >
-      <DialogContent className={cn("p-0 overflow-hidden", (step === "concepts" || step === "generating" || step === "discovering") ? "max-w-2xl" : "max-w-lg")}>
+      <DialogContent className={cn("p-0 overflow-hidden transition-all duration-300", (step === "result" || step === "concepts") ? "max-w-4xl sm:max-w-4xl" : (step === "generating" || step === "discovering") ? "max-w-3xl sm:max-w-3xl" : "max-w-2xl sm:max-w-2xl")}>
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2 font-display text-lg">
             <Sparkles className="h-4 w-4" />
@@ -524,7 +524,7 @@ export function CreateWithFlowPostDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4 max-h-[75vh] overflow-y-auto scrollbar-thin">
+        <div className="px-6 py-5 space-y-4 max-h-[82vh] overflow-y-auto scrollbar-thin">
           {step === "input" && (
             <>
               <div className="space-y-1.5">
@@ -858,47 +858,65 @@ export function CreateWithFlowPostDialog({
           )}
 
           {step === "result" && asset && (
-            <div className="space-y-4">
-              {asset.imageUrl && (
-                <img
-                  src={asset.imageUrl}
-                  alt={asset.creativeBrief.concept}
-                  className="w-full rounded-lg border object-cover"
-                />
-              )}
-              <p className="text-sm font-semibold">{asset.creativeBrief.concept}</p>
-              <p className="text-xs text-muted-foreground">{asset.creativeBrief.visualStory}</p>
-              {asset.creativeBrief.headline && (
-                <p className="text-xs font-medium">"{asset.creativeBrief.headline}"</p>
-              )}
-              {asset.creativeBrief.marketingCreative?.brandMessage && (
-                <p className="text-xs text-muted-foreground">"{asset.creativeBrief.marketingCreative.brandMessage}"</p>
-              )}
-              {asset.creativeBrief.marketingCreative?.secondaryInfo?.length ? (
-                <p className="text-xs text-muted-foreground">
-                  {asset.creativeBrief.marketingCreative.secondaryInfo.join(' · ')}
-                </p>
-              ) : null}
-              {asset.typography && (
-                <p className="text-[11px] text-muted-foreground/70">
-                  Typography — {asset.typography.headlineFont}
-                  {asset.typography.accentFont ? ` + ${asset.typography.accentFont}` : ''}
-                  {asset.typography.bodyFont !== asset.typography.headlineFont ? ` + ${asset.typography.bodyFont}` : ''}
-                </p>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+              <div className="md:col-span-6 space-y-2">
+                {asset.imageUrl && (
+                  <div className="relative overflow-hidden rounded-xl border bg-black/5 shadow-md flex items-center justify-center">
+                    <img
+                      src={asset.imageUrl}
+                      alt={asset.creativeBrief.concept}
+                      className="w-full max-h-[62vh] object-contain rounded-xl"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="md:col-span-6 space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-foreground leading-snug">{asset.creativeBrief.concept}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{asset.creativeBrief.visualStory}</p>
+                </div>
+                
+                {asset.creativeBrief.headline && (
+                  <div className="rounded-lg bg-secondary/50 p-3 border">
+                    <p className="text-xs font-semibold text-foreground">Headline Hook:</p>
+                    <p className="mt-0.5 text-xs text-foreground/90 font-medium">"{asset.creativeBrief.headline}"</p>
+                  </div>
+                )}
+                {asset.creativeBrief.marketingCreative?.brandMessage && (
+                  <p className="text-xs text-muted-foreground">"{asset.creativeBrief.marketingCreative.brandMessage}"</p>
+                )}
+                {asset.creativeBrief.marketingCreative?.secondaryInfo?.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    {asset.creativeBrief.marketingCreative.secondaryInfo.join(' · ')}
+                  </p>
+                ) : null}
+                {asset.typography && (
+                  <div className="inline-flex items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground">
+                    <span className="font-semibold text-foreground">Typography:</span>
+                    {asset.typography.headlineFont}
+                    {asset.typography.accentFont ? ` + ${asset.typography.accentFont}` : ''}
+                    {asset.typography.bodyFont !== asset.typography.headlineFont ? ` + ${asset.typography.bodyFont}` : ''}
+                  </div>
+                )}
 
-              <div className="flex items-center gap-2">
-                <Textarea
-                  value={refineInstruction}
-                  onChange={(e) => setRefineInstruction(e.target.value)}
-                  placeholder='Refine — e.g. "make it more premium" or "darker background"'
-                  rows={1}
-                  className="min-h-9 resize-none text-sm"
-                  disabled={refining}
-                />
-                <Button size="sm" variant="outline" disabled={refining || !refineInstruction.trim()} onClick={handleRefine}>
-                  {refining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                </Button>
+                <div className="pt-2 space-y-1.5 border-t">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Wand2 className="h-3.5 w-3.5 text-primary" /> Refine Creative
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Textarea
+                      value={refineInstruction}
+                      onChange={(e) => setRefineInstruction(e.target.value)}
+                      placeholder='Refine — e.g. "make it brighter", "more vibrant flowers"'
+                      rows={2}
+                      className="resize-none text-xs"
+                      disabled={refining}
+                    />
+                    <Button size="sm" disabled={refining || !refineInstruction.trim()} onClick={handleRefine} className="h-full px-3">
+                      {refining ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

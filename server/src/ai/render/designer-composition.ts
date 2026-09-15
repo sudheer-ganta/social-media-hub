@@ -250,7 +250,7 @@ export function resolveLogoNegativeSpacePosition(
   const isDeadCenter = Math.abs(logoNode.x + lw / 2 - 0.5) < 0.10 && Math.abs(logoNode.y + lh / 2 - 0.5) < 0.10;
 
   if (currentClearance >= 0.015 && !isDefaultFooter && !isDeadCenter &&
-      logoNode.x >= 0.015 && logoNode.y >= 0.015 && logoNode.x + lw <= 0.985 && logoNode.y + lh <= 0.985) {
+    logoNode.x >= 0.015 && logoNode.y >= 0.015 && logoNode.x + lw <= 0.985 && logoNode.y + lh <= 0.985) {
     return { x: logoNode.x, y: logoNode.y, width: lw, height: lh };
   }
 
@@ -577,10 +577,16 @@ export function repairPlanMechanically(
     if (n.kind === 'copy') {
       const c = resolveCopyLine(n.id, semanticCopy, copy);
       if (c) {
-        if (!Array.isArray(n.lines) || !n.lines.length || sameWords(n.lines.join(' ')) !== sameWords(c.text)) {
+        const isDisplay = c.semanticRole === 'primary-hook' || c.role === 'HEADLINE' || n.id === 'primary-hook' || n.id === 'secondary-hook';
+        const maxLen = isDisplay ? 22 : 30;
+
+        // Pre-split text into balanced lines to accurately calculate multi-line height
+        if (c.text.length > maxLen && c.text.includes(' ')) {
+          n.lines = splitTextIntoBalancedLines(c.text, maxLen);
+        } else {
           n.lines = [c.text];
         }
-        const isDisplay = c.semanticRole === 'primary-hook' || c.role === 'HEADLINE';
+
         const readableFloor = isDisplay ? 0.045 : 0.020;
         const fromOwnBox = Math.max(readableFloor, Math.min(0.35, (n.height || readableFloor) * 0.8));
         n.fontScale = Math.max(
@@ -588,15 +594,17 @@ export function repairPlanMechanically(
           Math.min(0.35, Number.isFinite(n.fontScale) && n.fontScale > 0 ? n.fontScale : fromOwnBox),
         );
 
-        if (n.surface && n.surface !== 'none' && n.surface !== 'transparent') {
-          n.color = contrast('#ffffff', n.surface) >= 4.5 ? '#ffffff' : '#111111';
-        } else if (productCount === 0 && (!n.surface || n.surface === 'none')) {
-          n.color = '#ffffff';
-        } else {
-          const bg = n.surface === 'none' ? plan.background : n.surface;
-          if (hex(n.color) && hex(bg) && contrast(n.color, bg) < 4.2) {
-            n.color = contrast('#ffffff', bg) >= 4.5 ? '#ffffff' : '#111111';
-          }
+        // Dynamically adjust box height to fit all text lines without clipping or overlapping
+        const lineCount = Math.max(1, n.lines.length);
+        const lineSpacing = isDisplay ? 1.25 : 1.35;
+        const requiredHeight = lineCount * n.fontScale * lineSpacing + 0.015;
+        n.height = Math.max(n.height, Number(requiredHeight.toFixed(3)));
+
+        const bg = (!n.surface || n.surface === 'none' || n.surface === 'transparent') ? plan.background : n.surface;
+        if (hex(n.color) && hex(bg) && contrast(n.color, bg) < 4.2) {
+          n.color = contrast('#111111', bg) >= 4.2 ? '#111111' : '#ffffff';
+        } else if (!hex(n.color) || n.color === 'none') {
+          n.color = contrast('#111111', bg) >= 4.2 ? '#111111' : '#ffffff';
         }
       }
     }
@@ -608,11 +616,15 @@ export function repairPlanMechanically(
   for (let i = 0; i < copyNodes.length - 1; i++) {
     const current = copyNodes[i];
     const next = copyNodes[i + 1];
-    const hOverlap = current.x < next.x + next.width && current.x + current.width > next.x;
-    if (hOverlap && next.y < current.y + current.height + 0.015) {
-      const neededShift = (current.y + current.height + 0.015) - next.y;
-      if (next.y + next.height + neededShift <= 0.94) {
-        next.y += neededShift;
+    const currentLines = Array.isArray(current.lines) && current.lines.length > 0 ? current.lines.length : 1;
+    const currentActualHeight = Math.max(current.height, currentLines * (current.fontScale || 0.04) * 1.25 + 0.015);
+    const minGap = 0.025; // Safe vertical margin between text blocks
+
+    const hOverlap = Math.abs(current.x - next.x) < 0.65 || (current.x < next.x + next.width && current.x + current.width > next.x);
+    if (hOverlap && next.y < current.y + currentActualHeight + minGap) {
+      const neededShift = (current.y + currentActualHeight + minGap) - next.y;
+      if (next.y + next.height + neededShift <= 0.95) {
+        next.y += Number(neededShift.toFixed(3));
       }
     }
   }
@@ -651,9 +663,10 @@ export async function renderDesignerPlan(
       ? `<ellipse cx="${(n.x + n.width / 2) * w}" cy="${(n.y + n.height / 2) * h}" rx="${n.width * w / 2}" ry="${n.height * h / 2}" fill="${n.color}"${rot}/>`
       : `<rect x="${n.x * w}" y="${n.y * h}" width="${n.width * w}" height="${n.height * h}" fill="${n.color}"${rot}/>`;
   };
+  const effectiveTexture = (texture === 'none' && (!plan.background || plan.background === '#ffffff' || plan.background === '#f5f0e8' || plan.background === '#f9f6f0' || plan.background === '#fdfbf7' || plan.background === '#faf0e6')) ? 'paper-grain' : texture;
   const layers: OverlayOptions[] = [{
     input: Buffer.from(svg(plan.nodes.filter(n => n.kind === 'shape').map(shape).join('') +
-      (texture === 'none' ? '' : renderTexture(texture, w, h))))
+      (effectiveTexture === 'none' ? '' : renderTexture(effectiveTexture, w, h))))
   }];
 
   const semanticCopy = buildSemanticCopyList(copy);
@@ -748,20 +761,7 @@ export async function renderDesignerPlan(
     });
   }
 
-  if (visual && input.products.length === 0) {
-    const scrimSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-      <defs>
-        <linearGradient id="scrim-bottom" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#000000" stop-opacity="0.45"/>
-          <stop offset="25%" stop-color="#000000" stop-opacity="0.10"/>
-          <stop offset="55%" stop-color="#000000" stop-opacity="0.25"/>
-          <stop offset="100%" stop-color="#000000" stop-opacity="0.85"/>
-        </linearGradient>
-      </defs>
-      <rect width="${w}" height="${h}" fill="url(#scrim-bottom)"/>
-    </svg>`;
-    layers.push({ input: Buffer.from(scrimSvg) });
-  }
+
 
   const copySvg = plan.nodes.filter(n => n.kind === 'copy').map(n => {
     const isPill = n.id.includes('badge') || n.id.includes('offer') || n.id === 'secondary-hook' || n.id === 'cta';
@@ -926,8 +926,8 @@ HOW THE ELEMENTS BEHAVE (this is the design — follow it exactly):
 ${behaviourLines.length ? behaviourLines.join('\n') : '- The blueprint left behaviour undecided. Derive it from the visual idea above; do not reach for a familiar arrangement.'}
 
 ${decidedGrammar.length
-    ? `SPATIAL DECISIONS THE ART DIRECTOR ALREADY MADE (honour these exactly):\n${decidedGrammar.join('\n')}\nEverything not listed here is yours to compose from the idea.`
-    : 'The art director deliberately left placement open. Compose it from the idea — and specifically NOT from habit.'}
+      ? `SPATIAL DECISIONS THE ART DIRECTOR ALREADY MADE (honour these exactly):\n${decidedGrammar.join('\n')}\nEverything not listed here is yours to compose from the idea.`
+      : 'The art director deliberately left placement open. Compose it from the idea — and specifically NOT from habit.'}
 
 DESIGN & COMPOSITION PRINCIPLES:
 - Compose a stunning, cohesive marketing poster for modern social channels (Instagram, LinkedIn, X, etc.).
@@ -944,8 +944,8 @@ Type is high-impact editorial material. Position copy intentionally where contra
 
 IMAGERY:
 ${isPureTypographicPoster
-    ? 'This creative contains NO image. Do not create an image node and do not invent a visual to occupy space.'
-    : 'Honour the visual idea. When hero-visual is present, make it an expansive, richly-detailed visual (x: 0, y: 0, width: 1.0, height: 1.0) anchoring the entire composition.'}
+      ? 'This creative contains NO image. Do not create an image node and do not invent a visual to occupy space.'
+      : 'Honour the visual idea. When hero-visual is present, make it an expansive, richly-detailed visual (x: 0, y: 0, width: 1.0, height: 1.0) anchoring the entire composition.'}
 
 THE BRAND MARK:
 Place id "brand-mark" where the composition genuinely leaves room for it, with at least 0.015 clearance from every other element. ${concept.logoSanctuary ? `The art director's intent: ${concept.logoSanctuary}.` : 'The art director did not fix a position — find the real negative space your composition created.'} Never place a white or black box behind it. It is not a footer.
@@ -1028,11 +1028,12 @@ export function composeHighFidelityVisualPrompt(options: {
   ].filter((p): p is string => Boolean(p && p.trim().length > 0));
 
   const aestheticDirectives = [
-    'High-end commercial and editorial visual aesthetics with impeccable craft, cinematic scale, and rich detail.',
-    'Full-bleed immersive photography with rich tangible textures, natural lighting, soft directional shadows, and realistic depth of field.',
+    'High-end commercial and editorial visual aesthetics with impeccable craft, vibrant clarity, ultra-high-definition 8k resolution, and rich macro detail.',
+    'Full-bleed immersive photography with rich tangible textures (fresh leaves, sesame seeds, glistening glaze, natural wood grain), bright natural daylight or high-key studio lighting, clear visibility, clean well-lit backgrounds, and realistic depth of field.',
     'Depict concrete, vibrant, authentic real-world subjects and settings directly relevant to the brand, campaign subject, and environment.',
+    'FESTIVE & CATEGORY AUTHENTICITY: For cultural/festive campaigns (Ganesh Pooja, Diwali, Christmas, Eid, etc.), prominently depict authentic iconic festive symbols, traditional sweets, marigold garlands, Lord Ganesha idols, glowing diyas, or Christmas trees with genuine emotional warmth. For brand categories (Travel, Food, Apparel), clearly depict real category visual cues (airplanes, flight window vistas, boutique hotel suites, appetizing craft dishes, styled garments) so the business and product are instantly recognizable.',
     'STRICT PROHIBITION: Never generate a miniature picture frame hanging on an empty wall, a poster pinned to a concrete wall, a flyer on a table, or a blank room mockup. The visual MUST BE the direct, expansive, immersive subject or destination itself.',
-    'Avoid dark empty slates, sterile blank walls, artificial neon gradients, or generic AI voids.',
+    'STRICT LIGHTING RULE: Ensure bright, luminous, well-lit scenes with clean, light backgrounds (white, pastel, soft warm cream, airy daylight). AVOID dark gloomy voids, pitch-black backgrounds, murky underexposed shadows, heavy dark vignetting, or dim dark moody lighting unless explicitly requested.',
     'Leave clean, balanced composition areas and natural breathing room for graphic overlay.',
     'CRITICAL: Absolutely wordless and clean — NO text, NO lettering, NO numerals, NO typography, NO logos, NO watermark in the image.',
   ].join(' ');
@@ -1158,7 +1159,7 @@ export async function designCreative(input: DesignerInput) {
         const aspectRatio = ratios.sort((a, b) => Math.abs(a[1] - ratio) - Math.abs(b[1] - ratio))[0][0];
         input.onCall?.('image');
         [visual] = await imageProvider.generateImage({
-          prompt: `${visualPrompt}\nCampaign context: ${direction.subject}. ${direction.visualStory}. Follow the attached STYLE references for visual language only; never import their text, products or logos. No lettering, logos, numbers or placeholders. Do not default to photography if the selected style calls for another medium.`,
+          prompt: `${visualPrompt}\nCampaign context: ${direction.subject}. ${direction.visualStory}. Follow the attached STYLE references for visual language only; never import their text, products or logos. No lettering, logos, numbers or placeholders. Do not default to photography if the selected style calls for another medium. Ensure bright, radiant daylight or high-key studio lighting with clean, luminous, airy backgrounds. Avoid dark, pitch-black, or dim shadowy lighting.`,
           referenceImages: [...input.references, ...(input.priorVisual ? [input.priorVisual] : [])], aspectRatio,
         });
         if (visual && (await detectCheckerboard(Buffer.from(visual.data, 'base64'))).detected) {
