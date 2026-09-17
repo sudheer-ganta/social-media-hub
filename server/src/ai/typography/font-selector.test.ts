@@ -81,8 +81,8 @@ function recipe(overrides?: Partial<ReferenceDesignRecipe>): ReferenceDesignReci
 }
 
 describe('selectTypography', () => {
-  it('picks an elegant serif headline for a luxury fashion editorial brief', () => {
-    const result = selectTypography({
+  it('picks an elegant serif headline for a luxury fashion editorial brief', async () => {
+    const result = await selectTypography({
       direction: direction({
         concept: 'A quiet-luxury fashion campaign, sophisticated and fashion-forward',
         subject: 'a tailored coat on a model',
@@ -96,8 +96,8 @@ describe('selectTypography', () => {
     expect(result.bodyFont).not.toBe(result.headlineFont);
   });
 
-  it('picks a modern geometric-sans headline for a tech announcement in the same Editorial family', () => {
-    const result = selectTypography({
+  it('picks a modern geometric-sans headline for a tech announcement in the same Editorial family', async () => {
+    const result = await selectTypography({
       direction: direction({
         concept: 'A modern technology product announcement, clean and confident',
         subject: 'a software app interface',
@@ -111,8 +111,8 @@ describe('selectTypography', () => {
     expect(result.headlineFont).not.toBe('Playfair Display');
   });
 
-  it('honours an explicit brand body font while still allowing a specialised headline display face', () => {
-    const result = selectTypography({
+  it('honours an explicit brand body font while still allowing a specialised headline display face', async () => {
+    const result = await selectTypography({
       direction: direction({
         concept: 'A quiet-luxury fashion campaign',
         mood: 'elegant, premium',
@@ -124,8 +124,8 @@ describe('selectTypography', () => {
     expect(result.bodyFont).toBe('Inter');
   });
 
-  it('never selects a Latin-only display font for Devanagari copy', () => {
-    const result = selectTypography({
+  it('never selects a Latin-only display font for Devanagari copy', async () => {
+    const result = await selectTypography({
       direction: direction({
         headline: 'नमस्ते दुनिया',
         supportingLine: 'ताज़ा और स्वादिष्ट',
@@ -138,8 +138,8 @@ describe('selectTypography', () => {
     expect(result.bodyFont).toMatch(/Devanagari|Noto/);
   });
 
-  it('prefers heavy grotesk/condensed display type for Neo Brutalism-flavoured typography-led concepts', () => {
-    const result = selectTypography({
+  it('prefers heavy grotesk/condensed display type for Neo Brutalism-flavoured typography-led concepts', async () => {
+    const result = await selectTypography({
       direction: direction({
         concept: 'A loud, brutalist streetwear drop, high-impact and confident',
         mood: 'bold, loud, industrial',
@@ -151,8 +151,8 @@ describe('selectTypography', () => {
     expect(['Anton', 'Archivo Black', 'Bebas Neue', 'Oswald', 'Barlow Condensed']).toContain(result.headlineFont);
   });
 
-  it('offers a handwritten accent for Minimal Doodles-flavoured concepts', () => {
-    const result = selectTypography({
+  it('offers a handwritten accent for Minimal Doodles-flavoured concepts', async () => {
+    const result = await selectTypography({
       direction: direction({
         concept: 'A friendly, doodle-illustrated coffee shop promo',
         mood: 'friendly, restrained, quiet',
@@ -164,8 +164,8 @@ describe('selectTypography', () => {
     expect(result.accentFont).toBeTruthy();
   });
 
-  it('always returns real weights the catalog actually has files for', () => {
-    const result = selectTypography({
+  it('always returns real weights the catalog actually has files for', async () => {
+    const result = await selectTypography({
       direction: direction({ artDirectionFamily: 'TYPOGRAPHY_LED' }),
       creativeDna: dna(),
       recipe: recipe({ typographyFamily: 'condensed-display' }),
@@ -176,9 +176,9 @@ describe('selectTypography', () => {
 
   // ── Style DNA category is a hard constraint, not a scoring bonus (Phase 1) ──
 
-  it('Minimal Doodles never selects a serif body font, even though the headline font pairs with one', () => {
+  it('Minimal Doodles never selects a serif body font, even though the headline font pairs with one', async () => {
     const style = getStyleDNA('minimal-doodles')!;
-    const result = selectTypography({
+    const result = await selectTypography({
       direction: direction({ concept: 'A friendly local bakery promo', mood: 'warm, friendly' }),
       creativeDna: dna(),
       recipe: recipe({ typographyFamily: 'sans-modern' }),
@@ -191,13 +191,13 @@ describe('selectTypography', () => {
     expect(['sans-serif', 'handwritten']).toContain(getFontDefinition(result.bodyFont)?.category);
   });
 
-  it('two styles with incompatible typography categories resolve to different, style-conformant font categories for the identical brief', () => {
+  it('two styles with incompatible typography categories resolve to different, style-conformant font categories for the identical brief', async () => {
     const briefDirection = direction({ concept: 'A festival product launch', mood: 'expressive, bold' });
     const desiMaximalism = getStyleDNA('desi-maximalism')!; // typography categories: serif, display — no sans-serif
     const vibrantBlocking = getStyleDNA('vibrant-color-blocking')!; // typography categories: sans-serif only
 
-    const a = selectTypography({ direction: briefDirection, creativeDna: dna(), recipe: recipe(), styleDna: desiMaximalism });
-    const b = selectTypography({ direction: briefDirection, creativeDna: dna(), recipe: recipe(), styleDna: vibrantBlocking });
+    const a = await selectTypography({ direction: briefDirection, creativeDna: dna(), recipe: recipe(), styleDna: desiMaximalism });
+    const b = await selectTypography({ direction: briefDirection, creativeDna: dna(), recipe: recipe(), styleDna: vibrantBlocking });
 
     expect(getFontDefinition(a.headlineFont)?.category).not.toBe('sans-serif');
     expect(getFontDefinition(a.bodyFont)?.category).not.toBe('sans-serif');
@@ -205,9 +205,9 @@ describe('selectTypography', () => {
     expect(getFontDefinition(b.bodyFont)?.category).toBe('sans-serif');
   });
 
-  it('honours accentAllowed:false even for a style whose category constraints would otherwise permit a decorative accent font', () => {
+  it('honours accentAllowed:false even for a style whose category constraints would otherwise permit a decorative accent font', async () => {
     const neoBrutalism = getStyleDNA('neo-brutalism')!; // accentAllowed: false
-    const result = selectTypography({
+    const result = await selectTypography({
       direction: direction({ concept: 'A loud streetwear drop', mood: 'bold, loud, industrial' }),
       creativeDna: dna(),
       recipe: recipe({ typographyFamily: 'condensed-display' }),
@@ -216,11 +216,11 @@ describe('selectTypography', () => {
     expect(result.accentFont).toBeUndefined();
   });
 
-  it('falls back to the full catalog only when the style constraint leaves zero candidates for the required script', () => {
+  it('falls back to the full catalog only when the style constraint leaves zero candidates for the required script', async () => {
     // Desi Maximalism excludes sans-serif; the only Devanagari-capable family
     // in serif/display is Noto Serif Devanagari, so this must not go empty.
     const style = getStyleDNA('desi-maximalism')!;
-    const result = selectTypography({
+    const result = await selectTypography({
       direction: direction({ headline: 'नमस्ते दुनिया', supportingLine: 'ताज़ा और स्वादिष्ट' }),
       creativeDna: dna(),
       recipe: recipe(),

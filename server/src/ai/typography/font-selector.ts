@@ -16,6 +16,7 @@ import {
   type TypographyStyleProfile,
 } from './style-profiles';
 import { detectScriptsAcross } from './language';
+import { generateFontPairing, type FontPairingChoice } from './font-pairing.generator';
 import type { ArtDirectionFamily, CreativeDirection, CreativeResearch, ReferenceDesignRecipe, ResolvedCreativeDna } from '../types';
 import type { StyleDNA } from '../style-dna/style-dna';
 import type { AiTextProvider } from '../providers';
@@ -200,12 +201,19 @@ function scoreFont(font: FontDefinition, ctx: ScoreContext): number {
   if (ctx.industry && font.compatibleIndustries.includes(ctx.industry)) score += 4;
 
   // An accent exists to be a distinctive flourish (eyebrow/annotation), not a
-  // third helping of the same neutral sans as headline/body ΓÇö without this,
+  // third helping of the same neutral sans as headline/body — without this,
   // a well-matched geometric sans can out-score the handwritten/display faces
   // an accent role is actually for.
   if (ctx.role === 'accent' && (font.category === 'handwritten' || font.category === 'display')) score += 3;
 
   score -= Math.abs(font.formality - ctx.desiredFormality) * 1.5;
+
+  // Cormorant Garamond is an ultra-delicate haute-couture / wedding font. If the
+  // campaign is for food, fitness, tech, gaming, automotive, or general promos,
+  // penalize it heavily so punchy, appetizing, or modern fonts are chosen instead.
+  if (font.family === 'Cormorant Garamond' && (ctx.industry === 'food' || ctx.industry === 'fitness' || ctx.industry === 'tech' || ctx.industry === 'gaming' || ctx.industry === 'automotive' || ctx.industry === 'retail')) {
+    score -= 10;
+  }
 
   if (ctx.brandFamily && font.family === ctx.brandFamily) {
     score += ctx.role === 'body' ? 12 : 2;
@@ -215,13 +223,13 @@ function scoreFont(font: FontDefinition, ctx: ScoreContext): number {
 }
 
 /**
- * A style's `preferredCategories` is authoritative ΓÇö the member's selected
+ * A style's `preferredCategories` is authoritative — the member's selected
  * style (or, absent one, the concept's ArtDirectionFamily profile) must not
  * be silently reinterpreted by typography. This filters candidates BEFORE
  * scoring, so nothing downstream (pairing, brand-family boost, personality
  * match) can ever resurrect a category the style excludes. Previously this
  * was only a +2 scoring bonus, which a strong pairing/personality match
- * could outweigh ΓÇö e.g. a sans-only style still ending up with a serif body
+ * could outweigh — e.g. a sans-only style still ending up with a serif body
  * font because it was in the headline font's `pairsWith` list.
  */
 function categoryAllowed(font: FontDefinition, ctx: ScoreContext): boolean {
@@ -239,9 +247,53 @@ function rankCandidates(role: FontRole, ctx: ScoreContext): FontDefinition[] {
   const constrained = rank(FONT_CATALOG.filter((font) => categoryAllowed(font, ctx)));
   // Only widen back to the full catalog when the hard constraint leaves
   // nothing at all for this role (e.g. a required script has no family in
-  // the allowed categories) ΓÇö never to let a well-paired or well-scored font
+  // the allowed categories) — never to let a well-paired or well-scored font
   // from an excluded category win anyway.
   return constrained.length > 0 ? constrained : rank(FONT_CATALOG);
+}
+
+/**
+ * Balances candidate shortlists so top contenders across distinct categories
+ * (condensed display, modern geometric sans, warm culinary serif, editorial display, handwritten)
+ * are fairly presented to the AI typographer, preventing the same font from monopolizing candidate #0.
+ */
+function createDiverseShortlist(candidates: FontDefinition[], limit = 8): FontDefinition[] {
+  if (candidates.length <= limit) return candidates;
+  const byCategory = new Map<FontCategory, FontDefinition[]>();
+  for (const font of candidates) {
+    const list = byCategory.get(font.category) ?? [];
+    list.push(font);
+    byCategory.set(font.category, list);
+  }
+
+  const result: FontDefinition[] = [];
+  const added = new Set<string>();
+
+  // Interleave candidates across available categories so the LLM typographer has
+  // a genuinely varied palette (display condensed, modern sans, warm serif, handwritten)
+  let round = 0;
+  while (result.length < limit && round < 4) {
+    for (const [, fonts] of byCategory.entries()) {
+      if (result.length >= limit) break;
+      const f = fonts[round];
+      if (f && !added.has(f.family)) {
+        result.push(f);
+        added.add(f.family);
+      }
+    }
+    round++;
+  }
+
+  // Fill remaining slots in score order
+  for (const font of candidates) {
+    if (result.length >= limit) break;
+    if (!added.has(font.family)) {
+      result.push(font);
+      added.add(font.family);
+    }
+  }
+
+  return result;
 }
 
 // ΓöÇΓöÇΓöÇ Geometry helpers (feeds render/layout-plan.ts's existing char-count wrapper) ΓöÇΓöÇ
@@ -314,13 +366,20 @@ function roleTypography(font: FontDefinition, role: FontRole, profile: Typograph
 
 // ΓöÇΓöÇΓöÇ Main entry ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-export function selectTypography({ direction, creativeDna, recipe, styleDna }: FontSelectionInput): TypographySelection {
+export async function selectTypography({
+  direction,
+  creativeDna,
+  recipe,
+  styleDna,
+  research,
+  provider,
+}: FontSelectionInput): Promise<TypographySelection> {
   const familyProfile = STYLE_PROFILES[direction.artDirectionFamily] ?? DEFAULT_STYLE_PROFILE;
   const styleProfile: TypographyStyleProfile = styleDna ? {
     personality: [...new Set([...familyProfile.personality, ...styleDna.typography.displayPersonality])],
-    preferredCategories: (familyProfile.preferredCategories && familyProfile.preferredCategories.length > 0)
-      ? familyProfile.preferredCategories
-      : styleDna.typography.preferredCategories,
+    preferredCategories: (styleDna.typography.preferredCategories && styleDna.typography.preferredCategories.length > 0)
+      ? styleDna.typography.preferredCategories
+      : familyProfile.preferredCategories,
     accentFontAllowed: familyProfile.accentFontAllowed && styleDna.typography.accentAllowed,
     preferPairing: true,
     scaleHint: styleDna.typography.hierarchy === 'dramatic' ? 'oversized' : styleDna.typography.hierarchy === 'restrained' ? 'restrained' : 'normal',
@@ -373,7 +432,7 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
     role: 'headline',
     brandFamily: creativeDna.headlineFont || undefined,
   });
-  const headlineFont = headlineCandidates[0] ?? getFontDefinition('Inter')!;
+  let headlineFont = headlineCandidates[0] ?? getFontDefinition('Inter')!;
 
   // ΓöÇΓöÇ Body ΓÇö prefers the headline's own paired partners, brand body font still the strongest signal ΓöÇΓöÇ
   const bodyCandidates = rankCandidates('body', {
@@ -382,18 +441,70 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
     brandFamily: creativeDna.bodyFont || undefined,
   });
   const pairedBody = bodyCandidates.find((f) => headlineFont.pairsWith.includes(f.family));
-  const bodyFont = pairedBody ?? bodyCandidates.find((f) => f.family !== headlineFont.family) ?? bodyCandidates[0] ?? getFontDefinition('Inter')!;
+  let bodyFont = pairedBody ?? bodyCandidates.find((f) => f.family !== headlineFont.family) ?? bodyCandidates[0] ?? getFontDefinition('Inter')!;
 
   // ΓöÇΓöÇ Accent ΓÇö only when the style calls for one and the concept has a role for it (eyebrow/interactive annotation).
   // Ranked on its own terms (personality/category/bestFor/compatibleStyles), NOT by headline/body pairing ΓÇö
   // an accent is a decorative flourish (often handwritten), and pairsWith is curated for headline+body legibility,
   // so preferring pairsWith membership here previously picked a plain sans partner over a genuine accent face.
   let accentFont: FontDefinition | undefined;
-  if (styleProfile.accentFontAllowed) {
-    accentFont = rankCandidates('accent', { ...baseCtx, role: 'accent' }).find(
+  const accentCandidates = styleProfile.accentFontAllowed
+    ? rankCandidates('accent', { ...baseCtx, role: 'accent' }).filter(
       (f) => f.family !== headlineFont.family && f.family !== bodyFont.family,
-    );
+    )
+    : [];
+  accentFont = accentCandidates[0];
+
+  // ── The AI pass: a typographer choosing among fonts that all already qualify ──
+  //
+  // Scoring has done the part scoring is good at — ruling out wrong scripts,
+  // unreadable faces and categories the selected style excludes. What it cannot
+  // do is the last step, where several families sit within a point of each other
+  // and the right answer depends on what the campaign is saying. The model
+  // chooses from the shortlists ONLY, so none of the hard constraints above can
+  // be reopened, and a null answer leaves the deterministic pick in place.
+  let pairing: FontPairingChoice | null = null;
+  if (provider) {
+    pairing = await generateFontPairing({
+      provider,
+      candidates: {
+        headline: createDiverseShortlist(headlineCandidates, 8),
+        body: createDiverseShortlist(bodyCandidates, 8),
+        accent: accentCandidates.slice(0, 5),
+      },
+      context: {
+        concept: direction.concept,
+        mood: direction.mood,
+        visualStyle: creativeDna.visualStyle,
+        styleName: styleDna?.name,
+        industry,
+        copy: [direction.headline, direction.supportingLine, direction.cta, direction.marketingCreative?.offerText]
+          .filter((c): c is string => typeof c === 'string' && c.length > 0),
+        research,
+      },
+    });
   }
+
+  // From here the deterministic and AI paths run the same code — the AI only ever
+  // substitutes which FontDefinition the geometry is derived from, so every size,
+  // weight, script and file check below still governs the result.
+  if (pairing) {
+    headlineFont = headlineCandidates.find((f) => f.family === pairing?.headlineFamily) ?? headlineFont;
+    bodyFont = bodyCandidates.find((f) => f.family === pairing?.bodyFamily) ?? bodyFont;
+    if (pairing.accentFamily) {
+      accentFont = accentCandidates.find((f) => f.family === pairing?.accentFamily) ?? accentFont;
+    }
+  }
+
+  // The declared case/tracking intent, applied through the existing style profile
+  // so nothing downstream has to learn about the AI pass.
+  const effectiveProfile: TypographyStyleProfile = pairing
+    ? {
+      ...styleProfile,
+      caseHint: pairing.intents.headline.caseIntent,
+      trackingHint: pairing.intents.headline.trackingIntent,
+    }
+    : styleProfile;
 
   const preferredHeadlineWeight = styleDna?.typography.preferredWeights.at(-1) ?? ROLE_WEIGHT_TARGET.headline;
   const preferredBodyWeight = styleDna?.typography.preferredWeights[0] ?? ROLE_WEIGHT_TARGET.body;
@@ -408,7 +519,7 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
     return bodyFont;
   };
   const hierarchy = Object.fromEntries(
-    roles.map((role) => [role, roleTypography(roleFontFor(role), role, styleProfile)]),
+    roles.map((role) => [role, roleTypography(roleFontFor(role), role, effectiveProfile)]),
   ) as Record<FontRole, RoleTypography>;
 
   const baseFontStack: BaseFontStack = {
@@ -418,7 +529,7 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
     bodyWeight,
     headlineCharWidth: charWidthFor(headlineFont),
     lineHeightMult: lineHeightFor(headlineFont),
-    letterSpacing: letterSpacingFor(headlineFont, styleProfile.trackingHint),
+    letterSpacing: letterSpacingFor(headlineFont, effectiveProfile.trackingHint),
   };
 
   const facesUsed = new Map<string, { family: string; weight: number; style: 'normal' | 'italic' }>();
@@ -438,6 +549,7 @@ export function selectTypography({ direction, creativeDna, recipe, styleDna }: F
     `Body: ${bodyFont.family}, a neutral, readable partner${headlineFont.pairsWith.includes(bodyFont.family) ? ' from the headlineΓÇÖs own pairing list' : ''}`,
     accentFont ? `Accent: ${accentFont.family} for eyebrow/annotation flourishes the style calls for` : undefined,
     creativeDna.headlineFont || creativeDna.bodyFont ? 'brand typography honoured where the requested style allowed it' : undefined,
+    pairing?.reasoning ? `Chosen from the shortlist: ${pairing.reasoning}` : undefined,
   ].filter(Boolean);
 
   return {

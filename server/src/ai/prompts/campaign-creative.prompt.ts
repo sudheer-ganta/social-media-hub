@@ -66,6 +66,18 @@ export interface CampaignCopyLine {
  * With no plan, behaviour is unchanged: the copy stage keeps its own judgement
  * rather than inheriting a default that would be a template of its own.
  */
+const TECHNICAL_META_ARTIFACTS =
+  /(?:target depth setup|output string built|ready to deliver|setup finished|internal note|json output|system instruction|prompt artifact|here is the (?:headline|copy|text)|as requested by|the member requested|depth setup finished)/i;
+
+const LAYOUT_DIRECTION_LEAKS =
+  /\b(?:upper|lower|bottom|top|middle|left|right)\s+(?:third|half|corner|quadrant|column|edge|margin|zone)\b|\b(?:statement typography|high contrast against|typography with|set in (?:serif|sans|bold)|negative space|placed across|positioned in|placed in|sits in the|rendered as|overlay text)\b/i;
+
+function cleanCopyLine(text?: string): string {
+  const trimmed = (text ?? '').trim();
+  if (!trimmed || TECHNICAL_META_ARTIFACTS.test(trimmed) || LAYOUT_DIRECTION_LEAKS.test(trimmed)) return '';
+  return trimmed;
+}
+
 export function collectCampaignCopy(
   direction: CreativeDirection,
   omittedElements: string[] = [],
@@ -74,8 +86,8 @@ export function collectCampaignCopy(
 ): CampaignCopyLine[] {
   const lines: CampaignCopyLine[] = [];
   const push = (role: CampaignCopyLine['role'], text?: string) => {
-    const trimmed = (text ?? '').trim();
-    if (trimmed) lines.push({ role, text: trimmed });
+    const cleaned = cleanCopyLine(text);
+    if (cleaned) lines.push({ role, text: cleaned });
   };
 
   const isOmitted = (pattern: RegExp) => omittedElements.some((e) => pattern.test(e));

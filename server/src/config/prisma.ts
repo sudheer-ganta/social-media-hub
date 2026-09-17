@@ -19,10 +19,10 @@ if (!env.DATABASE_URL) {
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
   keepAlive: true,
-  keepAliveInitialDelayMillis: 5000,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 30000,
+  keepAliveInitialDelayMillis: 10000,
+  max: 20,
+  idleTimeoutMillis: 60000,
+  connectionTimeoutMillis: 60000,
 });
 
 pool.on('error', (err) => {

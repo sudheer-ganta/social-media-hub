@@ -451,10 +451,10 @@ describe('Architectural Composition Pipeline Verification', () => {
     ).rejects.toThrow('after two attempts');
 
     // Exactly 2 creative attempts were performed
-    // Attempt 1: plan + critic + new art director = 3 calls
+    // Attempt 1: font pairing + plan + critic + new art director = 4 calls
     // Attempt 2: plan + critic = 2 calls
-    // Total JSON calls = 5
-    expect(generateJson).toHaveBeenCalledTimes(5);
+    // Total JSON calls = 6
+    expect(generateJson).toHaveBeenCalledTimes(6);
   }, 25000);
 
   // Requirement 16: Stage timing instrumentation

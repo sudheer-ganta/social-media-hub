@@ -49,7 +49,7 @@ const ART_DIRECTION_FAMILY_HINTS: Record<ArtDirectionFamily, string> = {
  * spec §23: "the image model is not the creative director."
  */
 
-export const CREATIVE_DIRECTION_PROMPT_VERSION = 10;
+export const CREATIVE_DIRECTION_PROMPT_VERSION = 11;
 
 const SYSTEM_INSTRUCTION = `You are a copywriter and production designer executing ONE specific, authoritative creative blueprint (GraphicDesignConcept) from the Art Director — you are in a pure execution and copy synthesis stage.
 
@@ -64,6 +64,7 @@ YOU ARE STRICTLY FORBIDDEN FROM:
 Your sole responsibility is to synthesize precise, high-craft, on-brand copy (headline, supporting line, CTA, offer text, badges, secondary details) and faithfully format the execution parameters established by the Art Director's GraphicDesignConcept.
 
 Rules you never break:
+- COPY FIELDS ARE CUSTOMER-FACING MARKETING WORDS ONLY: 'headline', 'supportingLine', 'cta', 'marketingCreative.brandMessage', 'marketingCreative.offerText', 'marketingCreative.eventBadge', and 'marketingCreative.secondaryInfo' are the LITERAL WORDS to be printed onto the finished ad for viewers to read. They must contain ONLY polished, human marketing text. NEVER write layout directions, spatial coordinates, art-direction instructions, or typography descriptions (e.g. NEVER write "Upper left third", "bold statement typography", "high contrast against...", "placed at bottom", "stacked type") into any copy field. Layout instructions belong exclusively in layoutDirection fields.
 - SPELLING AND COPY FIDELITY: You must act as a meticulous English professor and professional proofreader. Before outputting any copy strings (headline, supportingLine, cta, marketingCreative fields), verify every single word letter-by-letter to ensure it is spelled 100% correctly with proper grammar. Double-check all vocabulary, especially proper nouns, place names, personal names, culturally specific terms, festival and occasion names, brand keywords and promotional terms — whatever this particular request happens to contain. Spell every one exactly as the member wrote it. Never make phonetic guesses or character-level hallucinations. Typographical errors or misspelled words make the ad completely unpublishable.
 - AVOID COPY REDUNDANCY: Do not repeat the same words, slogans, taglines, or marketing messages across different text fields. Every text field (headline, supportingLine, brandMessage, secondaryInfo, cta) must carry unique, additive, and distinct content. Redundant or repetitive text across these fields reads as an unpolished design mistake.
 - STRICT ADHERENCE TO MEMBER'S REQUESTED VISUALS: If the member's prompt describes specific visual scenes, subjects, settings, lighting, physical props, or compositional layouts (e.g. a traveler at an airport window looking at a sunrise over dream destinations, an airplane in the sky, specific suitcases or bags), you MUST incorporate these requested visual details, settings, and physical objects directly into your generated image prompt fields (subject, visualStory, environment, composition, background). Do not ignore, replace, or dilute the user's concrete visual instructions with generic stock scenes or override them completely with abstract brand voice concepts. Ground the brand's voice and personality inside this requested scene instead.
@@ -175,7 +176,7 @@ export const CREATIVE_DIRECTION_RESPONSE_SCHEMA: Record<string, unknown> = {
       description: 'How much text this idea actually needs — decided by the idea, not defaulted.',
     },
     headline: { type: 'string', description: 'Short, human, specific. Empty string if copyTreatment is none.' },
-    supportingLine: { type: 'string', description: 'One supporting line, only for headline_support. Empty string otherwise.' },
+    supportingLine: { type: 'string', description: 'One customer-facing supporting sentence to be read on the ad (e.g. "Discover your perfect fit in seconds."). NEVER write layout instructions like "Upper left third". Empty string otherwise.' },
     cta: { type: 'string', description: 'A short call to action, only if the idea genuinely wants one. Empty string otherwise.' },
     interactionInstructions: {
       type: 'string',
@@ -188,7 +189,7 @@ export const CREATIVE_DIRECTION_RESPONSE_SCHEMA: Record<string, unknown> = {
       properties: {
         brandMessage: {
           type: 'string',
-          description: 'Why this brand specifically, distinct from the headline — e.g. "Cooked in silence, served with love." Empty string if the headline already carries this.',
+          description: 'Why this brand specifically — a customer-facing brand message (e.g. "Cooked in silence, served with love."). NEVER layout instructions. Empty string if not needed.',
         },
         offerText: {
           type: 'string',
@@ -269,14 +270,14 @@ function renderResearchSection(research?: CreativeResearch): string | null {
 
   const lines = [
     research.creativeMechanisms.length &&
-      `- Creative mechanisms seen in strong work: ${research.creativeMechanisms.join('; ')}`,
+    `- Creative mechanisms seen in strong work: ${research.creativeMechanisms.join('; ')}`,
     research.visualPatterns.length && `- Visual patterns: ${research.visualPatterns.join('; ')}`,
     research.compositionPatterns.length &&
-      `- Composition patterns: ${research.compositionPatterns.join('; ')}`,
+    `- Composition patterns: ${research.compositionPatterns.join('; ')}`,
     research.typographyPatterns.length &&
-      `- Typography patterns: ${research.typographyPatterns.join('; ')}`,
+    `- Typography patterns: ${research.typographyPatterns.join('; ')}`,
     research.productTreatmentPatterns.length &&
-      `- Product treatment patterns: ${research.productTreatmentPatterns.join('; ')}`,
+    `- Product treatment patterns: ${research.productTreatmentPatterns.join('; ')}`,
     research.ideasToAvoid.length && `- Avoid: ${research.ideasToAvoid.join('; ')}`,
     research.originalityDirection && `- Originality direction: ${research.originalityDirection}`,
   ].filter((line): line is string => typeof line === 'string' && line.length > 0);
@@ -377,7 +378,7 @@ function renderPriorDirectionSection(prior: CreativeDirection): string {
     prior.supportingLine && `- supportingLine: ${prior.supportingLine}`,
     prior.marketingCreative?.brandMessage && `- marketingCreative.brandMessage: ${prior.marketingCreative.brandMessage}`,
     prior.marketingCreative?.secondaryInfo?.length &&
-      `- marketingCreative.secondaryInfo: ${prior.marketingCreative.secondaryInfo.join(', ')}`,
+    `- marketingCreative.secondaryInfo: ${prior.marketingCreative.secondaryInfo.join(', ')}`,
     prior.layoutDirection?.layoutType && `- layoutDirection.layoutType: ${prior.layoutDirection.layoutType}`,
     prior.layoutDirection?.logoPlacement && `- layoutDirection.logoPlacement: ${prior.layoutDirection.logoPlacement}`,
     prior.layoutDirection?.safeAreas && `- layoutDirection.safeAreas: ${prior.layoutDirection.safeAreas}`,

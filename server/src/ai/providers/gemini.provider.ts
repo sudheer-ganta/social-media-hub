@@ -25,8 +25,8 @@ import {
 const GEMINI_API_BASE =
   'https://generativelanguage.googleapis.com/v1beta/models';
 
-/** A slow model still beats a hung request holding an Express worker. */
-const REQUEST_TIMEOUT_MS = 90_000;
+/** A fast timeout prevents hung sockets from blocking generation threads. */
+const REQUEST_TIMEOUT_MS = 45_000;
 
 /**
  * Generous on purpose. Three captions, a hashtag list and a caption per
@@ -225,7 +225,7 @@ export class GeminiProvider implements AiTextProvider {
   constructor(
     private readonly apiKey: string = env.GEMINI_API_KEY,
     readonly model: string = env.GEMINI_MODEL,
-  ) {}
+  ) { }
 
   isConfigured(): boolean {
     return this.apiKey.length > 0;

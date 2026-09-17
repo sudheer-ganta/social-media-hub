@@ -40,6 +40,14 @@ const LIVE_PIPELINE = [
   'ai/brand/creative-brief.ts',
   'ai/render/designer-composition.ts',
   'ai/render/anti-template-validator.ts',
+  // The measured-placement stage. It decides where type goes, what colour it
+  // takes and how big it is, so it is squarely inside the rule: those decisions
+  // must come from the measured picture and the declared idea, never from what
+  // the creative happens to be about.
+  'ai/render/image-field.ts',
+  'ai/render/text-placement.ts',
+  'ai/typography/type-system.ts',
+  'ai/typography/font-pairing.generator.ts',
   'ai/strategy/concept-similarity.ts',
   'services/creative-generation.service.ts',
 ];

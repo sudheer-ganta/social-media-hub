@@ -1,7 +1,8 @@
+import sharp from 'sharp';
 import type { AiTextProvider } from '../providers';
 import type { InlineImagePart } from '../providers/provider.interface';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
-import { claimSatisfied } from '../intent/claim-match';
+import { claimSatisfied, claimTokens } from '../intent/claim-match';
 
 export interface DesignCriticEvaluation {
   passed: boolean;
@@ -30,6 +31,18 @@ export interface DesignCriticEvaluation {
   unnecessaryTextBlocks: boolean;
   /** Is the occasion/topic integrated into the idea, or applied as decoration on top of it? */
   contextIntegrated: boolean;
+  /**
+   * Does type sit on top of the thing the picture is of — a face, the product, the
+   * subject's focal mass — in a way that reads as an accident?
+   *
+   * The renderer measures this geometrically before compositing
+   * (render/image-field.ts, render/text-placement.ts), which is what actually
+   * prevents it. This is the visual confirmation of that measurement, and it
+   * catches the case arithmetic cannot: type clear of the subject's bounding box
+   * but still sitting on the one detail that mattered. Type crossing the image is
+   * NOT this defect — that is good design, and often the idea.
+   */
+  textOccludesSubject: boolean;
   /**
    * THE decisive question: would this creative still work, unchanged, if the
    * occasion were swapped for a different one? If yes, the design is generic —
@@ -78,6 +91,7 @@ Standards of evaluation:
    - Is it art-directed — scale contrast, deliberate line breaks, type used as visual material?
    - Or is it a block of words parked on the opposite side of the canvas from the image, in the space left over?
    - A piece made almost entirely of typography, with strong scale contrast and real negative space, is a legitimate and powerful design — do not mark it down for having no photograph.
+   - Does any type sit ON the thing the picture is OF — across a face, over the product, on the one detail that carried the meaning? Type crossing the image is good design and frequently the whole idea; type covering the subject is an accident. Judge which one you are looking at, and read the words: if you cannot read them comfortably at a glance, that is the answer.
 
 6. IS THERE COPY THAT DOES NOTHING?
    - Count the separate text blocks. Does every one of them earn its place?
@@ -140,6 +154,7 @@ Answer the visual evaluation questions truthfully based on the pixels. Do not be
       'typeParkedOppositeImage',
       'unnecessaryTextBlocks',
       'contextIntegrated',
+      'textOccludesSubject',
       'interchangeableWithAnotherEvent',
       'criticalFlaws',
       'problems',
@@ -165,6 +180,7 @@ Answer the visual evaluation questions truthfully based on the pixels. Do not be
       typeParkedOppositeImage: { type: 'boolean', description: 'True if the typography is simply sitting in the leftover space on the other side of the image.' },
       unnecessaryTextBlocks: { type: 'boolean', description: 'True if any text block adds nothing — filler supporting sentences, category labels, footer lines.' },
       contextIntegrated: { type: 'boolean', description: 'True if the occasion/culture/topic is part of the idea rather than applied as decoration. True when the campaign has no such context.' },
+      textOccludesSubject: { type: 'boolean', description: 'True if type sits on top of what the picture is OF — across a face, over the product, on the detail that carried the meaning — so it reads as an accident. Type merely crossing the image is NOT this: that is good design. False when there is no image.' },
       interchangeableWithAnotherEvent: { type: 'boolean', description: 'True if this creative would work unchanged with a completely different occasion and a swapped picture. True is a FAILURE.' },
       criticalFlaws: { type: 'array', items: { type: 'string' }, description: 'Fatal flaws: unreadable text, cut off logo, missing required subject/offer, template card look' },
       problems: { type: 'array', items: { type: 'string' }, description: 'All observed design critique points' },
@@ -205,6 +221,7 @@ Answer the visual evaluation questions truthfully based on the pixels. Do not be
   const imageFillsEmptyQuadrant = raw.imageFillsEmptyQuadrant === true;
   const typeParkedOppositeImage = raw.typeParkedOppositeImage === true;
   const unnecessaryTextBlocks = raw.unnecessaryTextBlocks === true;
+  const textOccludesSubject = raw.textOccludesSubject === true;
   const interchangeableWithAnotherEvent = raw.interchangeableWithAnotherEvent === true;
 
   // Compare observed answers with canonical CreativeBrief
@@ -214,17 +231,30 @@ Answer the visual evaluation questions truthfully based on the pixels. Do not be
   }
 
   // Check 1: Event / Subject preservation
-  if (brief.event && !claimSatisfied(brief.event, `${observedSubject} ${observedEvent || ''} ${firstRead}`)) {
-    reasonsToReject.push(
-      `Campaign event mismatch: The creative was supposed to promote "${brief.event}", but the visual reads as "${observedSubject || firstRead}".`,
-    );
+  if (brief.event) {
+    const textToCheck = `${observedSubject} ${observedEvent || ''} ${firstRead}`;
+    const directMatch = claimSatisfied(brief.event, textToCheck);
+    const eventTokens = claimTokens(brief.event).filter(t => !['happy', 'special', 'edition', 'celebration', 'greetings', 'promo'].includes(t));
+    const tokenMatch = eventTokens.length > 0 && eventTokens.some(t => claimTokens(textToCheck).includes(t));
+    const eventWordMatch = Boolean(observedEvent && claimTokens(brief.event).some(t => claimTokens(observedEvent).includes(t)));
+
+    if (!directMatch && !tokenMatch && !eventWordMatch) {
+      reasonsToReject.push(
+        `Campaign event mismatch: The creative was supposed to promote "${brief.event}", but the visual reads as "${observedSubject || firstRead}".`,
+      );
+    }
   }
 
   // Check 2: Offer preservation
-  if (brief.offer && !claimSatisfied(brief.offer, `${observedOffer || ''} ${observedSubject} ${firstRead}`)) {
-    reasonsToReject.push(
-      `Offer missing: The required offer "${brief.offer}" was not clearly communicated in the visible design.`,
-    );
+  if (brief.offer) {
+    const textToCheck = `${observedOffer || ''} ${observedSubject} ${firstRead}`;
+    const offerClean = brief.offer.trim().toLowerCase();
+    const isNoOffer = offerClean === 'none' || offerClean === 'n/a' || offerClean === '' || offerClean === 'null';
+    if (!isNoOffer && !claimSatisfied(brief.offer, textToCheck)) {
+      reasonsToReject.push(
+        `Offer missing: The required offer "${brief.offer}" was not clearly communicated in the visible design.`,
+      );
+    }
   }
 
   // Check 3: Template look rejection
@@ -272,6 +302,11 @@ Answer the visual evaluation questions truthfully based on the pixels. Do not be
   if (!contextIntegrated) {
     reasonsToReject.push(
       'The occasion is decorated onto the design rather than integrated into the idea. Motifs and colours applied on top of a generic layout are the signature of a template.',
+    );
+  }
+  if (textOccludesSubject) {
+    reasonsToReject.push(
+      'Type is sitting on the subject rather than on the picture. Move the copy into the space the image actually leaves, or give the crossing a reason and make the words legible through it.',
     );
   }
   // The decisive one — a creative that survives having its occasion swapped was
@@ -323,6 +358,7 @@ Answer the visual evaluation questions truthfully based on the pixels. Do not be
     typeParkedOppositeImage,
     unnecessaryTextBlocks,
     contextIntegrated,
+    textOccludesSubject,
     interchangeableWithAnotherEvent,
     problems: reasonsToReject,
     strengths,

@@ -197,15 +197,7 @@ export function gateByIntent(
     ...concept,
     intentFidelity: evaluateIntentFidelity(intent.requiredClaims, conceptText(concept)),
   }));
-  const complete = scored.filter((c) => c.intentFidelity.missingRequirements.length === 0);
-  if (complete.length > 0) return complete;
-
-  // Fallback: If no single concept carries 100% of claims verbatim, keep the best-covering concepts
-  return [...scored].sort((a, b) => {
-    const scoreDiff = (b.intentFidelity?.score ?? 0) - (a.intentFidelity?.score ?? 0);
-    if (scoreDiff !== 0) return scoreDiff;
-    return overallScore(b) - overallScore(a);
-  });
+  return scored.filter((c) => c.intentFidelity.missingRequirements.length === 0);
 }
 
 export interface GenerateCreativeConceptsOptions {
@@ -234,10 +226,7 @@ function normaliseConcepts(rawConcepts: unknown): ScoredCreativeConcept[] {
 }
 
 function gateConcepts(normalised: ScoredCreativeConcept[]): ScoredCreativeConcept[] {
-  const gated = normalised.filter(passesQualityGate);
-  if (gated.length > 0) return gated;
-  // If no concept strictly passed all numerical thresholds, keep top normalised concepts by overall score
-  return [...normalised].sort((a, b) => overallScore(b) - overallScore(a));
+  return normalised.filter(passesQualityGate);
 }
 
 /** True when 3+ concepts came back but every one picked the same art-direction family — the exact failure mode this feature exists to catch (a set of "different ideas" that would still render as one repeated visual template). */
@@ -412,15 +401,15 @@ export async function generateCreativeConcepts({
     const problems = [
       concepts.length === 0 && 'every proposal failed the quality gate; propose clear, relevant alternatives',
       isDegenerateFamilySpread(concepts) &&
-        `every concept picked the same art-direction family (${concepts[0].artDirectionFamily}) — that renders as one repeated visual template`,
+      `every concept picked the same art-direction family (${concepts[0].artDirectionFamily}) — that renders as one repeated visual template`,
       diversity.duplicatedFamilies.length > 0 &&
-        `more than one concept uses the ${diversity.duplicatedFamilies.join(' and ')} mechanism family`,
+      `more than one concept uses the ${diversity.duplicatedFamilies.join(' and ')} mechanism family`,
       diversity.similarPairs.length > 0 &&
-        `these concepts are one idea styled differently, not different ideas: ${diversity.similarPairs
-          .map((pair) => `"${pair.a}" and "${pair.b}"`)
-          .join('; ')}`,
+      `these concepts are one idea styled differently, not different ideas: ${diversity.similarPairs
+        .map((pair) => `"${pair.a}" and "${pair.b}"`)
+        .join('; ')}`,
       diversity.selfReportedDuplicates.length > 0 &&
-        `you scored ${diversity.selfReportedDuplicates.map((name) => `"${name}"`).join(', ')} as sitting too close to the other concepts`,
+      `you scored ${diversity.selfReportedDuplicates.map((name) => `"${name}"`).join(', ')} as sitting too close to the other concepts`,
     ].filter((problem): problem is string => typeof problem === 'string');
 
     attempts += 1;
@@ -457,8 +446,8 @@ export async function generateCreativeConcepts({
       prompt: `${built.prompt}\n\nYour previous attempt produced concepts that drop requirements the member explicitly stated: ${stillMissing
         .map((claim) => `"${claim}"`)
         .join(', ')}. Every concept must carry ALL of ${intent.requiredClaims
-        .map((claim) => `"${claim}"`)
-        .join(', ')} — through its bigIdea, message or productRole, in the member's own words. Be as creative as you like about HOW; you have no licence to drop, generalise or substitute any of them. Keep the concepts' mechanisms as different from each other as before.`,
+          .map((claim) => `"${claim}"`)
+          .join(', ')} — through its bigIdea, message or productRole, in the member's own words. Be as creative as you like about HOW; you have no licence to drop, generalise or substitute any of them. Keep the concepts' mechanisms as different from each other as before.`,
       responseSchema: built.responseSchema,
       temperature: built.temperature,
     })) as { concepts?: unknown };
@@ -477,9 +466,6 @@ export async function generateCreativeConcepts({
   // mechanism diversity): with more than three concepts standing, the weaker
   // of any mechanism duplicates is dropped rather than shown.
   concepts = trimDuplicateMechanisms(concepts);
-  if (!concepts.length && normalised.length > 0) {
-    concepts = normalised.slice(0, 3);
-  }
   if (!concepts.length) throw new Error('No concept met the campaign requirements. Please try again.');
   const finalDiversity = evaluateConceptDiversity(concepts);
 

@@ -144,18 +144,16 @@ export const env = {
   // fall back to it — each role below defaults to the model sized for that
   // job, and inheriting GEMINI_MODEL here would silently route caption
   // traffic to the expensive analysis model on any deployment that sets it.
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
 
   // ── Model per workload ─────────────────────────────────────────────────────
-  // Flash writes and looks, Pro Preview reasons, Flash-Lite does chores.
+  // Flash writes and looks, Flash-Lite does chores.
   // See `ai/providers/index.ts` for what routes where.
   //
-  // 3.6 rather than a 3.1 flash because there is no such model: ListModels for
-  // this API shows the 3.1 family ships pro-preview, flash-lite and image
-  // variants only. gemini-3.6-flash is the newest stable flash it offers.
+  // gemini-3.6-flash is the newest stable flash it offers.
   GEMINI_CAPTION_MODEL: process.env.GEMINI_CAPTION_MODEL || 'gemini-3.6-flash',
   GEMINI_VISION_MODEL: process.env.GEMINI_VISION_MODEL || 'gemini-3.6-flash',
-  GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || 'gemini-3.1-pro-preview',
+  GEMINI_MARKETING_MODEL: process.env.GEMINI_MARKETING_MODEL || 'gemini-3.6-flash',
   GEMINI_LIGHT_MODEL: process.env.GEMINI_LIGHT_MODEL || 'gemini-3.1-flash-lite',
   // Flash Image ("nano banana"), not Imagen: it's the only Gemini image model
   // that accepts reference images (a product photo, a logo) alongside the
@@ -163,14 +161,11 @@ export const env = {
   GEMINI_IMAGE_MODEL: process.env.IMAGE_MODEL || process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
 
   // ── Creative-pipeline model tiers ──────────────────────────────────────────
-  // The creative pipeline splits its text work by value: intent extraction,
-  // research synthesis, concept generation and QC run on the fast model; only
-  // the creative direction (the brief the image is generated from) earns the
-  // reasoning model. Both are env-overridable per deployment; IMAGE_MODEL
-  // above overrides GEMINI_IMAGE_MODEL the same way.
+  // The creative pipeline uses gemini-3.6-flash for fast, high-quality reasoning
+  // without 90s preview-model latency bottlenecks.
   FAST_TEXT_MODEL: process.env.FAST_TEXT_MODEL || 'gemini-3.6-flash',
   CREATIVE_TEXT_MODEL:
-    process.env.CREATIVE_TEXT_MODEL || process.env.GEMINI_MARKETING_MODEL || 'gemini-3.1-pro-preview',
+    process.env.CREATIVE_TEXT_MODEL || process.env.GEMINI_MARKETING_MODEL || 'gemini-3.6-flash',
 
   // ── Creative research (Gemini + Google Search grounding) ───────────────────
   //

@@ -8,6 +8,10 @@ import type { ResolvedStyleDNA } from '../style-dna/style-dna';
 import { renderStyleDnaInstructions } from '../style-dna/style-dna';
 import { resolveDesignRecipe } from './design-recipe';
 import { selectTypography, type TypographySelection } from '../typography/font-selector';
+import { buildTypeSystem, type TypeSystem } from '../typography/type-system';
+import type { CaseHint } from '../typography/style-profiles';
+import { analyzeImageField } from './image-field';
+import { fitCopyToField, type PlacementReport } from './text-placement';
 import { fontFilePath } from '../typography/font-catalog';
 import { collectCampaignCopy, type CampaignCopyLine } from '../prompts/campaign-creative.prompt';
 import { evaluateIntentFidelity } from '../intent/claim-match';
@@ -17,7 +21,6 @@ import { validateAntiTemplateQuality } from './anti-template-validator';
 import { evaluateRenderedDesign } from '../generators/design-critic.generator';
 import { generateGraphicDesignConcept } from '../generators/art-director.generator';
 import { compareGraphicConcepts, redesignDivergenceInstruction } from '../strategy/concept-similarity';
-import { generateVisionComposition, renderVisionCompositionInstructions } from '../generators/vision-composition.generator';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
 
 export interface SemanticCopyItem extends CampaignCopyLine {
@@ -39,6 +42,14 @@ export interface DesignNode extends DesignBox {
   rotation?: number;
   zIndex?: number;
   opacity?: number;
+  /**
+   * A legibility wash behind this copy only, computed by render/text-placement.ts
+   * from the measured backdrop. Deliberately NOT in DESIGNER_PLAN_SCHEMA: the
+   * planning model never authors one, because whether a wash is needed is a fact
+   * about the finished picture rather than a design decision. Optional, so plans
+   * persisted before this existed still parse.
+   */
+  scrim?: { direction: 'up' | 'down' | 'left' | 'right'; color: string; opacity: number };
 }
 export interface DesignerPlan {
   background: string;
@@ -62,6 +73,31 @@ export interface DesignerInput {
   onStageTiming?: (stage: string, durationMs: number) => void;
   /** Research from the brand+occasion+style grounded search — used for AI font selection and vision composition. */
   research?: CreativeResearch;
+}
+
+/**
+ * Kill switch for the measured-placement stage (image-field + text-placement +
+ * the type system's effect on placement). Off reverts the renderer to composing
+ * type exactly where the planning model put it, in the colour it chose — which is
+ * what every creative before this stage did — without a deploy.
+ *
+ * Read per call rather than captured at module load, so a single process can render
+ * the same brief both ways (see scripts/verify-text-placement.ts).
+ */
+export const textIntelligenceEnabled = (): boolean => process.env.FLOWPOST_TEXT_INTELLIGENCE !== 'off';
+
+/** QA trail for what the measurement changed and why — the counterpart to `structure`. */
+function logPlacementReport(report: PlacementReport, field: { subjectBox: { x: number; y: number; width: number; height: number } }): void {
+  const changes = report.moved.length + report.recoloured.length + report.scrimmed.length + report.resized.length;
+  if (!changes && !report.notes.length) return;
+  console.info('[creative] type fitted to the measured image', {
+    subjectBox: Object.fromEntries(Object.entries(field.subjectBox).map(([k, v]) => [k, Number(v.toFixed(2))])),
+    ...(report.moved.length && { moved: report.moved }),
+    ...(report.recoloured.length && { recoloured: report.recoloured }),
+    ...(report.scrimmed.length && { scrimmed: report.scrimmed }),
+    ...(report.resized.length && { resized: report.resized }),
+    ...(report.notes.length && { notes: report.notes }),
+  });
 }
 
 const str = { type: 'string' };
@@ -447,24 +483,55 @@ function splitTextIntoBalancedLines(text: string, maxLineLength = 26): string[] 
   return lines;
 }
 
-/** Real font outlines are measured before rasterization; no character-count clipping. */
-export function fittedCopySvg(n: DesignNode, copy: CampaignCopyLine, typography: TypographySelection, w: number, h: number): string {
+/** Applies the case the typographer chose. 'none' leaves the copy exactly as authored. */
+function applyCase(text: string, caseTransform: CaseHint): string {
+  if (caseTransform === 'upper') return text.toUpperCase();
+  if (caseTransform === 'title') return text.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  return text;
+}
+
+/**
+ * Real font outlines are measured before rasterization; no character-count clipping.
+ *
+ * The `typeSystem` argument is what turns a font choice into typography. Without
+ * it this rendered every creative at one of two hardcoded line heights, with zero
+ * letter-spacing at every size, in whatever case the copy happened to arrive in —
+ * so the per-role tracking, leading and case that the typography engine computes
+ * were calculated on every request and then discarded. It stays optional because a
+ * refinement can re-render a plan persisted before the type system existed.
+ */
+export function fittedCopySvg(
+  n: DesignNode,
+  copy: CampaignCopyLine,
+  typography: TypographySelection,
+  w: number,
+  h: number,
+  typeSystem?: TypeSystem,
+): string {
   const display = ['HEADLINE', 'OFFER'].includes(copy.role) || n.id === 'primary-hook' || n.id === 'secondary-hook';
+  const step = typeSystem
+    ? typeSystem.steps[n.id === 'primary-hook' ? 'primary-hook' : n.id === 'secondary-hook' ? 'secondary-hook' : 'supporting-note']
+    : undefined;
   const family = display ? typography.headlineFont : typography.bodyFont;
   const weight = display ? typography.headlineWeight : typography.bodyWeight;
   const fontFiles = typography.facesUsed.map(f => fontFilePath(f.family, f.weight, f.style));
   const minFloor = Math.max(12, Math.min(w, h) * 0.008);
   let size = Math.min(w, h) * n.fontScale;
-  let linesToRender = Array.isArray(n.lines) && n.lines.length > 1
+  const caseTransform: CaseHint = step?.caseTransform ?? 'none';
+  let linesToRender = (Array.isArray(n.lines) && n.lines.length > 1
     ? [...n.lines]
-    : (copy.text.length > 26 ? splitTextIntoBalancedLines(copy.text, display ? 24 : 32) : [copy.text]);
+    : (copy.text.length > 26 ? splitTextIntoBalancedLines(copy.text, display ? 24 : 32) : [copy.text])
+  ).map((line) => applyCase(line, caseTransform));
 
   let bestFitResult: string | null = null;
 
   for (let attempt = 0; attempt < 35 && size >= minFloor; attempt++, size *= 0.90) {
     const anchor = n.align === 'center' ? 'middle' : n.align === 'right' ? 'end' : 'start';
-    const lineSpacing = display ? 1.15 : 1.25;
-    const text = `<g font-family="${esc(family)}" font-weight="${weight}" font-size="${size}" fill="${n.color}" text-anchor="${anchor}">` +
+    const lineSpacing = step?.lineHeight ?? (display ? 1.15 : 1.25);
+    // Tracking is a fraction of the size, so it stays proportional through every
+    // shrink-to-fit iteration below.
+    const tracking = step ? ` letter-spacing="${(step.letterSpacing * size).toFixed(2)}"` : '';
+    const text = `<g font-family="${esc(family)}" font-weight="${weight}" font-size="${size}"${tracking} fill="${n.color}" text-anchor="${anchor}">` +
       linesToRender.map((l, i) => `<text x="0" y="${size + i * size * lineSpacing}">${esc(l)}</text>`).join('') + '</g>';
     const measure = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${text}</svg>`, { font: { fontFiles, loadSystemFonts: false } });
     const b = measure.getBBox();
@@ -484,18 +551,14 @@ export function fittedCopySvg(n: DesignNode, copy: CampaignCopyLine, typography:
     bestFitResult = `<g transform="translate(${x} ${y})${rot}">${text}</g>`;
 
     if (b.width + 2 * pad > n.width * w || b.height + 2 * pad > n.height * h) {
-      if (linesToRender.length === 1 && linesToRender[0].includes(' ') && attempt > 2) {
-        const words = linesToRender[0].split(' ');
-        const mid = Math.ceil(words.length / 2);
-        linesToRender = [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+      if (attempt > 2 && linesToRender.some(l => l.length > 18 && l.includes(' '))) {
+        const fullText = linesToRender.join(' ');
+        const targetLen = Math.max(16, Math.floor(fullText.length / (linesToRender.length + 1)));
+        linesToRender = splitTextIntoBalancedLines(fullText, targetLen).map((line) => applyCase(line, caseTransform));
       }
       continue;
     }
 
-    return bestFitResult;
-  }
-
-  if (bestFitResult) {
     return bestFitResult;
   }
 
@@ -552,7 +615,7 @@ export function repairPlanMechanically(
       n.height = Math.max(0.02, Math.min(1.08, Number.isFinite(n.height) ? n.height : 0.15));
     }
 
-    if (n.kind === 'visual' && productCount === 0) {
+    if (n.kind === 'visual' && productCount === 0 && n.width >= 0.85 && n.height >= 0.85 && n.x <= 0.05 && n.y <= 0.05) {
       n.x = 0;
       n.y = 0;
       n.width = 1.0;
@@ -613,19 +676,64 @@ export function repairPlanMechanically(
   // Prevent copy nodes from colliding or overlapping vertically
   const copyNodes = plan.nodes.filter(n => n?.kind === 'copy');
   copyNodes.sort((a, b) => a.y - b.y);
-  for (let i = 0; i < copyNodes.length - 1; i++) {
-    const current = copyNodes[i];
-    const next = copyNodes[i + 1];
-    const currentLines = Array.isArray(current.lines) && current.lines.length > 0 ? current.lines.length : 1;
-    const currentActualHeight = Math.max(current.height, currentLines * (current.fontScale || 0.04) * 1.25 + 0.015);
-    const minGap = 0.025; // Safe vertical margin between text blocks
 
-    const hOverlap = Math.abs(current.x - next.x) < 0.65 || (current.x < next.x + next.width && current.x + current.width > next.x);
-    if (hOverlap && next.y < current.y + currentActualHeight + minGap) {
-      const neededShift = (current.y + currentActualHeight + minGap) - next.y;
-      if (next.y + next.height + neededShift <= 0.95) {
-        next.y += Number(neededShift.toFixed(3));
+  // Group horizontally-overlapping copy nodes into vertical stacks/clusters
+  const clusters: DesignNode[][] = [];
+  for (const node of copyNodes) {
+    let placed = false;
+    for (const cluster of clusters) {
+      const overlapsWithCluster = cluster.some(other =>
+        Math.abs(node.x - other.x) < 0.55 || (node.x < other.x + other.width && node.x + node.width > other.x)
+      );
+      if (overlapsWithCluster) {
+        cluster.push(node);
+        placed = true;
+        break;
       }
+    }
+    if (!placed) clusters.push([node]);
+  }
+
+  for (const cluster of clusters) {
+    if (cluster.length <= 1) continue;
+    cluster.sort((a, b) => a.y - b.y);
+
+    const minGap = 0.020;
+    const calcNodeHeight = (n: DesignNode) => {
+      const lines = Array.isArray(n.lines) && n.lines.length > 0 ? n.lines.length : 1;
+      const isDisplay = n.id === 'primary-hook' || n.id === 'secondary-hook';
+      return Math.max(n.height, Number((lines * (n.fontScale || 0.035) * (isDisplay ? 1.25 : 1.35) + 0.012).toFixed(3)));
+    };
+
+    let totalNeeded = cluster.reduce((sum, n) => sum + calcNodeHeight(n), 0) + (cluster.length - 1) * minGap;
+    let startY = cluster[0].y;
+
+    // If cluster overflows bottom margin (0.95), try shifting top upward first
+    if (startY + totalNeeded > 0.95) {
+      const overflow = startY + totalNeeded - 0.95;
+      startY = Math.max(0.04, startY - overflow);
+    }
+
+    // If still overflowing after upward shift, proportionally scale down supporting copy
+    if (startY + totalNeeded > 0.95) {
+      const available = 0.95 - startY;
+      const scaleDown = Math.max(0.70, available / totalNeeded);
+      for (const n of cluster) {
+        const isDisplay = n.id === 'primary-hook';
+        const floor = isDisplay ? 0.038 : 0.016;
+        n.fontScale = Math.max(floor, Number((n.fontScale * (isDisplay ? Math.max(0.85, scaleDown) : scaleDown)).toFixed(4)));
+        n.height = calcNodeHeight(n);
+      }
+      totalNeeded = cluster.reduce((sum, n) => sum + calcNodeHeight(n), 0) + (cluster.length - 1) * minGap;
+    }
+
+    // Position all nodes in cluster sequentially without overlaps
+    let curY = startY;
+    for (let i = 0; i < cluster.length; i++) {
+      const n = cluster[i];
+      n.y = Number(curY.toFixed(3));
+      n.height = calcNodeHeight(n);
+      curY += n.height + minGap;
     }
   }
 
@@ -651,6 +759,7 @@ export async function renderDesignerPlan(
   visual?: InlineImagePart,
   texture: 'none' | 'paper-grain' | 'film-grain' | 'halftone' | 'noise' = 'none',
   concept?: GraphicDesignConcept,
+  typeSystem?: TypeSystem,
 ): Promise<Buffer> {
   const issues = validateDesignerPlan(plan, copy, input.products.length, concept);
   const fatalIssues = issues.filter(i => i.includes('Missing required copy') || i.includes('cannot fit') || i.includes('too small'));
@@ -691,6 +800,41 @@ export async function renderDesignerPlan(
 
     const slotW = Math.max(1, Math.round(n.width * w)), slotH = Math.max(1, Math.round(n.height * h));
     let sharpInstance = sharp(Buffer.from(asset.data, 'base64')).rotate();
+
+    if (n.kind === 'logo') {
+      try {
+        const rawBuf = Buffer.from(asset.data, 'base64');
+        const { data: rawPixels, info } = await sharp(rawBuf)
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+
+        if (info.channels === 4 && rawPixels.length >= 4) {
+          const r0 = rawPixels[0], g0 = rawPixels[1], b0 = rawPixels[2];
+          const isWhiteCorner = (r0 > 225 && g0 > 225 && b0 > 225);
+          const isDarkBg = contrast('#ffffff', plan.background) >= 3.0; // backdrop is dark
+
+          if (isWhiteCorner) {
+            for (let i = 0; i < rawPixels.length; i += 4) {
+              const r = rawPixels[i], g = rawPixels[i + 1], b = rawPixels[i + 2];
+              if (r > 240 && g > 240 && b > 240) {
+                rawPixels[i + 3] = 0; // Transparent background only
+              } else if (r > 215 && g > 215 && b > 215) {
+                // Smooth anti-aliased edge
+                rawPixels[i + 3] = Math.round(rawPixels[i + 3] * Math.max(0, (240 - Math.max(r, g, b)) / 25));
+              }
+              // Exact user logo colors (r, g, b) are preserved 100% untouched
+            }
+            sharpInstance = sharp(rawPixels, {
+              raw: { width: info.width, height: info.height, channels: 4 },
+            }).rotate();
+          }
+        }
+      } catch {
+        // Fall back to original sharpInstance
+      }
+    }
+
     if (n.rotation && Math.abs(n.rotation) > 0.1) {
       sharpInstance = sharpInstance.rotate(n.rotation, { background: '#00000000' });
     }
@@ -763,17 +907,42 @@ export async function renderDesignerPlan(
 
 
 
-  const copySvg = plan.nodes.filter(n => n.kind === 'copy').map(n => {
+  // Scrims live in the copy layer, not among the shapes: the shape layer is
+  // composited UNDERNEATH the imagery, so a wash placed there would be hidden by
+  // the very picture it exists to darken.
+  const scrimDefs: string[] = [];
+  const copySvg = plan.nodes.filter(n => n.kind === 'copy').map((n, index) => {
     const isPill = n.id.includes('badge') || n.id.includes('offer') || n.id === 'secondary-hook' || n.id === 'cta';
     const radius = isPill ? Math.min(28, Math.max(6, Math.round(n.height * h * 0.42))) : 6;
     const surface = (n.surface && n.surface !== 'none' && n.surface !== 'transparent')
       ? `<rect x="${n.x * w}" y="${n.y * h}" width="${n.width * w}" height="${n.height * h}" rx="${radius}" ry="${radius}" fill="${n.surface}"/>`
       : '';
+    let scrim = '';
+    if (n.scrim) {
+      // A photographic scrim must span seamlessly across the canvas rather than
+      // drawing a sharp floating rectangular box with visible left/right borders.
+      const isVertical = n.scrim.direction === 'down' || n.scrim.direction === 'up';
+      const bleed = 0.12;
+      const x = isVertical ? 0 : Math.max(0, n.x - bleed);
+      const right = isVertical ? 1.0 : Math.min(1.0, n.x + n.width + bleed);
+      const y = isVertical ? (n.scrim.direction === 'down' ? 0 : Math.max(0, n.y - bleed)) : 0;
+      const bottom = isVertical ? (n.scrim.direction === 'down' ? Math.min(1.0, n.y + n.height + bleed) : 1.0) : 1.0;
+      const id = `fp-scrim-${index}`;
+      const [x1, y1, x2, y2] = n.scrim.direction === 'down' ? [0, 0, 0, 1]
+        : n.scrim.direction === 'up' ? [0, 1, 0, 0]
+          : n.scrim.direction === 'right' ? [0, 0, 1, 0] : [1, 0, 0, 0];
+      scrimDefs.push(
+        `<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">` +
+        `<stop offset="0" stop-color="${n.scrim.color}" stop-opacity="${n.scrim.opacity}"/>` +
+        `<stop offset="1" stop-color="${n.scrim.color}" stop-opacity="0"/></linearGradient>`,
+      );
+      scrim = `<rect x="${x * w}" y="${y * h}" width="${(right - x) * w}" height="${(bottom - y) * h}" fill="url(#${id})"/>`;
+    }
     const resolvedCopy = resolveCopyLine(n.id, semanticCopy, copy) || semanticCopy[0];
-    return surface + fittedCopySvg(n, resolvedCopy, typography, w, h);
+    return scrim + surface + fittedCopySvg(n, resolvedCopy, typography, w, h, typeSystem);
   }).join('');
 
-  const overlay = new Resvg(svg(copySvg), {
+  const overlay = new Resvg(svg((scrimDefs.length ? `<defs>${scrimDefs.join('')}</defs>` : '') + copySvg), {
     font: {
       loadSystemFonts: false,
       fontFiles: typography.facesUsed.map(f => fontFilePath(f.family, f.weight, f.style))
@@ -865,8 +1034,26 @@ export function buildCompositionInstructions(options: {
   concept: GraphicDesignConcept;
   requiredNodeList: string;
   isPureTypographicPoster: boolean;
+  /**
+   * The modular scale derived from what this blueprint declared about contrast.
+   * Stated as a ratio and a starting point rather than as bands per role, because
+   * bands per role ARE the template: "primary 0.055–0.09, secondary 0.022–0.040"
+   * is a picture of big-headline-small-print handed to every creative equally,
+   * which is what this function's history above describes going wrong. Absent for
+   * a caller that has no type system (a refinement of an older plan), in which
+   * case the model is asked for the relationship without a suggested ratio.
+   */
+  typeSystem?: TypeSystem;
 }): string {
-  const { concept, requiredNodeList, isPureTypographicPoster } = options;
+  const { concept, requiredNodeList, isPureTypographicPoster, typeSystem } = options;
+
+  const typeScale = typeSystem
+    ? [
+      `- The scale is a modular one: every size is the one below it multiplied by ${typeSystem.ratio}.`,
+      `- Read off that scale, the first read lands near fontScale ${typeSystem.steps['primary-hook'].fontScale}, a second read near ${typeSystem.steps['secondary-hook'].fontScale}, supporting copy near ${typeSystem.steps['supporting-note'].fontScale}.`,
+      '- Those are the scale, not a target. Depart from them where the idea demands it, keep the ratio between the reads, and say so in the rationale.',
+    ].join('\n')
+    : '- Derive the scale from the hierarchy in the idea: pick what leads, then set every other size as a consistent multiple of the smallest.';
 
   const ideaLines = [
     `- The visual idea: "${concept.visualIdea}"`,
@@ -930,17 +1117,25 @@ ${decidedGrammar.length
       : 'The art director deliberately left placement open. Compose it from the idea — and specifically NOT from habit.'}
 
 DESIGN & COMPOSITION PRINCIPLES:
-- Compose a stunning, cohesive marketing poster for modern social channels (Instagram, LinkedIn, X, etc.).
+- Compose a stunning, cohesive marketing creative for modern social channels (Instagram, LinkedIn, X, etc.).
 - When imagery (hero-visual) is present, treat it as the rich, immersive visual scene filling the canvas (x: 0, y: 0, width: 1.0, height: 1.0) or as a structured, intentional hero frame.
-- Typography hierarchy & legibility:
-  * Primary hook / Headline: Bold, prominent display scale (fontScale: 0.055 - 0.09) with high contrast.
-  * Secondary hook / Support: Clean, readable body scale (fontScale: 0.022 - 0.040).
-  * Brand mark / Logo: Placed with clear breathing room in a natural anchor zone (e.g. top-left x: 0.08, y: 0.08, top-center, or footer).
 - Never place unreadable text over busy visual areas without contrast. Ensure crisp, high-impact readability.
 ${concept.elementsToOmit?.length ? concept.elementsToOmit.map((e) => `- Avoid: ${e}`).join('\n') : ''}
 
+ARRANGEMENTS THAT ARE FORBIDDEN BECAUSE THEY ARE REFLEXES, NOT DECISIONS:
+- typography on one side of the canvas with imagery on the other
+- a large headline above or beside a photograph, with small copy underneath
+- the brand mark parked in a corner or along the bottom edge as a footer
+- a row of small labels beneath the main content
+- a centred stack of headline, subhead and button
+Any of these may only appear if the idea above specifically calls for it, and your rationale has to say which line of the idea did.
+
 TYPOGRAPHY:
-Type is high-impact editorial material. Position copy intentionally where contrast is highest. Ensure strong headline dominance and crystal-clear readability.
+Type is high-impact editorial material. Position copy where contrast is genuinely highest, not where copy usually goes.
+
+SCALE — a relationship, not a set of sizes:
+${typeScale}
+Choose every scale from the hierarchy described above. Sizes come from the relationship between the reads, so decide what leads and by how much, then set the numbers to match. Two elements at almost the same size are a decision you must be able to defend, and so is a fifteenfold difference. Do not reach for a familiar headline size.
 
 IMAGERY:
 ${isPureTypographicPoster
@@ -1003,14 +1198,59 @@ async function redesignBlueprint(options: {
   return request(similarity.reason);
 }
 
+/**
+ * Describes where the composed copy is going to sit, in the language a brief to a
+ * photographer would use, so the image comes back with room for it.
+ *
+ * This is the cheapest of the four ways to stop type landing on a subject's face,
+ * because it prevents the collision instead of repairing it. The copy boxes are
+ * already known at this point — the plan that carries the visualPrompt carries
+ * them — and asking for calm, low-detail ground in that band costs nothing and
+ * loses nothing from the picture.
+ *
+ * Stated as measured geometry read off the plan, never as a named layout: it
+ * reports which thirds the copy actually occupies, and does not know or care what
+ * the creative is about.
+ */
+function describeReservedZone(nodes: DesignNode[]): string | null {
+  const copyBoxes = nodes.filter((n) => n?.kind === 'copy' && Number.isFinite(n.y) && Number.isFinite(n.height));
+  if (!copyBoxes.length) return null;
+
+  const top = Math.min(...copyBoxes.map((n) => n.y));
+  const bottom = Math.max(...copyBoxes.map((n) => n.y + n.height));
+  const left = Math.min(...copyBoxes.map((n) => n.x));
+  const right = Math.max(...copyBoxes.map((n) => n.x + n.width));
+  // Only worth asking for when the copy is actually concentrated somewhere. Copy
+  // spread across the whole frame has no zone to reserve, and demanding a calm
+  // everything would flatten the picture.
+  if (bottom - top > 0.62) return null;
+
+  const band = (lo: number, hi: number, axis: 'vertical' | 'horizontal'): string => {
+    const mid = (lo + hi) / 2;
+    if (axis === 'vertical') return mid < 0.34 ? 'upper' : mid > 0.66 ? 'lower' : 'middle';
+    return mid < 0.34 ? 'left' : mid > 0.66 ? 'right' : 'central';
+  };
+
+  const vertical = band(top, bottom, 'vertical');
+  const horizontal = right - left > 0.75 ? '' : ` ${band(left, right, 'horizontal')}`;
+  return (
+    `COMPOSITIONAL RESERVE: keep the ${vertical}${horizontal} area of the frame calm and low in detail — even tone, ` +
+    'no faces, no small high-contrast detail and no focal element there. Put the subject and the interesting ' +
+    'texture elsewhere in the frame. This is a compositional request about where the detail sits, not a request ' +
+    'for empty space or a blank panel: the area should still be part of the scene.'
+  );
+}
+
 export function composeHighFidelityVisualPrompt(options: {
   candidatePrompt?: string;
   direction: CreativeDirection;
   concept?: GraphicDesignConcept;
   context: CreativeRenderContext;
   styleDna?: ResolvedStyleDNA;
+  /** The composed plan's nodes, so the image can be briefed to leave room for the copy. */
+  nodes?: DesignNode[];
 }): string {
-  const { candidatePrompt, direction, concept, context, styleDna } = options;
+  const { candidatePrompt, direction, concept, context, styleDna, nodes } = options;
 
   const subject = direction.subject || context.canonicalBrief?.subject || '';
   const visualStory = direction.visualStory || '';
@@ -1039,8 +1279,11 @@ export function composeHighFidelityVisualPrompt(options: {
   ].join(' ');
 
   const styleInstructions = styleDna ? renderStyleDnaInstructions(styleDna) : '';
+  const reserve = nodes ? describeReservedZone(nodes) : null;
 
-  return `${coreParts.join('. ')}\n\n${aestheticDirectives}\n${styleInstructions}`;
+  return [`${coreParts.join('. ')}`, aestheticDirectives, reserve, styleInstructions]
+    .filter((part): part is string => Boolean(part && part.trim().length > 0))
+    .join('\n\n');
 }
 
 export async function designCreative(input: DesignerInput) {
@@ -1062,16 +1305,24 @@ export async function designCreative(input: DesignerInput) {
   const { recipe, source } = resolveDesignRecipe(direction, context.creativeDna, {
     styleDna: styleDna?.style, styleDnaVariant: styleDna?.variant, referenceStyle: context.referenceStyle,
   });
-  const typography = selectTypography({
+  const typography = await selectTypography({
     direction,
     creativeDna: context.creativeDna,
     recipe,
     styleDna: styleDna?.style,
     research: input.research,
+    // Enables the AI pairing pass; without it the deterministic scoring decides
+    // alone, which is exactly what happened for every creative before now.
+    provider: textProvider,
   });
   for (const face of typography.facesUsed) {
     if (!existsSync(fontFilePath(face.family, face.weight, face.style))) throw new Error(`The selected font ${face.family} is unavailable on the renderer.`);
   }
+  // One base size and one ratio for the whole creative, so the hierarchy is a
+  // relationship rather than a set of independently chosen numbers. Rebuilt per
+  // blueprint below, because a redesign changes both the copy and the declared
+  // scale contrast it is derived from.
+  let typeSystem = buildTypeSystem({ typography, concept: currentGraphicConcept, copy });
   const attachments = [...input.products, ...input.references, input.logo];
   const sizes = await Promise.all(input.products.map(async (p, i) => {
     const m = await sharp(Buffer.from(p.data, 'base64')).metadata();
@@ -1087,6 +1338,7 @@ export async function designCreative(input: DesignerInput) {
     concept: currentGraphicConcept,
     requiredNodeList,
     isPureTypographicPoster,
+    typeSystem,
   });
 
   let feedback = '';
@@ -1151,6 +1403,7 @@ export async function designCreative(input: DesignerInput) {
           concept: currentGraphicConcept,
           context,
           styleDna,
+          nodes: candidatePlan.nodes,
         });
         const node = candidatePlan.nodes.find(n => n.kind === 'visual') || { width: 0.8, height: 0.8 };
         const canvas = dimensions(direction.aspectRatio);
@@ -1166,41 +1419,54 @@ export async function designCreative(input: DesignerInput) {
           visual = undefined; feedback = 'The generated visual contained invalid pixels. Plan a clear, fully opaque visual.'; continue;
         }
 
-        // ── Vision composition analysis: AI looks at the actual image ──────
-        // Run after image generation so the designer knows the real image
-        // topology — where safe zones are, where the focal point is, how
-        // much text the image can carry — before compositing begins.
-        if (visual && input.research && textProvider.supportsVision) {
-          const visionStart = Date.now();
-          const visionAnalysis = await generateVisionComposition({
-            provider: textProvider,
-            imageBase64: visual.data,
-            context: {
-              concept: direction.concept,
-              headline: direction.headline,
-              supportingLine: direction.supportingLine,
-              cta: direction.cta,
-              brandName: context.brand?.name,
-              goal: context.goal,
-              occasion: direction.marketingCreative?.eventBadge,
-              styleName: styleDna?.style.name,
-            },
-            research: input.research,
-          });
-          onStageTiming?.('visionComposition', Date.now() - visionStart);
+      }
 
-          const visionInstructions = renderVisionCompositionInstructions(visionAnalysis);
-          if (visionInstructions) {
-            instructions = `${instructions}\n\n${visionInstructions}`;
-          }
+      // ── Fit the composed type to the picture that actually came back ──────
+      //
+      // The plan was authored before this image existed — the visualPrompt that
+      // produced it is part of the same plan — so this is the first moment
+      // anything can know where the subject ended up. The measurement is
+      // deterministic (no model call), and the fitting pass only repairs:
+      // occlusion of the subject, colour against the real backdrop, a wash where
+      // no colour can work, and an inverted hierarchy.
+      //
+      // Wrapped so that any failure leaves the plan exactly as composed. A
+      // creative that would have rendered before this stage existed still
+      // renders, byte for byte.
+      let planForRender = candidatePlan;
+      if (textIntelligenceEnabled() && visual) {
+        const fitStart = Date.now();
+        try {
+          const field = await analyzeImageField(Buffer.from(visual.data, 'base64'));
+          const heroNode = candidatePlan.nodes.find((n) => n?.kind === 'visual');
+          const { plan: fittedPlan, report } = fitCopyToField({
+            plan: candidatePlan,
+            field,
+            typeSystem,
+            concept: currentGraphicConcept,
+            palette: context.creativeDna.brandColors ?? [],
+            // Only when the visual genuinely covers the canvas is the measured
+            // field what sits behind the type.
+            imageIsBackdrop: Boolean(heroNode && heroNode.width >= 0.9 && heroNode.height >= 0.9),
+          });
+          planForRender = fittedPlan;
+          logPlacementReport(report, field);
+        } catch (error) {
+          console.warn('[creative] text placement measurement unavailable; composing as planned', {
+            detail: error instanceof Error ? error.message : String(error),
+          });
         }
+        onStageTiming?.('textPlacement', Date.now() - fitStart);
       }
 
       try {
         const renderStart = Date.now();
-        rendered = await renderDesignerPlan(candidatePlan, input, copy, typography, visual, recipe.texture, currentGraphicConcept);
+        rendered = await renderDesignerPlan(planForRender, input, copy, typography, visual, recipe.texture, currentGraphicConcept, typeSystem);
         onStageTiming?.('render', Date.now() - renderStart);
-        plan = candidatePlan;
+        // The fitted plan, not the composed one — what is persisted has to be what
+        // was rendered, or a refinement re-renders from coordinates that were
+        // already corrected once.
+        plan = planForRender;
         break;
       } catch (error) {
         feedback = `Repair layout: ${error instanceof Error ? error.message : String(error)}\nPrevious plan: ${JSON.stringify(candidatePlan)}`;
@@ -1210,6 +1476,7 @@ export async function designCreative(input: DesignerInput) {
 
     if (!plan || !rendered) continue;
 
+    const criticStart = Date.now();
     const critic = await evaluateRenderedDesign({
       provider: textProvider,
       renderedPng: rendered,
@@ -1246,6 +1513,7 @@ export async function designCreative(input: DesignerInput) {
       referenceImages: input.references,
       logoImage: input.logo,
     });
+    onStageTiming?.('critic', Date.now() - criticStart);
 
     const currentResult = {
       data: rendered,
@@ -1315,6 +1583,9 @@ export async function designCreative(input: DesignerInput) {
           copy.splice(0, copy.length, ...redesignedCopy);
           semanticCopy.splice(0, semanticCopy.length, ...buildSemanticCopyList(copy));
         }
+        // A redesign changes both how much copy there is and what the blueprint
+        // declared about scale contrast, and the scale is derived from both.
+        typeSystem = buildTypeSystem({ typography, concept: newBlueprint, copy });
         requiredNodeList = buildRequiredNodeList({
           semanticCopy,
           sizes,
@@ -1324,6 +1595,7 @@ export async function designCreative(input: DesignerInput) {
           concept: newBlueprint,
           requiredNodeList,
           isPureTypographicPoster: imageIsAbsent(newBlueprint) && sizes.length === 0,
+          typeSystem,
         });
         feedback = [
           `The previous creative was rejected: ${rejectionReason}`,
@@ -1340,9 +1612,6 @@ export async function designCreative(input: DesignerInput) {
     } else if (attempt === 1) {
       if (critic.passed) {
         return currentResult;
-      }
-      if (currentResult || firstAttemptResult) {
-        return currentResult || firstAttemptResult;
       }
       const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
       throw new Error(`FlowPost could not verify this design after two attempts with the critic. ${rejectionReason}`);

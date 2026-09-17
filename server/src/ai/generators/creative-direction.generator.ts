@@ -36,6 +36,34 @@ function asString(value: unknown, max = 400): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+const TECHNICAL_META_ARTIFACTS =
+  /(?:target depth setup|output string built|ready to deliver|setup finished|internal note|json output|system instruction|prompt artifact|here is the (?:headline|copy|text)|as requested by|the member requested|depth setup finished)/i;
+
+const LAYOUT_DIRECTION_LEAKS =
+  /\b(?:upper|lower|bottom|top|middle|left|right)\s+(?:third|half|corner|quadrant|column|edge|margin|zone)\b|\b(?:statement typography|high contrast against|typography with|set in (?:serif|sans|bold)|negative space|placed across|positioned in|placed in|sits in the|rendered as|overlay text)\b/i;
+
+export function sanitizeCopy(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed || TECHNICAL_META_ARTIFACTS.test(trimmed) || LAYOUT_DIRECTION_LEAKS.test(trimmed)) return '';
+  return trimmed;
+}
+
+function asCopy(value: unknown, max = 200): string {
+  const str = asString(value, max);
+  return sanitizeCopy(str);
+}
+
+function asCopyArray(value: unknown, maxItems: number, max = 160): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .map((item) => asCopy(item, max))
+        .filter((item): item is string => item.length > 0),
+    ),
+  ].slice(0, maxItems);
+}
+
 function asStringArray(value: unknown, maxItems: number, max = 240): string[] {
   if (!Array.isArray(value)) return [];
   return [
@@ -58,19 +86,28 @@ function asColors(value: unknown): string[] {
 // The same ratio vocabulary the composer's own crop tool offers
 // (src/utils/crop.ts AspectRatioId) minus "original", which has no meaning
 // for a freshly generated image — a generated creative and a manually
-// cropped one speak the same ratios end to end.
-const ASPECT_RATIOS = ['1:1', '4:5', '9:16', '16:9', '1.91:1'];
+// cropped photo share the same canvas proportions.
+const VALID_ASPECT_RATIOS = ['1:1', '4:5', '9:16', '16:9', '1.91:1'] as const;
 
-function asAspectRatio(value: unknown): string {
-  const raw = asString(value, 10);
-  return ASPECT_RATIOS.includes(raw) ? raw : '1:1';
+function asAspectRatio(value: unknown): CreativeDirection['aspectRatio'] {
+  if (typeof value === 'string' && (VALID_ASPECT_RATIOS as readonly string[]).includes(value)) {
+    return value as CreativeDirection['aspectRatio'];
+  }
+  return '1:1';
 }
 
-const COPY_TREATMENTS: CopyTreatment[] = ['none', 'headline', 'headline_support', 'interactive', 'editorial_punchline'];
-
 function asCopyTreatment(value: unknown): CopyTreatment {
-  const raw = asString(value, 20);
-  return (COPY_TREATMENTS as string[]).includes(raw) ? (raw as CopyTreatment) : 'none';
+  const valid: CopyTreatment[] = [
+    'none',
+    'headline',
+    'headline_support',
+    'interactive',
+    'editorial_punchline',
+  ];
+  if (typeof value === 'string' && (valid as string[]).includes(value)) {
+    return value as CopyTreatment;
+  }
+  return 'none';
 }
 
 function normaliseMarketingCreative(
@@ -78,12 +115,12 @@ function normaliseMarketingCreative(
 ): MarketingCreative | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
 
-  const brandMessage = asString(raw.brandMessage, 200);
-  const offerText = asString(raw.offerText, 60);
-  const eventBadge = asString(raw.eventBadge, 40);
-  const secondaryInfo = asStringArray(raw.secondaryInfo, 4, 120);
+  const brandMessage = asCopy(raw.brandMessage, 200);
+  const offerText = asCopy(raw.offerText, 60);
+  const eventBadge = asCopy(raw.eventBadge, 40);
+  const secondaryInfo = asCopyArray(raw.secondaryInfo, 4, 120);
   const logoTreatment = asString(raw.logoTreatment, 200);
-  const requiredElements = asStringArray(raw.requiredElements, 6, 120);
+  const requiredElements = asCopyArray(raw.requiredElements, 6, 120);
 
   if (!brandMessage && !offerText && !eventBadge && secondaryInfo.length === 0 && !logoTreatment && requiredElements.length === 0) {
     return undefined;
@@ -161,10 +198,10 @@ function normaliseDirection(
     mode,
     artDirectionFamily,
     copyTreatment: asCopyTreatment(payload.copyTreatment),
-    headline: asString(payload.headline, 120),
-    supportingLine: asString(payload.supportingLine, 160),
-    cta: asString(payload.cta, 60),
-    interactionInstructions: asString(payload.interactionInstructions, 160),
+    headline: asCopy(payload.headline, 120),
+    supportingLine: asCopy(payload.supportingLine, 160),
+    cta: asCopy(payload.cta, 60),
+    interactionInstructions: asCopy(payload.interactionInstructions, 160),
     ...(marketingCreative && { marketingCreative }),
     ...(layoutDirection && { layoutDirection }),
   };
@@ -200,17 +237,20 @@ export function repairMissingRequirements(
   direction: CreativeDirection,
   missing: string[],
 ): CreativeDirection {
-  if (missing.length === 0) return direction;
+  const cleanMissing = missing
+    .map(sanitizeCopy)
+    .filter((m) => m.length > 0 && !/^(?:what|why|how|who|where|when|which|is|are|does|do|can)\b/i.test(m));
+  if (cleanMissing.length === 0) return direction;
   const existing = direction.marketingCreative?.secondaryInfo ?? [];
   return {
     ...direction,
     // 'none' would mean the renderer typesets nothing at all — a creative
     // carrying required claims always needs at least a copy layer.
     copyTreatment: direction.copyTreatment === 'none' ? 'headline' : direction.copyTreatment,
-    headline: direction.headline || missing[0],
+    headline: direction.headline || cleanMissing[0],
     marketingCreative: {
       ...direction.marketingCreative,
-      secondaryInfo: [...new Set([...existing, ...missing])],
+      secondaryInfo: [...new Set([...existing, ...cleanMissing])],
     },
   };
 }

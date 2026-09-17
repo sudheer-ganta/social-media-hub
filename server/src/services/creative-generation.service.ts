@@ -706,23 +706,28 @@ const RECENT_SIGNATURE_LIMIT = 6;
  * `creativeBrief` on every persisted row.
  */
 async function fetchRecentSignatures(request: CreativeGenerationRequest): Promise<RecentCreativeSignature[]> {
-  const assets = await generatedAssetRepository.listByScope(
-    {
-      userId: request.userId,
-      contextType: request.contextType,
-      brandId: request.contextType === 'brand' ? (request.brandId ?? null) : null,
-    },
-    RECENT_SIGNATURE_LIMIT,
-  );
-  return assets
-    .filter((asset) => asset.status === 'COMPLETED')
-    .map((asset) => ({
-      artDirectionFamily: asset.creativeBrief.artDirectionFamily,
-      mode: asset.creativeBrief.mode,
-      palette: asset.creativeBrief.palette,
-      lighting: asset.creativeBrief.lighting,
-      background: asset.creativeBrief.background,
-    }));
+  try {
+    const assets = await generatedAssetRepository.listByScope(
+      {
+        userId: request.userId,
+        contextType: request.contextType,
+        brandId: request.contextType === 'brand' ? (request.brandId ?? null) : null,
+      },
+      RECENT_SIGNATURE_LIMIT,
+    );
+    return assets
+      .filter((asset) => asset.status === 'COMPLETED')
+      .map((asset) => ({
+        artDirectionFamily: asset.creativeBrief.artDirectionFamily,
+        mode: asset.creativeBrief.mode,
+        palette: asset.creativeBrief.palette,
+        lighting: asset.creativeBrief.lighting,
+        background: asset.creativeBrief.background,
+      }));
+  } catch (error) {
+    console.warn('[creative] failed to fetch recent signatures, continuing without visual memory', error);
+    return [];
+  }
 }
 
 /**
