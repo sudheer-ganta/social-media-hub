@@ -37,8 +37,9 @@ export default function Register() {
       if (needsEmailConfirmation) {
         setConfirmationSent(true);
       } else {
+        sessionStorage.setItem("is_new_signup", "true");
         toast.success("Account created — welcome!");
-        navigate("/", { replace: true });
+        navigate("/onboarding", { replace: true });
       }
     } catch (error) {
       toast.error("Registration failed", {

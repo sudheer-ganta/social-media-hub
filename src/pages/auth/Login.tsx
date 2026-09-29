@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/app/AuthProvider";
 import { loginSchema, type LoginValues } from "@/validators";
 
+import { creationProfileRepository } from "@/repositories/creation-profile.repository";
+
 export default function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
@@ -30,9 +32,11 @@ export default function Login() {
     setSubmitting(true);
     try {
       await signIn(values.email, values.password);
+      sessionStorage.removeItem("is_new_signup");
+      await creationProfileRepository.markCompleteForLogin().catch(() => {});
       toast.success("Welcome back!");
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from && from !== "/login" ? from : "/", { replace: true });
+      navigate(from && from !== "/login" && from !== "/onboarding" ? from : "/", { replace: true });
     } catch (error) {
       toast.error("Sign in failed", {
         description: error instanceof Error ? error.message : undefined,

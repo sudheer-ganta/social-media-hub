@@ -114,6 +114,8 @@ export interface BrandVoice {
   brandColors?: string[];
   /** Services the brand provides. */
   services?: string[];
+  /** Brand logo URL. Uploaded once and inherited automatically by AI creatives. */
+  logoUrl?: string;
 }
 
 export const EMPTY_BRAND_VOICE: BrandVoice = {
@@ -129,6 +131,7 @@ export const EMPTY_BRAND_VOICE: BrandVoice = {
   targetAudience: "",
   personality: "" as any,
   services: [],
+  logoUrl: "",
 };
 
 export const DEFAULT_BRAND_VOICE: BrandVoice = {
@@ -149,6 +152,7 @@ export const DEFAULT_BRAND_VOICE: BrandVoice = {
   usp: "",
   competitors: [],
   brandColors: [],
+  logoUrl: "",
 };
 
 /**

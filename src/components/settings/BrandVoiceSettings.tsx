@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Star, Trash2, Edit2, Check, Wand2 } from "lucide-react";
+import { Plus, Star, Trash2, Edit2, Check, Wand2, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -127,7 +127,27 @@ export function BrandVoiceSettings() {
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold truncate">{p.name}</p>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {p.voice.logoUrl ? (
+                              <img
+                                src={p.voice.logoUrl}
+                                alt={`${p.name} logo`}
+                                className="h-9 w-9 rounded-lg border bg-secondary/80 object-contain p-1 shrink-0 shadow-xs"
+                              />
+                            ) : (
+                              <div className="h-9 w-9 rounded-lg border border-dashed flex items-center justify-center bg-muted/40 shrink-0 text-muted-foreground/60">
+                                <Building2 className="h-4 w-4" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold truncate">{p.name}</p>
+                              {p.voice.logoUrl ? (
+                                <span className="text-[10px] text-emerald-500 font-medium flex items-center gap-0.5">
+                                  <Check className="h-2.5 w-2.5" /> Logo ready
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
                           {p.is_default ? (
                             <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] gap-1 shrink-0">
                               <Star className="h-3 w-3 fill-current" /> Default
@@ -136,7 +156,7 @@ export function BrandVoiceSettings() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground shrink-0"
                               onClick={() => setDefault(p.id)}
                             >
                               Make Default

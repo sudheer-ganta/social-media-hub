@@ -69,7 +69,7 @@ export function validateStyleBriefConsistency(
       `Incompatible pairing: compositionFamily "${compositionFamily}" / artDirection "${artDirectionFamily}" is structurally inconsistent with selectedStyleId "${selectedStyleId}".`,
     );
 
-    // If brief was luxury / editorial, repair style to editorial / minimalist; if brief was UGC / casual, repair concept to documentary-moment
+    // If brief was luxury / editorial, repair style to editorial / minimalist; if brief was UGC / casual, repair style to documentary / editorial
     if (brief?.primaryIntent === 'BRAND_DISCOVERY' || brief?.brandPersonality?.includes('luxury') || brief?.brandPersonality?.includes('editorial')) {
       repairedStyleId = 'editorial';
       if (repairedDirection) {
@@ -81,12 +81,15 @@ export function validateStyleBriefConsistency(
         repairedConcept.artDirectionFamily = 'EDITORIAL_PHOTOGRAPHY';
       }
     } else {
+      repairedStyleId = 'editorial';
+      if (repairedDirection) {
+        repairedDirection.selectedStyle = { id: 'editorial', name: 'Editorial', tags: ['editorial', 'fashion'] } as any;
+        (repairedDirection as any).selectedStyleId = 'editorial';
+        repairedDirection.artDirectionFamily = 'DOCUMENTARY';
+      }
       if (repairedConcept) {
         repairedConcept.compositionFamily = 'minimal-field';
         repairedConcept.artDirectionFamily = 'DOCUMENTARY';
-      }
-      if (repairedDirection) {
-        repairedDirection.artDirectionFamily = 'DOCUMENTARY';
       }
     }
   }
@@ -99,6 +102,11 @@ export function validateStyleBriefConsistency(
     violations.push(
       `Incompatible pairing: compositionFamily "${compositionFamily}" (quiet whitespace) is inconsistent with chaotic/vibrant selectedStyleId "${selectedStyleId}".`,
     );
+    repairedStyleId = 'editorial';
+    if (repairedDirection) {
+      repairedDirection.selectedStyle = { id: 'editorial', name: 'Editorial', tags: ['editorial', 'minimal'] } as any;
+      (repairedDirection as any).selectedStyleId = 'editorial';
+    }
     if (repairedConcept) {
       repairedConcept.compositionFamily = selectedStyleId === 'y2k' ? 'collage-grid' : 'split-contrast';
     }

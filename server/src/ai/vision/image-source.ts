@@ -56,7 +56,7 @@ const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
  */
 
 /** The user is watching a spinner, and two model calls still have to happen. */
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 20_000;
 
 /** A redirect or two is normal for object storage; a chain is not. */
 const MAX_REDIRECTS = 3;

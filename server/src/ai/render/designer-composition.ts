@@ -1552,7 +1552,7 @@ export async function designCreative(input: DesignerInput) {
   let activeRecoveryContext: CompositionRecoveryContext | undefined;
 
   const availableFallbacks = input.fallbackConcepts ? [...input.fallbackConcepts] : [];
-  const maxAttempts = availableFallbacks.length > 0 ? 3 : 2;
+  const maxAttempts = Math.min(6, 2 + availableFallbacks.length);
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const activeConceptName = currentGraphicConcept.name || currentGraphicConcept.conceptName;
@@ -2164,7 +2164,7 @@ export async function designCreative(input: DesignerInput) {
           detail: error instanceof Error ? error.message : String(error),
         });
       }
-    } else if (attempt === 1) {
+    } else if (attempt >= 1) {
       if (critic.passed) {
         return currentResult;
       }
@@ -2223,13 +2223,10 @@ export async function designCreative(input: DesignerInput) {
         }
       }
       const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
-      throw new Error(`FlowPost could not verify this design after two attempts with the critic. ${rejectionReason}`);
-    } else if (attempt === 2) {
-      if (critic.passed) {
-        return currentResult;
-      }
-      const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
-      throw new Error(`FlowPost could not verify this design after concept fallback. ${rejectionReason}`);
+      const msg = input.fallbackConcepts?.length
+        ? `FlowPost could not verify this design after concept fallback. ${rejectionReason}`
+        : `FlowPost could not verify this design after two attempts with the critic. ${rejectionReason}`;
+      throw new Error(msg);
     }
   }
 

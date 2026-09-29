@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { ChevronDown, Plus, Save, Trash2, Upload } from "lucide-react";
+import { useState, useRef } from "react";
+import { ChevronDown, Plus, Save, Trash2, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
+import { cloudinaryService } from "@/services/cloudinary.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -110,9 +112,26 @@ export function BrandVoicePanel({
   const [expanded, setExpanded] = useState(false);
   const [saveProfileName, setSaveProfileName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof BrandVoice>(key: K, val: BrandVoice[K]) =>
     onChange({ ...voice, [key]: val });
+
+  const handleLogoUpload = async (file: File) => {
+    setUploadingLogo(true);
+    try {
+      const uploaded = await cloudinaryService.uploadImage(file);
+      set("logoUrl", uploaded.url);
+      toast.success("Brand logo uploaded");
+    } catch (err) {
+      toast.error("Could not upload logo", {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -173,6 +192,13 @@ export function BrandVoicePanel({
       {/* Collapsed preview */}
       {!expanded && voice.name && (
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          {voice.logoUrl && (
+            <img
+              src={voice.logoUrl}
+              alt="Brand logo"
+              className="h-5 w-5 rounded border bg-secondary object-contain p-0.5 shrink-0"
+            />
+          )}
           <Badge variant="outline" className="text-xs font-medium">{voice.name}</Badge>
           <Badge className={cn("text-xs border", PERSONALITY_COLORS[voice.personality])}>
             {voice.personality}
@@ -250,6 +276,77 @@ export function BrandVoicePanel({
                     onChange={(e) => set("targetAudience", e.target.value)}
                     placeholder="Design-conscious millennials"
                     className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Brand Logo Upload */}
+              <div className="rounded-lg border bg-card/60 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-xs font-semibold">Brand Logo</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Upload your logo once. Automatically applied whenever you create creatives for this brand.
+                    </p>
+                  </div>
+                  {voice.logoUrl && (
+                    <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/20 bg-emerald-500/10">
+                      Configured
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 pt-1">
+                  {voice.logoUrl ? (
+                    <img
+                      src={voice.logoUrl}
+                      alt="Brand logo"
+                      className="h-12 w-12 rounded-lg border bg-secondary object-contain p-1 shadow-xs shrink-0"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-lg border border-dashed flex items-center justify-center bg-muted/40 text-muted-foreground shrink-0">
+                      <ImageIcon className="h-5 w-5 opacity-60" />
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5"
+                      disabled={uploadingLogo}
+                      onClick={() => logoInputRef.current?.click()}
+                    >
+                      {uploadingLogo ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Upload className="h-3 w-3" />
+                      )}
+                      {voice.logoUrl ? "Replace Logo" : "Upload Logo"}
+                    </Button>
+                    {voice.logoUrl && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                        onClick={() => set("logoUrl", "")}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" /> Remove
+                      </Button>
+                    )}
+                  </div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleLogoUpload(file);
+                      e.target.value = "";
+                    }}
                   />
                 </div>
               </div>

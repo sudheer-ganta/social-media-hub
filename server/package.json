@@ -4,7 +4,7 @@
   "description": "Express backend for Social Content Hub",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "npm run db:generate && ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "npm install --prefix .. && npm run db:generate && tsc",
     "start": "node dist/server.js",
     "db:generate": "npm --prefix .. run db:generate",

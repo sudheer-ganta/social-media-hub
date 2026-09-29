@@ -32,16 +32,20 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
 
     let active = true;
+    const isNewSignup = sessionStorage.getItem("is_new_signup") === "true";
+
     creationProfileRepository.get()
       .then((profile) => {
         if (!active) return;
-        const complete = profile?.onboarding_complete ?? false;
+        // If profile explicitly has onboarding_complete, use it.
+        // Otherwise, only force onboarding if this is a fresh signup.
+        const complete = profile?.onboarding_complete ?? !isNewSignup;
         setOnboardingComplete(complete);
         sessionStorage.setItem(`onboarding_complete_${userId}`, String(complete));
       })
       .catch(() => {
         if (!active) return;
-        setOnboardingComplete(false);
+        setOnboardingComplete(!isNewSignup);
       });
 
     return () => {

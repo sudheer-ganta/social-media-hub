@@ -111,6 +111,7 @@ export interface BrandVoiceInput {
   ctaStyle?: string;
   targetAudience?: string;
   services?: string[];
+  logoUrl?: string;
 }
 
 /**

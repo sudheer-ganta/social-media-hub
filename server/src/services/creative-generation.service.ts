@@ -350,8 +350,15 @@ function parseRequest(body: unknown, { userId }: { userId: string }): CreativeGe
   if (contextType === 'brand' && !readString(input.brandId, 64)) {
     throw new CreativeError('Pick which brand this creative is for.', 422);
   }
-  const creativeDna = readCreativeDna(input.creativeDna);
+  const rawCreativeDna = readCreativeDna(input.creativeDna);
   const brandVoice = readBrandVoice(input.brandVoice) as BrandProfileInput | undefined;
+  const voiceLogo = (brandVoice as any)?.logoUrl || (typeof input.brandVoice === 'object' && input.brandVoice && (input.brandVoice as any).logoUrl);
+  const creativeDna = rawCreativeDna
+    ? {
+        ...rawCreativeDna,
+        ...(!rawCreativeDna.logoAssetUrl && voiceLogo && { logoAssetUrl: String(voiceLogo).trim() }),
+      }
+    : voiceLogo ? { logoAssetUrl: String(voiceLogo).trim() } : undefined;
   const referenceImageUrls = readReferenceImageUrls(input.referenceImageUrls);
   const referenceStyleProfile = readReferenceStyleProfile(input.referenceStyleProfile);
   const rawStyleId = readString(input.styleId, 80);
@@ -780,6 +787,93 @@ interface FetchedReferenceImages {
   failures: ReferenceFetchFailure[];
 }
 
+interface CachedLogo {
+  image: { mimeType: string; data: string };
+  fetchedAt: number;
+}
+
+/** In-memory cache for validated brand logos to avoid unnecessary re-fetches. */
+const logoAssetCache = new Map<string, CachedLogo>();
+
+export function clearLogoAssetCache(): void {
+  logoAssetCache.clear();
+}
+
+export interface LogoFetchResult {
+  image: { mimeType: string; data: string } | null;
+  failure: { type: 'INVALID_LOGO' | 'NETWORK_TIMEOUT'; detail?: string; reason?: string } | null;
+}
+
+export async function fetchLogoAsset(logoUrl: string, brandId?: string): Promise<LogoFetchResult> {
+  const assetId = logoUrl;
+  const cached = logoAssetCache.get(logoUrl);
+
+  if (cached) {
+    console.info('[brand-logo] resolved-from-cache', { assetId, brandId });
+    return { image: cached.image, failure: null };
+  }
+
+  const maxRetries = 3;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const inlineImage = await fetchInlineImage(logoUrl);
+      const image = { mimeType: inlineImage.mimeType, data: inlineImage.data };
+      logoAssetCache.set(logoUrl, { image, fetchedAt: Date.now() });
+      console.info('[brand-logo] resolved', {
+        brandId,
+        assetId,
+        source: 'remote-fetch',
+        validationState: 'VALID',
+        attempt,
+      });
+      return { image, failure: null };
+    } catch (error) {
+      lastError = error;
+      const isFetchErr = error instanceof ImageFetchError;
+      const reason = isFetchErr ? error.reason : 'network';
+      const detail = isFetchErr ? error.detail : String(error);
+      const msg = error instanceof Error ? error.message : String(error);
+
+      // Check if permanently unresolvable / invalid / 404 / 403 / 400
+      const isPermanentFailure =
+        (isFetchErr && (reason === 'format' || reason === 'size' || reason === 'address')) ||
+        msg.includes('404') || msg.includes('403') || msg.includes('400') || msg.includes('unsupported') || msg.includes('invalid');
+
+      if (isPermanentFailure) {
+        console.warn('[brand-logo] invalid', { assetId, brandId, reason, detail: detail || msg });
+        return {
+          image: null,
+          failure: { type: 'INVALID_LOGO', reason: isFetchErr ? reason : 'format', detail: detail || msg },
+        };
+      }
+
+      // For network errors (timeout, DNS, 5xx), retry with bounded backoff
+      console.warn('[brand-logo] retrieval-retry', { assetId, brandId, attempt, reason, detail });
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 50));
+      }
+    }
+  }
+
+  // If retries exhausted and network error occurred:
+  const isFetchErr = lastError instanceof ImageFetchError;
+  const detail = isFetchErr ? lastError.detail : String(lastError);
+
+  // If we had a cached version, fall back to cached version
+  if (cached) {
+    console.warn('[brand-logo] resolved-from-cache', { assetId, brandId, fallbackAfterRetry: true });
+    return { image: cached.image, failure: null };
+  }
+
+  console.error('[brand-logo] retrieval-failed', { assetId, brandId, errorType: 'network', detail });
+  return {
+    image: null,
+    failure: { type: 'NETWORK_TIMEOUT', detail },
+  };
+}
+
 async function fetchReferenceImages(urls: string[]): Promise<FetchedReferenceImages> {
   const failures: ReferenceFetchFailure[] = [];
   const results = await Promise.all(
@@ -1054,9 +1148,9 @@ async function finishGeneration({
 }: FinishGenerationOptions): Promise<StoredGeneratedAsset> {
   let designVerified = false;
   try {
-    const [products, references, logos, previous] = await Promise.all([
+    const [products, references, logoResult, previous] = await Promise.all([
       fetchReferenceImages(referenceUrls), fetchReferenceImages(styleReferenceUrls),
-      logoAssetUrl ? fetchReferenceImages([logoAssetUrl]) : Promise.resolve({ images: [], failures: [] }),
+      logoAssetUrl ? fetchLogoAsset(logoAssetUrl, renderContext?.brand?.id) : Promise.resolve(null),
       priorVisualUrl ? fetchReferenceImages([priorVisualUrl]) : Promise.resolve({ images: [], failures: [] }),
     ]);
     if (products.failures.length || products.images.length !== referenceUrls.length) {
@@ -1065,12 +1159,16 @@ async function finishGeneration({
     if (references.failures.length || references.images.length !== styleReferenceUrls.length) {
       throw new CreativeError('Your style references could not all be read. Re-upload the missing references.', 422);
     }
-    if (logoAssetUrl && (logos.failures.length || !logos.images.length)) {
-      throw new CreativeError('The brand logo could not be read. Re-upload the logo.', 422);
+    if (logoAssetUrl && logoResult?.failure) {
+      if (logoResult.failure.type === 'INVALID_LOGO') {
+        throw new CreativeError('The brand logo could not be read. Re-upload the logo.', 422);
+      } else {
+        throw new CreativeError('Brand logo storage is temporarily unreachable. Please try again.', 502, logoResult.failure.detail);
+      }
     }
     if (!renderContext) throw new CreativeError('The campaign context is missing. Start a new creative.', 422);
 
-    let logoAsset = logos.images[0];
+    let logoAsset = logoResult?.image ?? undefined;
     if (!logoAsset) {
       const brandName = renderContext?.brand?.name || direction.headline || 'BRAND';
       const cleanName = brandName.replace(/[^\w\s.-]/g, '').trim() || 'BRAND';
@@ -1174,9 +1272,27 @@ async function resolveConceptAndResearch(
   intent: CreativeIntentBrief,
   referenceStyle: ReferenceStyleProfile | undefined,
   metrics?: CreativeMetrics,
-): Promise<{ concept: ScoredCreativeConcept; research: CreativeResearch | undefined }> {
+): Promise<{ concept: ScoredCreativeConcept; research: CreativeResearch | undefined; fallbackConcepts?: GraphicDesignConcept[] }> {
   if (request.selectedConcept) {
-    return { concept: request.selectedConcept, research: undefined };
+    const scope = conceptScope(request);
+    const siblings = await creativeConceptRepository.listDiscovered(scope).catch(() => []);
+    const fallbackConcepts = siblings
+      .filter((s) => s.conceptId !== request.selectedConcept?.conceptId)
+      .map((s) => ({
+        id: s.conceptId,
+        conceptName: s.conceptName,
+        visualIdea: s.bigIdea,
+        creativeMechanism: s.visualMechanism,
+        hero: (s as any).hero || 'image',
+        imageRole: (s as any).imageRole || 'full-bleed',
+        spatialRelationship: (s as any).spatialRelationship || '',
+        typeBehavior: (s as any).typeBehavior || '',
+        imageBehavior: (s as any).imageBehavior || '',
+        compositionFamily: (s as any).compositionFamily || 'asymmetric-editorial',
+        artDirectionFamily: s.artDirectionFamily,
+        selectedStyleId: s.styleId,
+      })) as GraphicDesignConcept[];
+    return { concept: request.selectedConcept, research: undefined, fallbackConcepts };
   }
 
   const [research, recentSignatures] = await Promise.all([
@@ -1204,7 +1320,25 @@ async function resolveConceptAndResearch(
   );
   if (metrics) metrics.textCalls += meta.attempts ?? 1;
 
-  return { concept: pickTopConcept(concepts), research };
+  const topConcept = pickTopConcept(concepts);
+  const fallbackConcepts = concepts
+    .filter((c) => c !== topConcept)
+    .map((c) => ({
+      id: c.conceptId,
+      conceptName: c.conceptName,
+      visualIdea: c.bigIdea,
+      creativeMechanism: c.visualMechanism,
+      hero: c.hero || 'image',
+      imageRole: c.imageRole || 'full-bleed',
+      spatialRelationship: c.spatialRelationship || '',
+      typeBehavior: c.typeBehavior || '',
+      imageBehavior: c.imageBehavior || '',
+      compositionFamily: c.compositionFamily || 'asymmetric-editorial',
+      artDirectionFamily: c.artDirectionFamily,
+      selectedStyleId: c.styleId,
+    })) as GraphicDesignConcept[];
+
+  return { concept: topConcept, research, fallbackConcepts };
 }
 
 /**
@@ -1469,7 +1603,7 @@ export const creativeGenerationService = {
       // its "reference style" inspiration channel (out of Phase 3's scope —
       // concept generation just picks the idea, not the visual system).
       const intelligentStyle = effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence);
-      const { concept, research } = await resolveConceptAndResearch(
+      const { concept, research, fallbackConcepts } = await resolveConceptAndResearch(
         request, brand, creativeDna, intent, intelligentStyle, metrics,
       );
 
@@ -1524,7 +1658,7 @@ export const creativeGenerationService = {
       const asset = await runGeneration({
         userId, request, textProvider, imageProvider, brand, creativeDna, concept,
         mode: concept.mode, artDirectionFamily: concept.artDirectionFamily, research, referenceStyle: directionReferenceStyle, styleDna, intent,
-        canonicalBrief, graphicConcept, ...(creativeStrategy && { creativeStrategy }),
+        canonicalBrief, graphicConcept, fallbackConcepts, ...(creativeStrategy && { creativeStrategy }),
         requestId, metrics, canonicalConceptId: claimedConceptId,
       });
       await creativeAttributionRepository.recordAssetEvent(userId, asset.id, 'ASSET_GENERATED', requestId ? `${requestId}:generated:${asset.id}` : undefined).catch(() => undefined);

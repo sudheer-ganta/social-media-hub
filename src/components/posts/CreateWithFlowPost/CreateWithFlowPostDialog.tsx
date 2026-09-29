@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Sparkles, Wand2, X, Camera, Palette, Compass, Lightbulb } from "lucide-react";
+import { Loader2, Sparkles, Wand2, X, Camera, Palette, Compass, Lightbulb, Check } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { cloudinaryService } from "@/services";
+import { brandVoicesRepository } from "@/repositories/brand-voices.repository";
 import { creativeService, type CreativeStyleSummary } from "@/services/creative.service";
 import { useBrandVoices } from "@/hooks/useBrandVoices";
 import { useCreativeDna } from "@/hooks/useCreativeDna";
@@ -258,7 +260,9 @@ export function CreateWithFlowPostDialog({
     : null;
 
   const brandVoiceProfile = activeBrand
-    ? (brandVoiceProfiles.find((p) => p.brand_id === activeBrand.id) ?? null)
+    ? (brandVoiceProfiles.find((p) => p.brand_id === activeBrand.id) ??
+       brandVoiceProfiles.find((p) => p.name.toLowerCase().trim() === activeBrand.name.toLowerCase().trim()) ??
+       null)
     : defaultBrandVoiceProfile?.brand_id ? null : defaultBrandVoiceProfile;
 
   const creativeDnaProfile = activeBrand
@@ -268,9 +272,9 @@ export function CreateWithFlowPostDialog({
   // A logo uploaded in this dialog overrides the saved one for this creative.
   const [logoOverride, setLogoOverride] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const logoAssetUrl = logoOverride ?? creativeDnaProfile?.dna.logoAssetUrl ?? "";
-  // Brand mode renders nothing without a real logo — FlowPost will not invent
-  // one, and a branded creative carrying a made-up mark is worse than none.
+  const brandVoiceLogo = brandVoiceProfile?.voice?.logoUrl || creativeDnaProfile?.dna?.logoAssetUrl || "";
+  const logoAssetUrl = logoOverride ?? brandVoiceLogo;
+  const isUsingSavedBrandLogo = !logoOverride && Boolean(brandVoiceLogo);
   const logoMissing = !logoAssetUrl;
 
   useEffect(() => {
@@ -351,6 +355,17 @@ export function CreateWithFlowPostDialog({
     try {
       const uploaded = await cloudinaryService.uploadMedia(file);
       setLogoOverride(uploaded.url);
+
+      if (brandVoiceProfile && !brandVoiceProfile.voice.logoUrl) {
+        try {
+          await brandVoicesRepository.update(brandVoiceProfile.id, {
+            voice: { ...brandVoiceProfile.voice, logoUrl: uploaded.url },
+          });
+          toast.success(`Saved logo to ${brandVoiceProfile.name} Brand Voice`);
+        } catch {
+          // non-fatal
+        }
+      }
     } catch (err) {
       toast.error("Could not upload that logo", {
         description: err instanceof Error ? err.message : undefined,
@@ -627,9 +642,16 @@ export function CreateWithFlowPostDialog({
 
               {(
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold">
-                    Brand logo <span className="text-destructive">*</span>
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">
+                      Brand logo <span className="text-destructive">*</span>
+                    </Label>
+                    {isUsingSavedBrandLogo && (
+                      <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/20 bg-emerald-500/10 gap-1 font-normal">
+                        <Check className="h-3 w-3" /> Auto-loaded from {brandVoiceProfile?.name || activeBrand?.name || "Brand Voice"}
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     Required. Your original logo gets its own clear space, away from text and product images.
                   </p>
@@ -638,7 +660,7 @@ export function CreateWithFlowPostDialog({
                       <img
                         src={logoAssetUrl}
                         alt="Brand logo"
-                        className="h-10 w-10 rounded border bg-secondary object-contain p-1"
+                        className="h-10 w-10 rounded border bg-secondary object-contain p-1 shrink-0"
                       />
                     ) : null}
                     <Button
@@ -657,6 +679,17 @@ export function CreateWithFlowPostDialog({
                         "+ Upload logo"
                       )}
                     </Button>
+                    {logoOverride && brandVoiceLogo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => setLogoOverride(null)}
+                      >
+                        Reset to brand logo
+                      </Button>
+                    )}
                     <input
                       ref={logoInputRef}
                       type="file"

@@ -64,6 +64,7 @@ const conceptRepo = vi.hoisted(() => ({
   markFailed: vi.fn(async () => undefined),
   recordAssetSignal: vi.fn(async () => true),
   explicitStyleHistory: vi.fn(async () => []),
+  listDiscovered: vi.fn(async () => []),
 }));
 vi.mock('../repositories/creative-concept.repository', () => ({ creativeConceptRepository: conceptRepo }));
 
@@ -218,11 +219,17 @@ vi.mock('../ai/generators/reference-style.generator', () => ({
   generateReferenceStyleProfile: vi.fn(async () => SAMPLE_REFERENCE_STYLE),
 }));
 
-const { creativeGenerationService, CreativeError } = await import('./creative-generation.service');
-const { fetchInlineImage } = await import('../ai/vision/image-source');
+const { creativeGenerationService, CreativeError, clearLogoAssetCache } = await import('./creative-generation.service');
+const { fetchInlineImage, ImageFetchError } = await import('../ai/vision/image-source');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearLogoAssetCache();
+  vi.mocked(fetchInlineImage).mockReset().mockImplementation(async () => ({
+    mimeType: 'image/jpeg',
+    data: 'ZmFrZQ==',
+    sizeBytes: 4,
+  }));
   designer.designCreative.mockReset().mockImplementation(async (input: any) => {
     let visual;
     if (!input.products.length) {
@@ -653,9 +660,29 @@ describe('creativeGenerationService', () => {
     expect(repo.markCompleted).not.toHaveBeenCalled();
   });
 
-  it('fails if the mandatory logo cannot be fetched', async () => {
-    vi.mocked(fetchInlineImage).mockRejectedValueOnce(new Error('404'));
-    await expect(creativeGenerationService.generate('user-1', { ...WITH_LOGO, prompt: 'Launch' })).rejects.toMatchObject({ status: 422 });
+  it('fails with 502 infrastructure error if logo storage experiences a network timeout after retries', async () => {
+    const fetchErr = new ImageFetchError('Connection timeout', 'ETIMEDOUT', 'network');
+    vi.mocked(fetchInlineImage).mockRejectedValue(fetchErr);
+    await expect(creativeGenerationService.generate('user-1', {
+      prompt: 'Launch',
+      creativeDna: { logoAssetUrl: 'https://cdn.example.com/timeout-logo.png' },
+    })).rejects.toMatchObject({
+      status: 502,
+      message: 'Brand logo storage is temporarily unreachable. Please try again.',
+    });
+    expect(designer.designCreative).not.toHaveBeenCalled();
+  });
+
+  it('fails with 422 if the logo asset is permanently unparseable or unsupported format', async () => {
+    const fetchErr = new ImageFetchError('Unsupported format', 'content-type: text/html', 'format');
+    vi.mocked(fetchInlineImage).mockRejectedValueOnce(fetchErr);
+    await expect(creativeGenerationService.generate('user-1', {
+      prompt: 'Launch',
+      creativeDna: { logoAssetUrl: 'https://cdn.example.com/invalid-logo.png' },
+    })).rejects.toMatchObject({
+      status: 422,
+      message: 'The brand logo could not be read. Re-upload the logo.',
+    });
     expect(designer.designCreative).not.toHaveBeenCalled();
   });
 

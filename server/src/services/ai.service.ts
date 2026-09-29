@@ -273,6 +273,9 @@ export function readBrandVoice(value: unknown): CaptionRequest['brandVoice'] {
     competitors: readStringArray(voice.competitors, 10),
     brandColors: readColors(voice.brandColors),
     services: readStringArray(voice.services, 15),
+    ...(readString(voice.logoUrl, 1000) && {
+      logoUrl: readString(voice.logoUrl, 1000),
+    }),
   };
 
   // An object of nothing but empty arrays is not a brand; sending it would put

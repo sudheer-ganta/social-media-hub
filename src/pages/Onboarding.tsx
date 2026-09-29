@@ -22,6 +22,7 @@ export default function Onboarding() {
     try {
       if (mode === "personal") {
         await creationProfileRepository.complete("personal");
+        sessionStorage.removeItem("is_new_signup");
         navigate("/posts/new?context=personal", { replace: true });
         return;
       }
@@ -31,6 +32,7 @@ export default function Onboarding() {
           ...DEFAULT_BRAND_VOICE, name: brand.name, description: description.trim(), tone: tone.trim(),
         });
         await creationProfileRepository.complete("brand", brand.id);
+        sessionStorage.removeItem("is_new_signup");
         navigate(`/posts/new?context=brand&brand=${brand.id}`, { replace: true });
       }
     } catch (err: unknown) {

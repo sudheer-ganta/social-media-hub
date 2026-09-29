@@ -86,4 +86,14 @@ export async function explicitStyleHistory(scope: ConceptScope, limit = 40): Pro
   return rows.map((row) => ({ styleId: row.styleId!, selectionCount: row.selectionCount, generated: Boolean(row.generatedAssetId), saved: Boolean(row.savedAt), reuseCount: row.reuseCount, selectedAt: row.selectedAt }));
 }
 
-export const creativeConceptRepository = { saveDiscovered, findOwned, claimGeneration, recordReopen, markFailed, recordAssetSignal, explicitStyleHistory };
+export async function listDiscovered(scope: ConceptScope, limit = 10): Promise<PersistedConcept[]> {
+  const rows = await prisma.creativeConceptRecord.findMany({
+    where: { ...scopeWhere(scope) },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    include: { generatedAsset: true },
+  });
+  return rows.map(map);
+}
+
+export const creativeConceptRepository = { saveDiscovered, findOwned, claimGeneration, recordReopen, markFailed, recordAssetSignal, explicitStyleHistory, listDiscovered };
