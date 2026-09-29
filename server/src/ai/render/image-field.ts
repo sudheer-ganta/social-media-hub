@@ -46,12 +46,96 @@ export interface QuietRect extends FieldRect {
   tone: ToneReading;
 }
 
+/**
+ * Authoritative calibration configuration for the Continuous Spatial Occupancy Field.
+ * All signal weights, multipliers, diffusion coefficients, and classification thresholds are centralized here.
+ */
+export interface SpatialOccupancyCalibration {
+  /** Multipliers to scale raw feature signals to [0, 1] */
+  readonly signalMultipliers: {
+    readonly detail: number;
+    readonly variance: number;
+    readonly saliency: number;
+    readonly peakSaliency: number;
+  };
+  /** Weights for combining peak, detail, variance, and ground saliency into raw structural presence */
+  readonly compositionWeights: {
+    readonly peak: number;
+    readonly detail: number;
+    readonly variance: number;
+    readonly saliency: number;
+  };
+  /** Spatial coherence diffusion parameters to bridge interior structural gaps */
+  readonly diffusion: {
+    readonly interiorInheritanceCenterThreshold: number;
+    readonly interiorInheritanceNeighborMaxThreshold: number;
+    readonly interiorCenterWeight: number;
+    readonly interiorNeighborMaxWeight: number;
+    readonly enclosedNeighborMeanThreshold: number;
+    readonly enclosedInheritanceWeight: number;
+    readonly smoothedCenterWeight: number;
+    readonly smoothedNeighborMeanWeight: number;
+  };
+  /** Minimum occupancy floor below which space is treated as genuinely quiet */
+  readonly noiseFloor: number;
+  /** Micro-precision noise gate applied before diffusion */
+  readonly rawGate: number;
+  /** Point sample threshold to classify a coordinate as inside subject */
+  readonly insideSubjectPointThreshold: number;
+  /** Downstream region overlap classifications */
+  readonly classification: {
+    readonly focalCoreOverlap: number;
+    readonly focalCoreOcclusion: number;
+    readonly texturedFieldOverlap: number;
+    readonly texturedFieldOcclusion: number;
+    readonly texturedFieldDetailEnergy: number;
+    readonly peripheralOverlap: number;
+  };
+}
+
+export const SPATIAL_OCCUPANCY_CALIBRATION: SpatialOccupancyCalibration = {
+  signalMultipliers: {
+    detail: 2.5,
+    variance: 4.5,
+    saliency: 1.6,
+    peakSaliency: 0.90,
+  },
+  compositionWeights: {
+    peak: 0.60,
+    detail: 0.30,
+    variance: 0.20,
+    saliency: 0.35,
+  },
+  diffusion: {
+    interiorInheritanceCenterThreshold: 0.20,
+    interiorInheritanceNeighborMaxThreshold: 0.40,
+    interiorCenterWeight: 0.50,
+    interiorNeighborMaxWeight: 0.35,
+    enclosedNeighborMeanThreshold: 0.45,
+    enclosedInheritanceWeight: 0.40,
+    smoothedCenterWeight: 0.70,
+    smoothedNeighborMeanWeight: 0.30,
+  },
+  noiseFloor: 0.02,
+  rawGate: 0.015,
+  insideSubjectPointThreshold: 0.35,
+  classification: {
+    focalCoreOverlap: 0.72,
+    focalCoreOcclusion: 0.28,
+    texturedFieldOverlap: 0.20,
+    texturedFieldOcclusion: 0.10,
+    texturedFieldDetailEnergy: 0.14,
+    peripheralOverlap: 0.04,
+  },
+} as const;
+
 export interface ImageField {
-  grid: { cols: number; rows: number; luminance: Float32Array; energy: Float32Array };
+  grid: { cols: number; rows: number; luminance: Float32Array; energy: Float32Array; occupancy?: Float32Array };
+  /** Continuous Spatial Occupancy Field (32x32 tiles, values in [0, 1]). */
+  occupancyGrid: Float32Array;
   /**
-   * The dominant high-detail mass, in normalized canvas coordinates. This is what
-   * type must not cover unless the art director asked it to — as distinct from
-   * the IMAGE, which type may freely cross.
+   * Coarse legacy/diagnostic bounding box.
+   * NOTE: For authoritative placement safety, the continuous Spatial Occupancy Field is consumed.
    */
   subjectBox: FieldRect;
   /** Energy-weighted centre of the picture — where the eye lands first. */
@@ -59,7 +143,13 @@ export interface ImageField {
   /** Candidate regions for type, best first. */
   quietRects: QuietRect[];
   toneAt(rect: FieldRect): ToneReading;
-  /** 0..1 share of `subjectBox` that `rect` covers. */
+  /** Mean occupancy in rect in [0, 1]. Authoritative continuous measure of visual occupation. */
+  occupancyAt(rect: FieldRect): number;
+  /** Integrated occupancy mass under rect. */
+  occupancyMass(rect: FieldRect): number;
+  /** Total integrated occupancy mass across the entire image field. */
+  totalOccupancyMass: number;
+  /** 0..1 share of total subject visual mass that `rect` covers. */
   occlusionOf(rect: FieldRect): number;
   /** 0..1 mean detail energy under the rect — high means type will fight the picture. */
   busynessAt(rect: FieldRect): number;
@@ -267,6 +357,109 @@ function findSubjectBox(saliency: Float32Array, cols: number, rows: number): Fie
 }
 
 /**
+ * Computes a continuous Spatial Occupancy Field (32x32) representing the
+ * physical presence of subjects, people, products, clothing, and high-detail mass.
+ *
+ * Unlike single bounding-box thresholding, this field is continuous in [0, 1] per tile
+ * and robust against full-bleed compositions, bright-on-dark, and dark-on-bright scenes.
+ */
+export function computeSpatialOccupancyField(
+  luminance: Float32Array,
+  energy: Float32Array,
+  cols: number,
+  rows: number,
+  saliency?: Float32Array,
+): Float32Array {
+  // 1. Calculate local 3x3 variance / stdDev per tile
+  const localStdDev = new Float32Array(cols * rows);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      let sum = 0;
+      let sqSum = 0;
+      let count = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= rows) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= cols) continue;
+          const v = luminance[ny * cols + nx];
+          sum += v;
+          sqSum += v * v;
+          count++;
+        }
+      }
+      const mean = sum / count;
+      const variance = Math.max(0, sqSum / count - mean * mean);
+      localStdDev[y * cols + x] = Math.sqrt(variance);
+    }
+  }
+
+  // 2. Compute local structural and saliency occupation:
+  // Visual occupancy represents physical presence: high-frequency detail energy, local variance, and ground saliency.
+  // Smooth, flat fields (whether bright wall, studio backdrop, or dark vignette) have low structure.
+  const { signalMultipliers, compositionWeights, diffusion, noiseFloor, rawGate } = SPATIAL_OCCUPANCY_CALIBRATION;
+  const rawOccupancy = new Float32Array(cols * rows);
+  for (let i = 0; i < cols * rows; i++) {
+    const detailSig = Math.min(1.0, energy[i] * signalMultipliers.detail);
+    const varianceSig = Math.min(1.0, localStdDev[i] * signalMultipliers.variance);
+    const salSig = saliency ? Math.min(1.0, saliency[i] * signalMultipliers.saliency) : 0;
+    const peakSig = Math.max(detailSig, varianceSig, salSig * signalMultipliers.peakSaliency);
+    const structuralPresence = Math.min(
+      1.0,
+      peakSig * compositionWeights.peak +
+        detailSig * compositionWeights.detail +
+        varianceSig * compositionWeights.variance +
+        salSig * compositionWeights.saliency,
+    );
+    rawOccupancy[i] = structuralPresence < rawGate ? 0 : structuralPresence;
+  }
+
+  // 3. Spatial Coherence (3x3 kernel diffusion to bridge solid interior regions flanked by edges)
+  const occupancy = new Float32Array(cols * rows);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = y * cols + x;
+      const center = rawOccupancy[idx];
+      let neighborMax = 0;
+      let neighborSum = 0;
+      let neighborCount = 0;
+
+      const neighbors = [
+        x > 0 ? idx - 1 : -1,
+        x + 1 < cols ? idx + 1 : -1,
+        y > 0 ? idx - cols : -1,
+        y + 1 < rows ? idx + cols : -1,
+      ];
+
+      for (const n of neighbors) {
+        if (n >= 0) {
+          const val = rawOccupancy[n];
+          if (val > neighborMax) neighborMax = val;
+          neighborSum += val;
+          neighborCount++;
+        }
+      }
+
+      // If neighbors have strong structural edges, solid interior tiles between them inherit continuous occupancy
+      const inherited = center > 0
+        ? (center < diffusion.interiorInheritanceCenterThreshold && neighborMax > diffusion.interiorInheritanceNeighborMaxThreshold
+            ? center * diffusion.interiorCenterWeight + neighborMax * diffusion.interiorNeighborMaxWeight
+            : center)
+        : (neighborSum / Math.max(1, neighborCount) > diffusion.enclosedNeighborMeanThreshold
+            ? (neighborSum / neighborCount) * diffusion.enclosedInheritanceWeight
+            : 0);
+      const smoothed = center > 0
+        ? inherited * diffusion.smoothedCenterWeight + (neighborCount > 0 ? (neighborSum / neighborCount) * diffusion.smoothedNeighborMeanWeight : 0)
+        : inherited;
+      occupancy[idx] = Number(Math.min(1.0, Math.max(0.0, smoothed < noiseFloor ? 0 : smoothed)).toFixed(4));
+    }
+  }
+
+  return occupancy;
+}
+
+/**
  * Proposes type regions by scoring a lattice of candidates. Every candidate is a
  * band or block a designer would actually consider — full-width strips,
  * half-width columns, tall side panels — rather than arbitrary boxes, because a
@@ -276,6 +469,7 @@ function proposeQuietRects(
   subjectBox: FieldRect,
   busynessAt: (rect: FieldRect) => number,
   toneAt: (rect: FieldRect) => ToneReading,
+  occupancyAt?: (rect: FieldRect) => number,
 ): QuietRect[] {
   const spans: Array<{ width: number; height: number }> = [
     { width: 1, height: 0.22 },
@@ -285,7 +479,6 @@ function proposeQuietRects(
     { width: 0.44, height: 0.6 },
     { width: 0.86, height: 0.18 },
   ];
-  const subjectArea = subjectBox.width * subjectBox.height;
   const candidates: QuietRect[] = [];
 
   for (const span of spans) {
@@ -295,11 +488,15 @@ function proposeQuietRects(
       for (const y of ySteps) {
         const rect: FieldRect = { x, y, width: span.width, height: span.height };
         const tone = toneAt(rect);
-        const occlusion = subjectArea > 0 ? intersectionArea(rect, subjectBox) / subjectArea : 0;
+        const occ = occupancyAt
+          ? occupancyAt(rect)
+          : subjectBox.width * subjectBox.height > 0
+          ? intersectionArea(rect, subjectBox) / (subjectBox.width * subjectBox.height)
+          : 0;
         // Evenness counts as much as calm: type reads on a flat dark field and
         // fails on a field that is half bright, even when both are "quiet".
         const quietness = Math.max(0, 1 - busynessAt(rect)) * (1 - Math.min(1, tone.stdDev * 1.6));
-        candidates.push({ ...rect, quietness: quietness - occlusion * 0.75, tone });
+        candidates.push({ ...rect, quietness: quietness - occ * 0.75, tone });
       }
     }
   }
@@ -330,13 +527,28 @@ export async function analyzeImageField(png: Buffer): Promise<ImageField> {
   }
 
   const energy = detailEnergy(luminance, COLS, ROWS);
+  const saliency = computeSaliency(luminance, energy, COLS, ROWS);
+  const occupancy = computeSpatialOccupancyField(luminance, energy, COLS, ROWS, saliency);
   const lumSum = new SummedArea(luminance, COLS, ROWS);
   const sqSum = new SummedArea(Float32Array.from(luminance, (v) => v * v), COLS, ROWS);
   const energySum = new SummedArea(energy, COLS, ROWS);
+  const occupancySum = new SummedArea(occupancy, COLS, ROWS);
+
+  const totalOccupancyMass = occupancySum.sum(0, 0, COLS, ROWS) / (COLS * ROWS);
 
   const busynessAt = (rect: FieldRect): number => {
     const { x0, y0, x1, y1, tiles } = tileRange(rect, COLS, ROWS);
     return energySum.sum(x0, y0, x1, y1) / tiles;
+  };
+
+  const occupancyAt = (rect: FieldRect): number => {
+    const { x0, y0, x1, y1, tiles } = tileRange(rect, COLS, ROWS);
+    return occupancySum.sum(x0, y0, x1, y1) / tiles;
+  };
+
+  const occupancyMass = (rect: FieldRect): number => {
+    const { x0, y0, x1, y1 } = tileRange(rect, COLS, ROWS);
+    return occupancySum.sum(x0, y0, x1, y1) / (COLS * ROWS);
   };
 
   const toneAt = (rect: FieldRect): ToneReading => {
@@ -348,16 +560,14 @@ export async function analyzeImageField(png: Buffer): Promise<ImageField> {
     return { meanLuminance: mean, stdDev, verdict };
   };
 
-  const saliency = computeSaliency(luminance, energy, COLS, ROWS);
   const subjectBox = findSubjectBox(saliency, COLS, ROWS);
-  const subjectArea = subjectBox.width * subjectBox.height;
 
   let weighted = 0;
   let cx = 0;
   let cy = 0;
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
-      const s = saliency[y * COLS + x];
+      const s = occupancy[y * COLS + x];
       weighted += s;
       cx += (s * (x + 0.5)) / COLS;
       cy += (s * (y + 0.5)) / ROWS;
@@ -366,12 +576,16 @@ export async function analyzeImageField(png: Buffer): Promise<ImageField> {
   const focalCentroid = weighted > 0 ? { x: cx / weighted, y: cy / weighted } : { x: 0.5, y: 0.5 };
 
   return {
-    grid: { cols: COLS, rows: ROWS, luminance, energy },
+    grid: { cols: COLS, rows: ROWS, luminance, energy, occupancy },
+    occupancyGrid: occupancy,
     subjectBox,
     focalCentroid,
-    quietRects: proposeQuietRects(subjectBox, busynessAt, toneAt),
+    quietRects: proposeQuietRects(subjectBox, busynessAt, toneAt, occupancyAt),
     toneAt,
+    occupancyAt,
+    occupancyMass,
+    totalOccupancyMass,
     busynessAt,
-    occlusionOf: (rect) => (subjectArea > 0 ? intersectionArea(rect, subjectBox) / subjectArea : 0),
+    occlusionOf: (rect) => (totalOccupancyMass > 0 ? occupancyMass(rect) / totalOccupancyMass : 0),
   };
 }

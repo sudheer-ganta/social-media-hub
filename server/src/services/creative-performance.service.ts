@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma';
 import type { CreativeScope } from '../repositories/creative-attribution.repository';
+import { withDbRetry } from '../utils/db-resilience';
 
 export type EvidenceStrength = 'insufficient' | 'emerging' | 'strong';
 export interface CreativePerformanceEvidence {
@@ -34,10 +35,13 @@ function exposure(snapshot: any) { return snapshot?.reach ?? snapshot?.impressio
 
 export async function performanceEvidence(scope: CreativeScope): Promise<CreativePerformanceEvidence[]> {
   if (!(prisma as any).postCreativeAsset?.findMany) return [];
-  const rows = await prisma.postCreativeAsset.findMany({
-    where: { ownerId: scope.userId, contextType: scope.contextType, brandId: scope.contextType === 'brand' ? (scope.brandId ?? null) : null, finalPublished: true },
-    include: { generatedAsset: true, post: { include: { post_platforms: { where: { status: 'PUBLISHED', publishedId: { not: null } }, include: { metricSnapshots: { take: 1, orderBy: { capturedAt: 'desc' } } } } } } },
-  });
+  const rows = await withDbRetry(
+    () => prisma.postCreativeAsset.findMany({
+      where: { ownerId: scope.userId, contextType: scope.contextType, brandId: scope.contextType === 'brand' ? (scope.brandId ?? null) : null, finalPublished: true },
+      include: { generatedAsset: true, post: { include: { post_platforms: { where: { status: 'PUBLISHED', publishedId: { not: null } }, include: { metricSnapshots: { take: 1, orderBy: { capturedAt: 'desc' } } } } } } },
+    }),
+    { label: 'performanceEvidence' },
+  );
   const groups = new Map<string, Array<{ rate: number; weight: number }>>();
   for (const row of rows) for (const publication of row.post.post_platforms) {
     const snapshot = publication.metricSnapshots[0];

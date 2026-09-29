@@ -36,6 +36,8 @@ function asString(value: unknown, max = 400): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+import { isStructuredArtifact, isInternalMetadata } from '../intent/copy-sanitizer';
+
 const TECHNICAL_META_ARTIFACTS =
   /(?:target depth setup|output string built|ready to deliver|setup finished|internal note|json output|system instruction|prompt artifact|here is the (?:headline|copy|text)|as requested by|the member requested|depth setup finished)/i;
 
@@ -44,7 +46,15 @@ const LAYOUT_DIRECTION_LEAKS =
 
 export function sanitizeCopy(text: string): string {
   const trimmed = text.trim();
-  if (!trimmed || TECHNICAL_META_ARTIFACTS.test(trimmed) || LAYOUT_DIRECTION_LEAKS.test(trimmed)) return '';
+  if (
+    !trimmed ||
+    isStructuredArtifact(trimmed) ||
+    isInternalMetadata(trimmed) ||
+    TECHNICAL_META_ARTIFACTS.test(trimmed) ||
+    LAYOUT_DIRECTION_LEAKS.test(trimmed)
+  ) {
+    return '';
+  }
   return trimmed;
 }
 

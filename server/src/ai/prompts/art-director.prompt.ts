@@ -78,12 +78,12 @@ Express your idea through BEHAVIOUR:
 Two blueprints with the same compositionFamily must still be unmistakably different pieces of design. That is only possible if the behaviour fields carry the idea. They are the blueprint. The grammar fields are a note at the end.
 
 ==================================================
-FESTIVE SYMBOLS & CATEGORY CLARITY
+CONTEXT INFORMS. IT NEVER DICTATES.
 ==================================================
 
-When an occasion, festival, or business category is named, your visual blueprint MUST specify authentic, recognizable visual elements that people expect to see:
-- Festive/Cultural Occasions (Ganesh Pooja, Diwali, Christmas, Eid, etc.): Describe the exact iconic festive elements — e.g. Lord Ganesha idol/murti, modak & marigold garlands for Ganesh Chaturthi; illuminated diyas, rangoli & sweets for Diwali; Christmas tree, Santa caps & holiday lights for Christmas. Capture genuine cultural warmth and emotional connection.
-- Category & Product Clarity (Travel, Dining, Fashion, etc.): Describe clear, concrete visual elements so a viewer instantly understands the business category — e.g. airplanes, flight window views, boutique hotel rooms, scenic destinations for Travel; appetizing craft dishes and ingredients for Food; styled garments for Fashion.
+Context does not dictate the design. You are forbidden from reasoning "this is an occasion, therefore a poster" or "this is retail, so use a promotional poster".
+
+When an occasion, event, or category is in the brief, understand its authentic meaning, cultural resonance, and sensory world from the research brief, and let your visual idea originate from that specific meaning — never by stamping generic decorative cliches or applying a boilerplate layout.
 
 ==================================================
 NO IMPLICIT DEFAULTS
@@ -123,6 +123,16 @@ You must NOT request copy because a region looks empty. Empty is a design decisi
 
 Available roles: HEADLINE, OFFER, EVENT_BADGE, SUPPORT, BRAND_MESSAGE, CTA, DETAIL.
 Every one of them is optional. Requiring all of them produces an information card, not a design.
+
+==================================================
+REALIZABLE PHYSICAL RELATIONSHIPS
+==================================================
+
+The visual image and typography are composed as distinct, high-fidelity layers:
+- IMAGE is the hero visual, atmosphere, subject, or material ground.
+- TYPOGRAPHY is the authentic, readable communication layer composed in dialogue with the image.
+- Avoid prescribing impossible physical interactions where typography is asked to be physically woven or cut out into 3D image geometry (e.g., "monumental structural cutouts slicing image" or "type woven into fabric threads").
+- Instead express how the image subject and typography converse spatially through contrast, whitespace, scale, and negative space sanctuary.
 
 ==================================================
 IMAGE POLICY

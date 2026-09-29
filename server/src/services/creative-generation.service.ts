@@ -20,6 +20,7 @@ import { generateCreativeIntent, normaliseIntent } from '../ai/generators/creati
 import { generateCreativeResearch } from '../ai/generators/creative-research.generator';
 import { generateReferenceStyleProfile } from '../ai/generators/reference-style.generator';
 import { detectMarketingStrategy } from '../ai/strategy/marketing-strategy-detector';
+import { analyzeConceptPoolDivergence, buildConceptIdentity } from '../ai/strategy/creative-differentiation';
 import { normaliseDesignRecipe } from '../ai/render/design-recipe';
 import { designCreative } from '../ai/render/designer-composition';
 import {
@@ -490,9 +491,9 @@ function effectiveStyleProfile(referenceStyle: ReferenceStyleProfile | undefined
  * so the gate sits exactly where pixels start being made.
  */
 function assertBrandLogo(request: CreativeGenerationRequest) {
-  // If logoAssetUrl is provided, it will be rendered. If not provided, the designer layout gracefully renders the headline & brand typography.
-  if (request.contextType === 'personal' || request.creativeDna?.logoAssetUrl || request.brandVoice?.name) return;
-  // Non-blocking fallback
+  if (request.contextType === 'brand' && !request.creativeDna?.logoAssetUrl) {
+    throw new CreativeError('Add your logo to create a creative.', 422);
+  }
 }
 
 /**
@@ -854,6 +855,7 @@ interface RunGenerationOptions {
   intent?: CreativeIntentBrief;
   canonicalBrief?: CreativeBrief;
   graphicConcept?: GraphicDesignConcept;
+  fallbackConcepts?: GraphicDesignConcept[];
   /**
    * False for a campaign variation, which is already a finished creative of
    * its own and would only be re-designed into a near-duplicate.
@@ -893,6 +895,7 @@ async function runGeneration({
   intent,
   canonicalBrief: providedBrief,
   graphicConcept: providedConcept,
+  fallbackConcepts,
   creativeStrategy,
   variationLabel,
   campaignId,
@@ -953,29 +956,17 @@ async function runGeneration({
       mode,
       artDirectionFamily,
       research,
-      // The selected style is now its own mandatory section (selectedStyle),
-      // never folded into referenceStyle — referenceStyle here is whatever
-      // the caller already resolved as genuine reference-image inspiration
-      // (optionally intelligence-enriched), so it stays honest about what it
-      // actually is (see effectiveStyleProfile's callers above `generate`).
       selectedStyle: styleDna?.style,
       referenceStyle,
       intent,
       brand,
       creativeDna,
-      // Copy synthesis executes the blueprint rather than running beside it.
-      // Without this the copy stage never saw the design, so it authored a
-      // full marketing kit — headline, support, brand message, details, CTA —
-      // and the composition stage then had to find somewhere to put all of it.
       graphicConcept,
       ...(creativeStrategy && { creativeStrategy }),
     }),
   );
   if (metrics) metrics.textCalls += directionMeta.attempts ?? 1;
 
-  // Everything a later refinement needs to re-execute this creative as it was
-  // actually made — brand, visual identity, the analysed design language and
-  // the member's own requirements. See CreativeRenderContext.
   const renderContext: CreativeRenderContext = {
     brand,
     creativeDna,
@@ -1016,14 +1007,11 @@ async function runGeneration({
     logoAssetUrl: creativeDna.logoAssetUrl || undefined,
     variationLabel,
     creativeDna,
-    // The renderer now takes styleDna directly (see design-recipe.ts /
-    // Phase 4) and only falls back to referenceStyle.designRecipe when no
-    // style resolved — passing the real referenceStyle through unwrapped
-    // keeps that fallback honest instead of re-conflating it with styleDna.
     referenceStyle,
     styleDna,
     canonicalBrief,
     graphicConcept,
+    fallbackConcepts,
     renderContext,
     requestId,
     metrics,
@@ -1049,6 +1037,7 @@ interface FinishGenerationOptions {
   styleDna?: ResolvedStyleDNA;
   canonicalBrief?: CreativeBrief;
   graphicConcept?: GraphicDesignConcept;
+  fallbackConcepts?: GraphicDesignConcept[];
   /** Persisted on the row so a later refinement re-executes this creative faithfully. */
   renderContext?: CreativeRenderContext;
   /** Correlation id from the HTTP layer — ties every stage log to one request. */
@@ -1061,7 +1050,7 @@ interface FinishGenerationOptions {
 /** Compose original assets and exact copy, verify the finished pixels, then persist. */
 async function finishGeneration({
   userId, asset, direction, imageProvider, referenceUrls, styleReferenceUrls = [], priorVisualUrl,
-  logoAssetUrl, creativeDna, referenceStyle, styleDna, canonicalBrief, graphicConcept, renderContext, requestId, metrics, canonicalConceptId,
+  logoAssetUrl, creativeDna, referenceStyle, styleDna, canonicalBrief, graphicConcept, fallbackConcepts, renderContext, requestId, metrics, canonicalConceptId,
 }: FinishGenerationOptions): Promise<StoredGeneratedAsset> {
   let designVerified = false;
   try {
@@ -1075,6 +1064,9 @@ async function finishGeneration({
     }
     if (references.failures.length || references.images.length !== styleReferenceUrls.length) {
       throw new CreativeError('Your style references could not all be read. Re-upload the missing references.', 422);
+    }
+    if (logoAssetUrl && (logos.failures.length || !logos.images.length)) {
+      throw new CreativeError('The brand logo could not be read. Re-upload the logo.', 422);
     }
     if (!renderContext) throw new CreativeError('The campaign context is missing. Start a new creative.', 422);
 
@@ -1092,7 +1084,7 @@ async function finishGeneration({
 
     const result = await timed(metrics, 'render', () => designCreative({
       direction, context: { ...renderContext, creativeDna, referenceStyle }, styleDna,
-      canonicalBrief, graphicConcept,
+      canonicalBrief, graphicConcept, fallbackConcepts,
       products: products.images, references: references.images, logo: logoAsset, priorVisual: previous.images[0],
       textProvider: providerForRole('creative'), imageProvider,
       onCall: kind => { if (metrics) { if (kind === 'text') metrics.textCalls += 1; else metrics.imageCalls += 1; } },
@@ -1316,6 +1308,25 @@ export const creativeGenerationService = {
       recentSignatures,
       referenceStyle: effectiveStyleProfile(referenceStyle, styleDna, designContext.brandIntelligence, designContext.performanceEvidence),
       intent,
+    });
+
+    // Multi-concept differentiation analysis & convergence detection
+    const divergence = analyzeConceptPoolDivergence(outcome.concepts, buildCanonicalCreativeBrief({
+      userPrompt: request.prompt,
+      goal: request.goal,
+      funnelStage: request.funnelStage,
+      brand,
+      creativeDna,
+      styleDna,
+      referenceStyle,
+      intent,
+    }));
+
+    console.info('[creative-differentiation] concept-pool-analyzed', {
+      conceptCount: outcome.concepts.length,
+      overallDiversityScore: divergence.overallDiversityScore,
+      hasConvergence: divergence.hasConvergence,
+      warnings: divergence.pairReports.flatMap((p) => p.report.convergenceWarnings),
     });
 
     // The brief travels back to the browser so `/generate` validates against

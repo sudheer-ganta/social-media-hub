@@ -450,11 +450,11 @@ describe('Architectural Composition Pipeline Verification', () => {
       })
     ).rejects.toThrow('after two attempts');
 
-    // Exactly 2 creative attempts were performed
-    // Attempt 1: font pairing + plan + critic + new art director = 4 calls
-    // Attempt 2: plan + critic = 2 calls
-    // Total JSON calls = 6
-    expect(generateJson).toHaveBeenCalledTimes(6);
+    // Exactly 2 creative attempts were performed:
+    // Attempt 1: font pairing + critic + redesign art director = 3 calls
+    // Attempt 2: critic = 1 call
+    // Total JSON calls = 4 (composition discovery is fully autonomous, no LLM JSON plan prompt)
+    expect(generateJson).toHaveBeenCalledTimes(4);
   }, 25000);
 
   // Requirement 16: Stage timing instrumentation
@@ -462,38 +462,21 @@ describe('Architectural Composition Pipeline Verification', () => {
     const logo = await createImage('#1234ef');
     const visual = await createImage('#ef1234');
 
-    const validPlan: DesignerPlan = {
-      background: '#f5f5f0',
-      rationale: 'Valid asymmetric layout',
-      nodes: [
-        makeNode('primary-hook', 'copy', -0.04, 0.08, 0.92, 0.25, ['DESIGN FUTURES 2026'], 0.10, -1),
-        makeNode('secondary-hook', 'copy', 0.05, 0.38, 0.40, 0.10, ['FREE ENTRY'], 0.04),
-        makeNode('supporting-note', 'copy', 0.05, 0.52, 0.45, 0.15, ['Annual typography and design retrospective'], 0.03),
-        makeNode('hero-visual', 'product', 0.42, 0.25, 0.62, 0.60, []),
-        makeNode('brand-mark', 'logo', 0.05, 0.85, 0.18, 0.08),
-      ],
-    };
-
     const recordedStages: Record<string, number> = {};
 
-    const generateJson = vi.fn().mockImplementation(async (call) => {
-      if (call.responseSchema && call.responseSchema.required?.includes('background')) {
-        return validPlan;
-      }
-      return {
-        observedSubject: 'DESIGN FUTURES 2026',
-        observedOffer: 'FREE ENTRY',
-        observedHero: 'typography',
-        firstRead: 'DESIGN FUTURES 2026',
-        templateLook: false,
-        aiLook: false,
-        humanCraft: true,
-        visualTension: true,
-        typographyAsDesign: true,
-        logoClear: true,
-        problems: [],
-        strengths: ['Dynamic balance', 'High impact type'],
-      };
+    const generateJson = vi.fn().mockResolvedValue({
+      observedSubject: 'DESIGN FUTURES 2026',
+      observedOffer: 'FREE ENTRY',
+      observedHero: 'typography',
+      firstRead: 'DESIGN FUTURES 2026',
+      templateLook: false,
+      aiLook: false,
+      humanCraft: true,
+      visualTension: true,
+      typographyAsDesign: true,
+      logoClear: true,
+      problems: [],
+      strengths: ['Dynamic balance', 'High impact type'],
     });
 
     const generateImage = vi.fn().mockResolvedValue([await createImage('#ababab')]);
@@ -523,8 +506,7 @@ describe('Architectural Composition Pipeline Verification', () => {
     });
 
     // Stage timings should be recorded
-    expect(recordedStages['composition']).toBeGreaterThanOrEqual(0);
-    expect(recordedStages['mechanicalRepair']).toBeGreaterThanOrEqual(0);
+    expect(recordedStages['imageAnalysis']).toBeGreaterThanOrEqual(0);
     expect(recordedStages['render']).toBeGreaterThanOrEqual(0);
     expect(recordedStages['critic']).toBeGreaterThanOrEqual(0);
   }, 20000);

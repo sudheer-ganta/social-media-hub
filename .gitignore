@@ -13,3 +13,5 @@ npm-debug.log*
 
 /generated/prisma
 server/src/generated
+out/
+*.timestamp-*.mjs

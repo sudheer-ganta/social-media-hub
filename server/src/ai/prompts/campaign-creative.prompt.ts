@@ -8,6 +8,7 @@ import type {
   ResolvedCreativeDna,
 } from '../types';
 import { describePaletteColor } from '../render/palette-words';
+import { isStructuredArtifact, isInternalMetadata } from '../intent/copy-sanitizer';
 
 /**
  * Stage B — the campaign design pass.
@@ -45,27 +46,6 @@ export interface CampaignCopyLine {
   text: string;
 }
 
-/**
- * The exact words this creative carries, in reading order. Never re-authored
- * here — and, since the copy plan landed, never PADDED here either.
- *
- * The version this replaced emitted every role the direction happened to fill:
- * headline, offer, a supporting line, an event badge, a brand message, one
- * entry per secondaryInfo item, and a CTA. Seven text blocks, on every
- * creative, whether or not the idea wanted them — which is what turned
- * finished designs into information cards with a picture attached. The
- * quantity of copy was a property of the direction model's enthusiasm, not of
- * the creative idea.
- *
- * A `copyPlan` from the art director now decides. Roles it does not list are
- * dropped even when text exists for them, and `maxTextElements` is a hard
- * ceiling, so a one-line poster stays a one-line poster. Required campaign
- * facts are the only thing that can survive the trim (see keepRequiredFacts) —
- * a design may be minimal, but it may not silently lose the member's offer.
- *
- * With no plan, behaviour is unchanged: the copy stage keeps its own judgement
- * rather than inheriting a default that would be a template of its own.
- */
 const TECHNICAL_META_ARTIFACTS =
   /(?:target depth setup|output string built|ready to deliver|setup finished|internal note|json output|system instruction|prompt artifact|here is the (?:headline|copy|text)|as requested by|the member requested|depth setup finished)/i;
 
@@ -74,7 +54,15 @@ const LAYOUT_DIRECTION_LEAKS =
 
 function cleanCopyLine(text?: string): string {
   const trimmed = (text ?? '').trim();
-  if (!trimmed || TECHNICAL_META_ARTIFACTS.test(trimmed) || LAYOUT_DIRECTION_LEAKS.test(trimmed)) return '';
+  if (
+    !trimmed ||
+    isStructuredArtifact(trimmed) ||
+    isInternalMetadata(trimmed) ||
+    TECHNICAL_META_ARTIFACTS.test(trimmed) ||
+    LAYOUT_DIRECTION_LEAKS.test(trimmed)
+  ) {
+    return '';
+  }
   return trimmed;
 }
 
@@ -183,12 +171,14 @@ export function keepRequiredFacts(
 
   for (const line of all) {
     if (result.includes(line)) continue;
+    if (isStructuredArtifact(line.text) || isInternalMetadata(line.text)) continue;
     if (CARRIES_HARD_FACT.test(line.text)) {
       result.push(line);
       continue;
     }
     // A claim already carried by a surviving line needs no second copy of itself.
     const claim = requiredClaims.find((c) => {
+      if (!c || isStructuredArtifact(c) || isInternalMetadata(c)) return false;
       const needle = normalise(c);
       return needle.length > 0 && normalise(line.text).includes(needle) && !covered().includes(needle);
     });

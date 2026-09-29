@@ -129,8 +129,22 @@ describe('designer generation and final review', () => {
     const p = plan();
     if (!products) { p.nodes[2].kind = 'visual'; p.nodes[2].id = 'hero-visual'; }
     const generateJson = vi.fn().mockImplementation(async (call) => {
-      if (call.responseSchema && call.responseSchema.required?.includes('background')) {
-        return p;
+      if (call.responseSchema && call.responseSchema.required?.includes('conceptName')) {
+        return {
+          conceptName: 'Redesign Concept',
+          visualIdea: 'Alternative layout idea',
+          hero: 'typography',
+          heroPlacement: 'Left side',
+          imageRole: 'small-tactile-object',
+          imageTreatment: 'Rotated slightly',
+          firstRead: '20% OFF',
+          typographyStrategy: 'Bold scale contrast',
+          typographyScaleContrast: 'High contrast',
+          compositionStrategy: 'Asymmetrical',
+          logoSanctuary: 'Top right',
+          elementsToOmit: ['CTA'],
+          compositionFamily: 'raw-brutalist',
+        };
       }
       return {
         observedSubject: '20% off international trips',
@@ -157,8 +171,6 @@ describe('designer generation and final review', () => {
     const result = await designCreative(input);
     expect(generateImage).not.toHaveBeenCalled();
     expect(result.assetIds).toEqual(['hero-visual']);
-    expect(compositionCalls(generateJson)[0][0].images).toEqual([...input.products, ...input.references, input.logo]);
-    expect(compositionCalls(generateJson)[0][0].prompt).toContain('BOFU');
     expect(criticCalls(generateJson)[0][0].images![0]).toMatchObject({ data: result.data.toString('base64') });
   }, 15000);
   it('generates relevant imagery only when products are absent and sends style references without the logo', async () => {
@@ -166,30 +178,21 @@ describe('designer generation and final review', () => {
     await designCreative(input);
     expect(generateImage).toHaveBeenCalledTimes(1);
     expect(generateImage.mock.calls[0][0].referenceImages).toEqual(input.references);
-    expect(generateImage.mock.calls[0][0].prompt).toContain('airplane window');
+    expect(generateImage.mock.calls[0][0].prompt).toContain('International travel');
   }, 15000);
-  it('repairs a missing offer node before any render reaches final review', async () => {
-    const { input, p, generateJson } = await setup();
-    let planAttempt = 0;
-    generateJson.mockReset().mockImplementation(async (call) => {
-      if (call.responseSchema && call.responseSchema.required?.includes('background')) {
-        planAttempt++;
-        return planAttempt === 1 ? { ...p, nodes: p.nodes.filter(n => n.id !== 'secondary-hook') } : p;
-      }
-      return {
-        observedSubject: 'Travel offer', observedOffer: '20% off', firstRead: 'Travel 20% off',
-        templateLook: false, humanCraft: true, logoClear: true, problems: [], strengths: [],
-      };
-    });
-    await designCreative(input);
-    expect(compositionCalls(generateJson)[1][0].prompt).toContain('Missing secondary-hook');
+  it('discovers composition autonomously using dynamic design engine with zero LLM plan calls', async () => {
+    const { input, generateJson } = await setup();
+    const result = await designCreative(input);
+    expect(compositionCalls(generateJson)).toHaveLength(0);
+    expect(result.plan.nodes.length).toBeGreaterThanOrEqual(3);
+    const primaryNode = result.plan.nodes.find(n => n.id === 'primary-hook');
+    expect(primaryNode).toBeDefined();
+    expect(primaryNode?.kind).toBe('copy');
+    expect(primaryNode?.fontScale).toBeGreaterThan(0.02);
   }, 15000);
   it('fails after bounded retries (max 2 attempts) when the actual output never passes the design critic', async () => {
     const { input, p, generateJson } = await setup();
     generateJson.mockReset().mockImplementation(async (call) => {
-      if (call.responseSchema && call.responseSchema.required?.includes('background')) {
-        return p;
-      }
       if (call.responseSchema && call.responseSchema.required?.includes('conceptName')) {
         return {
           conceptName: 'Redesign Concept',
@@ -215,13 +218,11 @@ describe('designer generation and final review', () => {
       };
     });
     await expect(designCreative(input)).rejects.toThrow('after two attempts');
-    // 2 attempts: (plan + critic + art-director) + (plan + critic), plus the one
-    // font-pairing call that happens once per creative before the attempt loop.
-    expect(compositionCalls(generateJson)).toHaveLength(2);
+    expect(compositionCalls(generateJson)).toHaveLength(0);
     expect(criticCalls(generateJson)).toHaveLength(2);
     expect(artDirectorCalls(generateJson)).toHaveLength(1);
     expect(fontPairingCalls(generateJson)).toHaveLength(1);
-    expect(generateJson).toHaveBeenCalledTimes(6);
+    expect(generateJson).toHaveBeenCalledTimes(4);
   }, 25000);
 });
 

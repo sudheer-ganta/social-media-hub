@@ -17,15 +17,30 @@ function asString(value: unknown, max = 160): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+const FORMAT_SUFFIX_REGEX = /\s+(?:post|posts|ad|ads|flyer|flyers|banner|banners|graphic|graphics|story|stories|reel|reels|creative|creatives|image|images|template|templates)$/i;
+const FORMAT_ONLY_REGEX = /^(?:post|posts|ad|ads|flyer|flyers|banner|banners|graphic|graphics|story|stories|reel|reels|creative|creatives|image|images|template|templates|social media post)$/i;
+
+function cleanClaim(raw: unknown): string {
+  const str = asString(raw, MAX_CLAIM_LENGTH);
+  if (!str || FORMAT_ONLY_REGEX.test(str)) return '';
+  const stripped = str.replace(FORMAT_SUFFIX_REGEX, '').trim();
+  return FORMAT_ONLY_REGEX.test(stripped) ? '' : stripped;
+}
+
 function asClaims(value: unknown, maxItems: number): string[] {
   if (!Array.isArray(value)) return [];
-  return [
-    ...new Set(
-      value
-        .map((item) => asString(item, MAX_CLAIM_LENGTH))
-        .filter((item) => item.length > 0),
-    ),
-  ].slice(0, maxItems);
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of value) {
+    const cleaned = cleanClaim(item);
+    if (!cleaned) continue;
+    const lower = cleaned.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    out.push(cleaned);
+  }
+  return out.slice(0, maxItems);
 }
 
 function asConfidence(value: unknown): Record<string, number> {
@@ -54,6 +69,21 @@ export const EMPTY_INTENT: CreativeIntentBrief = {
 
 /** Bounds a model-shaped (or wire-shaped) intent payload. */
 export function normaliseIntent(payload: RawCreativeIntentPayload): CreativeIntentBrief {
+  const ev = cleanClaim(payload.event);
+  const cat = cleanClaim(payload.productCategory);
+  const off = asString(payload.offer, 80);
+  const claims = asClaims(payload.requiredClaims, 8);
+
+  const allClaims: string[] = [];
+  const seen = new Set<string>();
+  for (const c of [ev, cat, off, ...claims]) {
+    if (!c) continue;
+    const lower = c.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    allClaims.push(c);
+  }
+
   return {
     extracted: true,
     event: asString(payload.event),
@@ -63,10 +93,7 @@ export function normaliseIntent(payload: RawCreativeIntentPayload): CreativeInte
     promotionType: asString(payload.promotionType, 80),
     venueType: asString(payload.venueType, 80),
     audience: asString(payload.audience),
-    requiredClaims: [...new Set([
-      ...asClaims(payload.requiredClaims, 8),
-      asString(payload.event), asString(payload.productCategory), asString(payload.offer, 80),
-    ].filter(Boolean))],
+    requiredClaims: allClaims,
     optionalDetails: asClaims(payload.optionalDetails, 6),
     confidence: asConfidence(payload.confidence),
   };

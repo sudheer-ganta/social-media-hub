@@ -22,10 +22,75 @@ import { evaluateRenderedDesign } from '../generators/design-critic.generator';
 import { generateGraphicDesignConcept } from '../generators/art-director.generator';
 import { compareGraphicConcepts, redesignDivergenceInstruction } from '../strategy/concept-similarity';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
+import { buildCreativeRealizationContract } from '../intent/creative-realization-contract';
+import {
+  evaluateCreativeIntentFidelity,
+  buildTargetedRegenerationPrompt,
+  assertCreativeIntentFidelityPassed,
+  CreativeRealizationAssertionError,
+  type CreativeIntentFidelityResult,
+} from '../intent/creative-intent-fidelity-gate';
+import { createCanvasRepresentation, createBrandDesignRepresentation, createDesignField, type DesignField } from './design-representation';
+import { discoverOptimizedComposition, assertCompositionStateValid, type OptimizedCompositionState } from './composition-evaluation';
+import {
+  sanitizeAndFilterCopy,
+  validateAndBuildRenderableCopy,
+  isStructuredArtifact,
+  type RenderableCopy,
+} from '../intent/copy-sanitizer';
+import { validateStyleBriefConsistency } from '../intent/style-brief-consistency';
+import { classifyCriticFailure, type CompositionRecoveryContext } from './critic-recovery';
+
+export class InvalidRenderableCopyError extends Error {
+  constructor(message: string, readonly invalidContent: string) {
+    super(message);
+    this.name = 'InvalidRenderableCopyError';
+  }
+}
+
+/**
+ * Renderer Fail-Closed Safety Invariant.
+ * Asserts that all nodes and copy strings are free of structured code/JSON artifacts before rendering.
+ */
+export function assertRenderableCopy(
+  plan: DesignerPlan | DesignNode[] | any,
+  copy?: CampaignCopyLine[] | RenderableCopy[],
+): void {
+  const nodes = Array.isArray(plan) ? plan : Array.isArray(plan?.nodes) ? plan.nodes : [];
+  for (const n of nodes) {
+    if (n && n.kind === 'copy' && Array.isArray(n.lines)) {
+      for (const line of n.lines) {
+        if (typeof line === 'string' && isStructuredArtifact(line)) {
+          throw new InvalidRenderableCopyError(
+            `Renderer invariant violation: structured artifact detected in node ${n.id}: "${line.slice(0, 60)}"`,
+            line,
+          );
+        }
+      }
+    }
+  }
+  if (Array.isArray(copy)) {
+    for (const c of copy) {
+      if (c && typeof c.text === 'string' && isStructuredArtifact(c.text)) {
+        throw new InvalidRenderableCopyError(
+          `Renderer invariant violation: structured artifact detected in copy item: "${c.text.slice(0, 60)}"`,
+          c.text,
+        );
+      }
+    }
+  }
+}
 
 export interface SemanticCopyItem extends CampaignCopyLine {
   id: string;
   semanticRole: 'primary-hook' | 'secondary-hook' | 'supporting-note';
+}
+
+export class TypographyHandoffError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TypographyHandoffError';
+  }
 }
 
 /** A plan contains content IDs, never model-authored replacement copy or asset URLs. */
@@ -42,6 +107,11 @@ export interface DesignNode extends DesignBox {
   rotation?: number;
   zIndex?: number;
   opacity?: number;
+  fontFamily?: string;
+  fontWeight?: number;
+  tracking?: number;
+  letterSpacing?: number;
+  lineHeight?: number;
   /**
    * A legibility wash behind this copy only, computed by render/text-placement.ts
    * from the measured backdrop. Deliberately NOT in DESIGNER_PLAN_SCHEMA: the
@@ -71,6 +141,7 @@ export interface DesignerInput {
   imageProvider: AiImageProvider;
   onCall?: (kind: 'text' | 'image') => void;
   onStageTiming?: (stage: string, durationMs: number) => void;
+  fallbackConcepts?: GraphicDesignConcept[];
   /** Research from the brand+occasion+style grounded search — used for AI font selection and vision composition. */
   research?: CreativeResearch;
 }
@@ -188,7 +259,7 @@ function contrast(a: string, b: string): number {
 /** Assign semantic IDs to campaign copy lines. */
 export function buildSemanticCopyList(copy: CampaignCopyLine[]): SemanticCopyItem[] {
   let hasHeadline = false;
-  let hasOffer = false;
+  let hasSecondary = false;
   let supportingCount = 0;
 
   return copy.map((c, index) => {
@@ -196,8 +267,8 @@ export function buildSemanticCopyList(copy: CampaignCopyLine[]): SemanticCopyIte
       hasHeadline = true;
       return { ...c, id: 'primary-hook', semanticRole: 'primary-hook' };
     }
-    if (c.role === 'OFFER' && !hasOffer) {
-      hasOffer = true;
+    if (!hasSecondary) {
+      hasSecondary = true;
       return { ...c, id: 'secondary-hook', semanticRole: 'secondary-hook' };
     }
     const id = supportingCount === 0 && copy.length <= 3 ? 'supporting-note' : `supporting-note-${supportingCount}`;
@@ -216,7 +287,8 @@ export function resolveCopyLine(nodeId: string, semanticCopy: SemanticCopyItem[]
     if (rawCopy[idx]) return { ...rawCopy[idx], id: nodeId, semanticRole: idx === 0 ? 'primary-hook' : 'supporting-note' };
   }
   if (nodeId === 'primary-hook' && semanticCopy[0]) return semanticCopy[0];
-  if (nodeId === 'secondary-hook') return semanticCopy.find(c => c.semanticRole === 'secondary-hook') || semanticCopy[1];
+  if (nodeId === 'secondary-hook') return semanticCopy.find(c => c.semanticRole === 'secondary-hook' || c.role === 'SUPPORT') || semanticCopy[1];
+  if (nodeId === 'cta') return semanticCopy.find(c => c.id === 'cta' || c.role === 'OFFER' || c.role === 'CTA' || c.semanticRole === 'supporting-note') || semanticCopy[2] || semanticCopy[1];
   if (nodeId === 'supporting-note') return semanticCopy.find(c => c.semanticRole === 'supporting-note') || semanticCopy.find(c => c.id.startsWith('supporting-note')) || semanticCopy[2];
   return undefined;
 }
@@ -237,8 +309,10 @@ export function resolveLogoNegativeSpacePosition(
   // overriding a design decision it was never asked to review.
   const lw = Math.max(0.06, Math.min(0.4, logoNode.width || 0.18));
   const lh = Math.max(0.025, Math.min(0.2, logoNode.height || 0.055));
-
-  const allObstacles = plan.nodes.filter(n => n && n !== logoNode && (n.kind !== 'shape' || (n.surface && n.surface !== 'none')));
+  const isFullBleedVisual = (n: DesignNode) => n.kind === 'visual' && n.width >= 0.85 && n.height >= 0.85;
+  const allObstacles = plan.nodes.filter(
+    n => n && n !== logoNode && (!isFullBleedVisual(n)) && (n.kind !== 'shape' || (n.surface && n.surface !== 'none'))
+  );
 
   const margin = 0.04;
   // Named regions the art director can ask for by name, PLUS a scan of the
@@ -508,61 +582,109 @@ export function fittedCopySvg(
   h: number,
   typeSystem?: TypeSystem,
 ): string {
-  const display = ['HEADLINE', 'OFFER'].includes(copy.role) || n.id === 'primary-hook' || n.id === 'secondary-hook';
+  // Authoritative Dynamic Design Engine (DDE) Typography Handoff
+  const hasExplicitTypography = Boolean(n.fontFamily && n.fontWeight !== undefined);
+
+  if (hasExplicitTypography) {
+    // ── PATH A: Pure Authoritative Execution (DDE BestState) ──
+    const family = n.fontFamily!;
+    const weight = n.fontWeight!;
+    const size = Math.min(w, h) * n.fontScale;
+    const lineSpacing = n.lineHeight ?? 1.15;
+    const trackingVal = n.tracking ?? n.letterSpacing ?? 0;
+    const tracking = trackingVal !== 0 ? ` letter-spacing="${(trackingVal * size).toFixed(2)}"` : '';
+    const linesToRender = Array.isArray(n.lines) && n.lines.length > 0 ? [...n.lines] : [copy.text];
+
+    const registeredFaces = [...(typography?.facesUsed || [])];
+    if (!registeredFaces.some(f => f.family === family && f.weight === weight)) {
+      registeredFaces.push({ family, weight, style: 'normal' });
+    }
+    const fontFiles = registeredFaces.map(f => fontFilePath(f.family, f.weight, f.style));
+
+    const anchor = n.align === 'center' ? 'middle' : n.align === 'right' ? 'end' : 'start';
+    const text = `<g font-family="${esc(family)}" font-weight="${weight}" font-size="${size}"${tracking} fill="${n.color}" text-anchor="${anchor}">` +
+      linesToRender.map((l, i) => `<text x="0" y="${size + i * size * lineSpacing}">${esc(l)}</text>`).join('') + '</g>';
+
+    const measure = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${text}</svg>`, {
+      font: { fontFiles, loadSystemFonts: false }
+    });
+    const b = measure.getBBox();
+    if (!b || b.width <= 0 || b.height <= 0) {
+      throw new TypographyHandoffError(`Resvg could not measure bounding box for node "${n.id}" (${copy.text})`);
+    }
+
+    // Fail closed on true geometry mismatch — DDE nodes must fit within their discovered footprint
+    const overflowTolerancePx = 24;
+    if (b.width > n.width * w + overflowTolerancePx || b.height > n.height * h + overflowTolerancePx) {
+      throw new TypographyHandoffError(
+        `DDE Geometry Mismatch: Node "${n.id}" (${copy.text}) exceeded bounds [w:${(n.width * w).toFixed(1)}px, h:${(n.height * h).toFixed(1)}px] with rendered [w:${b.width.toFixed(1)}px, h:${b.height.toFixed(1)}px].`
+      );
+    }
+
+    const extraX = Math.max(0, n.width * w - b.width);
+    const extraY = Math.max(0, n.height * h - b.height);
+    let x = n.x * w - b.x + (n.align === 'center' ? extraX / 2 : n.align === 'right' ? extraX : 0);
+    let y = n.y * h - b.y + (extraY > 0 ? extraY / 2 : 0);
+
+    x = Math.max(-b.x, Math.min(w - b.width - b.x, x));
+    y = Math.max(-b.y, Math.min(h - b.height - b.y, y));
+
+    const rot = n.rotation ? ` rotate(${n.rotation} ${b.x + b.width / 2} ${b.y + b.height / 2})` : '';
+    return `<g transform="translate(${x} ${y})${rot}">${text}</g>`;
+  }
+
+  // ── PATH B: Legacy Non-DDE / Mock Plan Fallback ──
+  const isHeadline = copy.role === 'HEADLINE' || n.id === 'primary-hook';
+  const isScriptHeadline = ['Caveat', 'Dancing Script', 'Pacifico', 'Satisfy', 'Great Vibes'].includes(typography.headlineFont) ||
+    typography.headlineFont.toLowerCase().includes('script') || typography.headlineFont.toLowerCase().includes('hand');
+  const family = (isScriptHeadline ? isHeadline : (isHeadline || copy.role === 'OFFER')) ? typography.headlineFont : typography.bodyFont;
+  const weight = isHeadline ? typography.headlineWeight : typography.bodyWeight;
+
   const step = typeSystem
     ? typeSystem.steps[n.id === 'primary-hook' ? 'primary-hook' : n.id === 'secondary-hook' ? 'secondary-hook' : 'supporting-note']
     : undefined;
-  const family = display ? typography.headlineFont : typography.bodyFont;
-  const weight = display ? typography.headlineWeight : typography.bodyWeight;
+
   const fontFiles = typography.facesUsed.map(f => fontFilePath(f.family, f.weight, f.style));
   const minFloor = Math.max(12, Math.min(w, h) * 0.008);
   let size = Math.min(w, h) * n.fontScale;
   const caseTransform: CaseHint = step?.caseTransform ?? 'none';
-  let linesToRender = (Array.isArray(n.lines) && n.lines.length > 1
+  const linesToRender = (Array.isArray(n.lines) && n.lines.length > 0
     ? [...n.lines]
-    : (copy.text.length > 26 ? splitTextIntoBalancedLines(copy.text, display ? 24 : 32) : [copy.text])
+    : [copy.text]
   ).map((line) => applyCase(line, caseTransform));
-
-  let bestFitResult: string | null = null;
 
   for (let attempt = 0; attempt < 35 && size >= minFloor; attempt++, size *= 0.90) {
     const anchor = n.align === 'center' ? 'middle' : n.align === 'right' ? 'end' : 'start';
-    const lineSpacing = step?.lineHeight ?? (display ? 1.15 : 1.25);
-    // Tracking is a fraction of the size, so it stays proportional through every
-    // shrink-to-fit iteration below.
+    const lineSpacing = step?.lineHeight ?? (isHeadline ? 1.15 : 1.25);
     const tracking = step ? ` letter-spacing="${(step.letterSpacing * size).toFixed(2)}"` : '';
     const text = `<g font-family="${esc(family)}" font-weight="${weight}" font-size="${size}"${tracking} fill="${n.color}" text-anchor="${anchor}">` +
       linesToRender.map((l, i) => `<text x="0" y="${size + i * size * lineSpacing}">${esc(l)}</text>`).join('') + '</g>';
-    const measure = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${text}</svg>`, { font: { fontFiles, loadSystemFonts: false } });
+
+    const measure = new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${text}</svg>`, {
+      font: { fontFiles, loadSystemFonts: false }
+    });
     const b = measure.getBBox();
-    const pad = 4;
     if (!b || b.width <= 0 || b.height <= 0) break;
 
-    // Track best fit even if slightly oversized as a safety fallback
+    const pad = 4;
     const extraX = n.width * w - b.width - 2 * pad;
     const extraY = n.height * h - b.height - 2 * pad;
     let x = n.x * w + pad - b.x + (n.align === 'center' ? extraX / 2 : n.align === 'right' ? extraX : 0);
     let y = n.y * h + pad - b.y + (extraY > 0 ? extraY / 2 : 0);
 
-    const minMargin = 20;
+    const minMargin = Math.max(48, Math.round(Math.min(w, h) * 0.04));
     x = Math.max(minMargin - b.x, Math.min(w - b.width - minMargin - b.x, x));
     y = Math.max(minMargin - b.y, Math.min(h - b.height - minMargin - b.y, y));
     const rot = n.rotation ? ` rotate(${n.rotation} ${b.x + b.width / 2} ${b.y + b.height / 2})` : '';
-    bestFitResult = `<g transform="translate(${x} ${y})${rot}">${text}</g>`;
 
     if (b.width + 2 * pad > n.width * w || b.height + 2 * pad > n.height * h) {
-      if (attempt > 2 && linesToRender.some(l => l.length > 18 && l.includes(' '))) {
-        const fullText = linesToRender.join(' ');
-        const targetLen = Math.max(16, Math.floor(fullText.length / (linesToRender.length + 1)));
-        linesToRender = splitTextIntoBalancedLines(fullText, targetLen).map((line) => applyCase(line, caseTransform));
-      }
       continue;
     }
 
-    return bestFitResult;
+    return `<g transform="translate(${x} ${y})${rot}">${text}</g>`;
   }
 
-  throw new Error(`Could not fit "${copy.text}" for ${n.id} into readable bounding box.`);
+  throw new TypographyHandoffError(`Could not fit "${copy.text}" for ${n.id} into allocated bounding box.`);
 }
 
 /**
@@ -942,10 +1064,21 @@ export async function renderDesignerPlan(
     return scrim + surface + fittedCopySvg(n, resolvedCopy, typography, w, h, typeSystem);
   }).join('');
 
+  const allFaces = [...(typography?.facesUsed || [])];
+  for (const n of plan.nodes) {
+    if (n && n.kind === 'copy' && n.fontFamily) {
+      const weight = n.fontWeight || 400;
+      if (!allFaces.some(f => f.family === n.fontFamily && f.weight === weight)) {
+        allFaces.push({ family: n.fontFamily, weight, style: 'normal' });
+      }
+    }
+  }
+  const fontFiles = allFaces.map(f => fontFilePath(f.family, f.weight, f.style));
+
   const overlay = new Resvg(svg((scrimDefs.length ? `<defs>${scrimDefs.join('')}</defs>` : '') + copySvg), {
     font: {
       loadSystemFonts: false,
-      fontFiles: typography.facesUsed.map(f => fontFilePath(f.family, f.weight, f.style))
+      fontFiles,
     }
   }).render().asPng();
   layers.push({ input: overlay });
@@ -1271,7 +1404,7 @@ export function composeHighFidelityVisualPrompt(options: {
     'High-end commercial and editorial visual aesthetics with impeccable craft, vibrant clarity, ultra-high-definition 8k resolution, and rich macro detail.',
     'Full-bleed immersive photography with rich tangible textures (fresh leaves, sesame seeds, glistening glaze, natural wood grain), bright natural daylight or high-key studio lighting, clear visibility, clean well-lit backgrounds, and realistic depth of field.',
     'Depict concrete, vibrant, authentic real-world subjects and settings directly relevant to the brand, campaign subject, and environment.',
-    'FESTIVE & CATEGORY AUTHENTICITY: For cultural/festive campaigns (Ganesh Pooja, Diwali, Christmas, Eid, etc.), prominently depict authentic iconic festive symbols, traditional sweets, marigold garlands, Lord Ganesha idols, glowing diyas, or Christmas trees with genuine emotional warmth. For brand categories (Travel, Food, Apparel), clearly depict real category visual cues (airplanes, flight window vistas, boutique hotel suites, appetizing craft dishes, styled garments) so the business and product are instantly recognizable.',
+    'CULTURAL & CATEGORY AUTHENTICITY: For cultural and occasion-driven campaigns, faithfully depict the authentic cultural atmosphere, emotional warmth, and signature festive or contextual elements described in the strategy. For brand and commercial categories, clearly depict authentic category visual cues and appetizing, true-to-life subject matter so the product and context are instantly recognizable.',
     'STRICT PROHIBITION: Never generate a miniature picture frame hanging on an empty wall, a poster pinned to a concrete wall, a flyer on a table, or a blank room mockup. The visual MUST BE the direct, expansive, immersive subject or destination itself.',
     'STRICT LIGHTING RULE: Ensure bright, luminous, well-lit scenes with clean, light backgrounds (white, pastel, soft warm cream, airy daylight). AVOID dark gloomy voids, pitch-black backgrounds, murky underexposed shadows, heavy dark vignetting, or dim dark moody lighting unless explicitly requested.',
     'Leave clean, balanced composition areas and natural breathing room for graphic overlay.',
@@ -1291,13 +1424,27 @@ export async function designCreative(input: DesignerInput) {
   let currentGraphicConcept: GraphicDesignConcept =
     graphicConcept || direction.graphicConcept || fallbackConceptFrom(direction);
 
-  // The member's hard requirements travel with every copy build, so a design
-  // that trims itself to one line still cannot lose the offer or the occasion.
   const requiredClaims = context.intent?.requiredClaims ?? [];
-  const copy = collectCampaignCopy(
-    direction, currentGraphicConcept.elementsToOmit, currentGraphicConcept.copyPlan, requiredClaims,
+  const effectiveCopyPlan = currentGraphicConcept.copyPlan ?? (
+    direction.copyTreatment === 'none'
+      ? { requiredRoles: [], maxTextElements: 0, rationale: 'Visual hero without copy overlay' }
+      : direction.copyTreatment === 'headline_only'
+      ? { requiredRoles: ['HEADLINE'], maxTextElements: 1, rationale: 'Single punchy headline' }
+      : direction.copyTreatment === 'headline_support'
+      ? { requiredRoles: ['HEADLINE', 'SUPPORT', 'CTA'], maxTextElements: 3, rationale: 'Headline with supporting statement and action' }
+      : { requiredRoles: ['HEADLINE', 'OFFER', 'CTA'], maxTextElements: 3, rationale: 'Essential campaign message, offer and action' }
   );
-  const semanticCopy = buildSemanticCopyList(copy);
+  const rawCopy = collectCampaignCopy(
+    direction, currentGraphicConcept.elementsToOmit, effectiveCopyPlan, requiredClaims,
+  );
+  let renderableCopy = validateAndBuildRenderableCopy(rawCopy, requiredClaims, effectiveCopyPlan.maxTextElements || 3);
+  let copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
+  let semanticCopy = renderableCopy.map((r) => ({
+    id: r.id,
+    role: r.role,
+    semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
+    text: r.text,
+  }));
   const missing = evaluateIntentFidelity(context.intent?.requiredClaims ?? [], copy.map(c => c.text).join(' ')).missingRequirements;
   if (missing.length) throw new Error(`Copy is missing required campaign facts: ${missing.join(', ')}.`);
   if (!input.logo) throw new Error('A readable brand logo is required.');
@@ -1311,19 +1458,12 @@ export async function designCreative(input: DesignerInput) {
     recipe,
     styleDna: styleDna?.style,
     research: input.research,
-    // Enables the AI pairing pass; without it the deterministic scoring decides
-    // alone, which is exactly what happened for every creative before now.
     provider: textProvider,
   });
   for (const face of typography.facesUsed) {
     if (!existsSync(fontFilePath(face.family, face.weight, face.style))) throw new Error(`The selected font ${face.family} is unavailable on the renderer.`);
   }
-  // One base size and one ratio for the whole creative, so the hierarchy is a
-  // relationship rather than a set of independently chosen numbers. Rebuilt per
-  // blueprint below, because a redesign changes both the copy and the declared
-  // scale contrast it is derived from.
   let typeSystem = buildTypeSystem({ typography, concept: currentGraphicConcept, copy });
-  const attachments = [...input.products, ...input.references, input.logo];
   const sizes = await Promise.all(input.products.map(async (p, i) => {
     const m = await sharp(Buffer.from(p.data, 'base64')).metadata();
     return { id: i === 0 ? 'hero-visual' : `supporting-visual-${i - 1}`, width: m.width, height: m.height };
@@ -1332,188 +1472,508 @@ export async function designCreative(input: DesignerInput) {
 
   const isPureTypographicPoster = imageIsAbsent(currentGraphicConcept) && sizes.length === 0;
 
-  let requiredNodeList = buildRequiredNodeList({ semanticCopy, sizes, isPureTypographicPoster });
+  // Initialize Dynamic Design Engine Canvas and Brand representations
+  const canvasDims = dimensions(direction.aspectRatio);
+  const canvas = createCanvasRepresentation(canvasDims.width, canvasDims.height);
+  const approvedHeadlineFonts = typography.approvedCandidates?.headline?.length
+    ? typography.approvedCandidates.headline
+    : [typography.headlineFont];
+  const approvedBodyFonts = typography.approvedCandidates?.body?.length
+    ? typography.approvedCandidates.body
+    : [typography.bodyFont];
 
-  let instructions = buildCompositionInstructions({
-    concept: currentGraphicConcept,
-    requiredNodeList,
-    isPureTypographicPoster,
-    typeSystem,
+  const brandRepresentation = createBrandDesignRepresentation({
+    colors: context.creativeDna.brandColors ?? [],
+    approvedFonts: {
+      headline: approvedHeadlineFonts,
+      body: approvedBodyFonts,
+    },
+    logo: input.logo ? {
+      aspectRatio: (logoSize.width || 100) / (logoSize.height || 100),
+      detectedColor: '#FFFFFF',
+      recommendedPlacement: 'top-left',
+    } : undefined,
   });
 
-  let feedback = '';
+  // ── STYLE / BRIEF CONSISTENCY GATE ──
+  const userStyleId = styleDna?.style?.id || direction?.selectedStyle?.id || (direction as any)?.selectedStyleId;
+  const consistencyResult = validateStyleBriefConsistency({
+    brief: canonicalBrief,
+    direction,
+    concept: currentGraphicConcept,
+    styleDna,
+    selectedStyleId: userStyleId,
+  });
+
+  if (consistencyResult.status === 'STYLE_INCONSISTENT') {
+    console.warn('[creative-consistency] STYLE_INCONSISTENT detected before image generation', {
+      violations: consistencyResult.violations,
+      repairedStyleId: consistencyResult.repairedStyleId,
+    });
+    if (consistencyResult.repairedConcept) {
+      currentGraphicConcept = { ...currentGraphicConcept, ...consistencyResult.repairedConcept };
+    }
+    if (consistencyResult.repairedDirection) {
+      Object.assign(direction, consistencyResult.repairedDirection);
+    }
+  }
+
+  // ── BUILD CREATIVE REALIZATION CONTRACT ──
+  let creativeRealizationContract = buildCreativeRealizationContract({
+    concept: currentGraphicConcept,
+    brief: canonicalBrief,
+    direction,
+    styleDna: styleDna?.style,
+    attemptId: 0,
+    conceptId: currentGraphicConcept.id,
+    requestId: (input as any)?.requestId || (context as any)?.requestId,
+  });
+
+  // ── USER-SELECTED STYLE AUTHORITY HARMONIZATION ──
+  if (userStyleId === 'creator-ugc' && creativeRealizationContract.artDirectionFamily === 'EDITORIAL_PHOTOGRAPHY') {
+    creativeRealizationContract.artDirectionFamily = 'DOCUMENTARY';
+    currentGraphicConcept.artDirectionFamily = 'DOCUMENTARY';
+  }
+
+  console.info('[creative-fidelity] contract-created', {
+    attemptId: 0,
+    conceptName: creativeRealizationContract.conceptName,
+    creativeMechanism: creativeRealizationContract.creativeMechanism,
+    dominantVisualObject: creativeRealizationContract.dominantVisualObject,
+    hero: creativeRealizationContract.hero,
+    imageRole: creativeRealizationContract.imageRole,
+    spatialRelationship: creativeRealizationContract.spatialRelationship,
+    strictness: creativeRealizationContract.strictness,
+    hardRequirementsCount: creativeRealizationContract.hardRequirements.length,
+  });
+
   let visual: InlineImagePart | undefined;
   let firstAttemptResult: any = null;
+  let activeRecoveryContext: CompositionRecoveryContext | undefined;
 
-  // Max 2 Creative Attempts
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const briefPayload = JSON.stringify({
-      canonicalBrief: canonicalBrief || {
-        userPrompt: direction.subject,
-        subject: direction.subject,
-        event: direction.marketingCreative?.eventBadge,
-        offer: direction.marketingCreative?.offerText,
-        goal: context.goal,
-        funnelStage: context.funnelStage,
-      },
-      graphicDesignConcept: currentGraphicConcept,
-      brand: context.brand,
-      selectedStyle: styleDna?.style,
-      referenceStyle: context.referenceStyle,
-      typography: { headline: typography.headlineFont, body: typography.bodyFont },
-      copy: semanticCopy,
-      products: sizes,
-      logo: { id: 'brand-mark', width: logoSize.width, height: logoSize.height },
-    });
+  const availableFallbacks = input.fallbackConcepts ? [...input.fallbackConcepts] : [];
+  const maxAttempts = availableFallbacks.length > 0 ? 3 : 2;
 
-    let plan: DesignerPlan | undefined;
-    let rendered: Buffer | undefined;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const activeConceptName = currentGraphicConcept.name || currentGraphicConcept.conceptName;
 
-    // Composition planning (max 2 plan turns)
-    for (let planTurn = 0; planTurn < 2; planTurn++) {
-      input.onCall?.('text');
-      const planStart = Date.now();
-      const raw = await textProvider.generateJson({
-        systemInstruction: instructions,
-        prompt: `${briefPayload}\n${feedback}`,
-        images: attachments,
-        responseSchema: DESIGNER_PLAN_SCHEMA,
-        temperature: .65,
-      });
-      onStageTiming?.('composition', Date.now() - planStart);
+    // ── STEP 1: Generate Visual Asset (if required) & Apply Creative Intent Fidelity Gate ──
+    if (!input.products.length && !visual && !isPureTypographicPoster) {
+      const maxImageTries = 2;
+      let lastFidelityResult: CreativeIntentFidelityResult | null = null;
 
-      const mechStart = Date.now();
-      const candidatePlan = repairPlanMechanically(raw as DesignerPlan, copy, input.products.length, currentGraphicConcept.elementsToOmit, currentGraphicConcept);
-      onStageTiming?.('mechanicalRepair', Date.now() - mechStart);
-
-      const problems = validateDesignerPlan(candidatePlan, copy, input.products.length, currentGraphicConcept);
-
-      if (problems.length && planTurn === 0) {
-        feedback = `Repair layout: ${problems.join(' ')}\nPrevious plan: ${JSON.stringify(raw)}`;
-        continue;
-      }
-      if (problems.length) {
-        console.warn('[creative] composition proceeded with layout notes', { problems });
-      }
-
-      if (!input.products.length && !visual && !imageIsAbsent(currentGraphicConcept)) {
-        const visualPrompt = composeHighFidelityVisualPrompt({
-          candidatePrompt: candidatePlan.visualPrompt,
+      for (let imgAttempt = 0; imgAttempt < maxImageTries; imgAttempt++) {
+        const baseVisualPrompt = composeHighFidelityVisualPrompt({
+          candidatePrompt: direction.visualStory || direction.concept,
           direction,
           concept: currentGraphicConcept,
           context,
           styleDna,
-          nodes: candidatePlan.nodes,
         });
-        const node = candidatePlan.nodes.find(n => n.kind === 'visual') || { width: 0.8, height: 0.8 };
-        const canvas = dimensions(direction.aspectRatio);
-        const ratio = (node.width || 0.8) * canvas.width / ((node.height || 0.8) * canvas.height);
-        const ratios: Array<[string, number]> = [['1:1', 1], ['4:5', .8], ['9:16', .5625], ['16:9', 16 / 9], ['1.91:1', 1.91]];
-        const aspectRatio = ratios.sort((a, b) => Math.abs(a[1] - ratio) - Math.abs(b[1] - ratio))[0][0];
+
+        const visualPrompt = imgAttempt === 0 || !lastFidelityResult
+          ? baseVisualPrompt
+          : buildTargetedRegenerationPrompt(
+              creativeRealizationContract,
+              lastFidelityResult.failures,
+              imgAttempt + 1,
+            );
+
+        console.info('[creative] generating visual asset', {
+          requestId: (input as any)?.requestId || (context as any)?.requestId,
+          attemptId: attempt,
+          attempt: imgAttempt + 1,
+          isTargetedRegeneration: imgAttempt > 0,
+          conceptName: activeConceptName,
+        });
+
         input.onCall?.('image');
-        [visual] = await imageProvider.generateImage({
+        const imageStart = Date.now();
+        const candidateVisual = await imageProvider.generateImage({
           prompt: `${visualPrompt}\nCampaign context: ${direction.subject}. ${direction.visualStory}. Follow the attached STYLE references for visual language only; never import their text, products or logos. No lettering, logos, numbers or placeholders. Do not default to photography if the selected style calls for another medium. Ensure bright, radiant daylight or high-key studio lighting with clean, luminous, airy backgrounds. Avoid dark, pitch-black, or dim shadowy lighting.`,
-          referenceImages: [...input.references, ...(input.priorVisual ? [input.priorVisual] : [])], aspectRatio,
+          referenceImages: [...input.references, ...(input.priorVisual ? [input.priorVisual] : [])],
+          aspectRatio: direction.aspectRatio,
         });
-        if (visual && (await detectCheckerboard(Buffer.from(visual.data, 'base64'))).detected) {
-          visual = undefined; feedback = 'The generated visual contained invalid pixels. Plan a clear, fully opaque visual.'; continue;
+        onStageTiming?.('imageGeneration', Date.now() - imageStart);
+
+        const visualPart = Array.isArray(candidateVisual) ? candidateVisual[0] : candidateVisual;
+
+        if (!visualPart) {
+          throw new Error('Image provider failed to produce a visual asset.');
         }
 
-      }
-
-      // ── Fit the composed type to the picture that actually came back ──────
-      //
-      // The plan was authored before this image existed — the visualPrompt that
-      // produced it is part of the same plan — so this is the first moment
-      // anything can know where the subject ended up. The measurement is
-      // deterministic (no model call), and the fitting pass only repairs:
-      // occlusion of the subject, colour against the real backdrop, a wash where
-      // no colour can work, and an inverted hierarchy.
-      //
-      // Wrapped so that any failure leaves the plan exactly as composed. A
-      // creative that would have rendered before this stage existed still
-      // renders, byte for byte.
-      let planForRender = candidatePlan;
-      if (textIntelligenceEnabled() && visual) {
-        const fitStart = Date.now();
-        try {
-          const field = await analyzeImageField(Buffer.from(visual.data, 'base64'));
-          const heroNode = candidatePlan.nodes.find((n) => n?.kind === 'visual');
-          const { plan: fittedPlan, report } = fitCopyToField({
-            plan: candidatePlan,
-            field,
-            typeSystem,
-            concept: currentGraphicConcept,
-            palette: context.creativeDna.brandColors ?? [],
-            // Only when the visual genuinely covers the canvas is the measured
-            // field what sits behind the type.
-            imageIsBackdrop: Boolean(heroNode && heroNode.width >= 0.9 && heroNode.height >= 0.9),
-          });
-          planForRender = fittedPlan;
-          logPlacementReport(report, field);
-        } catch (error) {
-          console.warn('[creative] text placement measurement unavailable; composing as planned', {
-            detail: error instanceof Error ? error.message : String(error),
-          });
+        if ((await detectCheckerboard(Buffer.from(visualPart.data, 'base64'))).detected) {
+          continue;
         }
-        onStageTiming?.('textPlacement', Date.now() - fitStart);
+
+        // Contract / Concept pairing check before Fidelity Gate
+        if (creativeRealizationContract.conceptName !== activeConceptName) {
+          console.error('[creative-fidelity] CONTRACT_IMAGE_PAIRING_FAILURE: Contract concept does not match active concept!', {
+            requestId: (input as any)?.requestId || (context as any)?.requestId,
+            attemptId: attempt,
+            contractConcept: creativeRealizationContract.conceptName,
+            activeConcept: activeConceptName,
+          });
+          throw new CreativeRealizationAssertionError(
+            `CONTRACT_IMAGE_PAIRING_FAILURE: Contract concept "${creativeRealizationContract.conceptName}" does not match active concept "${activeConceptName}".`,
+            'UNVERIFIABLE_REQUIRED_MECHANISM'
+          );
+        }
+
+        // Apply Creative Intent Fidelity Gate
+        const fidelityResult = await evaluateCreativeIntentFidelity({
+          image: visualPart,
+          contract: creativeRealizationContract,
+          provider: textProvider,
+          attempt: imgAttempt + 1,
+        });
+
+        console.info('[creative-fidelity] image-evaluated', {
+          requestId: (input as any)?.requestId || (context as any)?.requestId,
+          attemptId: attempt,
+          conceptName: activeConceptName,
+          contractConceptName: creativeRealizationContract.conceptName,
+          attempt: imgAttempt + 1,
+          passed: fidelityResult.passed,
+          confidence: fidelityResult.confidence,
+          failuresCount: fidelityResult.failures.length,
+          recommendedAction: fidelityResult.recommendedAction,
+        });
+
+        if (fidelityResult.passed) {
+          visual = visualPart;
+          (visual as any).fidelityVerified = true;
+          lastFidelityResult = fidelityResult;
+          break;
+        } else {
+          lastFidelityResult = fidelityResult;
+          console.warn('[creative-fidelity] FAIL - hard requirement violation', {
+            requestId: (input as any)?.requestId || (context as any)?.requestId,
+            attemptId: attempt,
+            attempt: imgAttempt + 1,
+            failures: fidelityResult.failures.map(f => ({
+              class: f.failureClass,
+              expected: f.expected,
+              observed: f.observed,
+              severity: f.severity,
+            })),
+            regenerationReason: fidelityResult.regenerationReason,
+          });
+
+          if (fidelityResult.recommendedAction === 'REPAIR_STYLE_CONTRADICTION' || fidelityResult.failures.some(f => f.failureClass === 'STYLE_FIDELITY_FAILURE')) {
+            console.info('[creative-fidelity] reconciling style contradiction on contract');
+            if (creativeRealizationContract.artDirectionFamily === 'EDITORIAL_PHOTOGRAPHY' && creativeRealizationContract.selectedStyleId === 'creator-ugc') {
+              creativeRealizationContract.selectedStyleId = 'editorial';
+            } else if (creativeRealizationContract.selectedStyleId) {
+              creativeRealizationContract.artDirectionFamily = undefined;
+            }
+            const recheckResult = await evaluateCreativeIntentFidelity({
+              image: visualPart,
+              contract: creativeRealizationContract,
+              provider: textProvider,
+              attempt: imgAttempt + 1,
+            });
+            if (recheckResult.passed) {
+              visual = visualPart;
+              (visual as any).fidelityVerified = true;
+              lastFidelityResult = recheckResult;
+              break;
+            }
+          }
+
+          if (imgAttempt < maxImageTries - 1) {
+            console.info('[creative-fidelity] regeneration-requested', {
+              requestId: (input as any)?.requestId || (context as any)?.requestId,
+              attemptId: attempt,
+              nextAttempt: imgAttempt + 2,
+              reason: fidelityResult.regenerationReason,
+            });
+            continue;
+          }
+        }
       }
 
-      try {
-        const renderStart = Date.now();
-        rendered = await renderDesignerPlan(planForRender, input, copy, typography, visual, recipe.texture, currentGraphicConcept, typeSystem);
-        onStageTiming?.('render', Date.now() - renderStart);
-        // The fitted plan, not the composed one — what is persisted has to be what
-        // was rendered, or a refinement re-renders from coordinates that were
-        // already corrected once.
-        plan = planForRender;
-        break;
-      } catch (error) {
-        feedback = `Repair layout: ${error instanceof Error ? error.message : String(error)}\nPrevious plan: ${JSON.stringify(candidatePlan)}`;
-        continue;
-      }
+      // Assert architectural invariant: unverified image MUST NEVER enter composition
+      assertCreativeIntentFidelityPassed(visual, lastFidelityResult, {
+        requiresImage: !isPureTypographicPoster && !input.products.length,
+        attemptId: attempt,
+        expectedConceptName: activeConceptName,
+      });
+    } else if (visual && (visual as any).fidelityVerified) {
+      console.info('[creative-fidelity] verified-image-reused', {
+        requestId: (input as any)?.requestId || (context as any)?.requestId,
+        attemptId: attempt,
+        conceptName: creativeRealizationContract.conceptName,
+      });
     }
 
-    if (!plan || !rendered) continue;
-
-    const criticStart = Date.now();
-    const critic = await evaluateRenderedDesign({
-      provider: textProvider,
-      renderedPng: rendered,
-      brief: {
-        userPrompt: direction.subject,
-        goal: context.goal,
-        funnelStage: context.funnelStage,
-        primaryMessage: direction.headline || direction.subject,
-        secondaryMessages: [],
-        subject: direction.subject,
-        event: direction.marketingCreative?.eventBadge,
-        offer: direction.marketingCreative?.offerText,
-        visualStory: direction.visualStory,
-        firstRead: direction.headline || direction.subject,
-        attentionHierarchy: currentGraphicConcept.attentionHierarchy ?? [],
-        emotionalTone: direction.mood || 'confident',
-        brandVoice: { tone: direction.mood || 'confident', personality: ['authentic'] },
-        creativeStyle: {
-          id: styleDna?.style.id || 'editorial',
-          name: styleDna?.style.name || 'Editorial',
-          visualLanguage: [],
-          typographyLanguage: [],
-          compositionLanguage: [],
-          imageTreatment: [],
-          textureLanguage: [],
-          colorLanguage: [],
-          imperfectionLanguage: [],
-        },
-        assets: { productAssets: [], referenceImages: [] },
-        requiredClaims: context.intent?.requiredClaims || [],
-      },
-      concept: currentGraphicConcept,
-      productImages: input.products,
-      referenceImages: input.references,
-      logoImage: input.logo,
+    console.info('[creative] dde-composition-start', {
+      requestId: (input as any)?.requestId || (context as any)?.requestId,
+      attemptId: attempt,
+      conceptName: activeConceptName,
+      contractConceptName: creativeRealizationContract.conceptName,
+      hasVerifiedVisual: Boolean(visual && (visual as any).fidelityVerified),
     });
-    onStageTiming?.('critic', Date.now() - criticStart);
+
+    // ── STEP 2: Analyze Actual Visual Image Field ──
+    const analysisStart = Date.now();
+    const visualBuffer = visual ? Buffer.from(visual.data, 'base64') : Buffer.alloc(0);
+    const rawImageField = await analyzeImageField(visualBuffer);
+    const designField = createDesignField(rawImageField);
+    onStageTiming?.('imageAnalysis', Date.now() - analysisStart);
+
+    // ── STEP 3: Form Copy Visual Items ──
+    const copyItems = renderableCopy.map((c) => {
+      const isHeadline = c.role === 'HEADLINE' || c.semanticRole === 'primary-hook';
+      const isSub = c.role === 'OFFER' || c.semanticRole === 'secondary-hook';
+      return {
+        id: c.id,
+        text: c.text,
+        role: (isHeadline ? 'headline' : isSub ? 'subheadline' : 'body') as 'headline' | 'subheadline' | 'body',
+        priority: c.priority,
+        font: isHeadline ? typography.headlineFont : typography.bodyFont,
+        approvedFonts: isHeadline ? approvedHeadlineFonts : approvedBodyFonts,
+        weight: isHeadline ? typography.headlineWeight : typography.bodyWeight,
+      };
+    });
+
+    // ── STEP 4: Run Dynamic Design Engine Autonomous Composition Discovery ──
+    const discoveryStart = Date.now();
+    const discoveryResult = discoverOptimizedComposition({
+      copyItems,
+      logoItem: input.logo ? {
+        id: 'brand-mark',
+        role: 'logo',
+        aspectRatio: (logoSize.width || 100) / (logoSize.height || 100),
+        sourceDimensions: { width: logoSize.width || 100, height: logoSize.height || 100 },
+      } : undefined,
+      field: designField,
+      canvas,
+      brand: brandRepresentation,
+      concept: currentGraphicConcept,
+      realizationContext: {
+        conceptName: creativeRealizationContract.conceptName,
+        creativeMechanism: creativeRealizationContract.creativeMechanism,
+        dominantVisualObject: creativeRealizationContract.dominantVisualObject,
+        hero: creativeRealizationContract.hero,
+        imageRole: creativeRealizationContract.imageRole,
+        spatialRelationship: creativeRealizationContract.spatialRelationship,
+        typeBehavior: creativeRealizationContract.typeBehavior,
+        imageBehavior: creativeRealizationContract.imageBehavior,
+        compositionFamily: creativeRealizationContract.compositionFamily,
+        requiredVisualMechanics: creativeRealizationContract.requiredVisualMechanics,
+        prohibitedVisualInterpretations: creativeRealizationContract.prohibitedVisualInterpretations,
+        requiredClaims: creativeRealizationContract.requiredClaims,
+      },
+      recoveryContext: activeRecoveryContext,
+    });
+    onStageTiming?.('composition', Date.now() - discoveryStart);
+    const bestState = discoveryResult.bestState;
+
+    // ── STEP 5: Handoff to Authoritative DesignerPlan ──
+    const planNodes: DesignNode[] = [];
+
+    // Background visual node
+    if (!input.products.length && visual && !isPureTypographicPoster) {
+      planNodes.push({
+        id: 'hero-visual',
+        kind: 'visual',
+        x: 0,
+        y: 0,
+        width: 1.0,
+        height: 1.0,
+        color: 'none',
+        surface: 'none',
+        fontScale: 0.045,
+        align: 'left',
+        shape: 'rectangle',
+        lines: [],
+      });
+    }
+
+    // Product nodes
+    if (input.products.length > 0) {
+      input.products.forEach((p, i) => {
+        const pId = i === 0 ? 'hero-visual' : `supporting-visual-${i - 1}`;
+        const pSize = sizes[i] || { width: 400, height: 400 };
+        const pAspect = (pSize.width || 400) / (pSize.height || 400);
+        const pw = Math.min(0.55, Math.max(0.25, 0.40 * pAspect));
+        const ph = Math.min(0.55, Math.max(0.25, 0.40 / pAspect));
+        const copyTopY = Math.min(...bestState.elements.map(e => e.rect.y));
+        const py = copyTopY > 0.4 ? 0.08 : 0.45;
+        const px = 0.50 - pw / 2;
+        planNodes.push({
+          id: pId,
+          kind: 'product',
+          x: Number(px.toFixed(3)),
+          y: Number(py.toFixed(3)),
+          width: Number(pw.toFixed(3)),
+          height: Number(ph.toFixed(3)),
+          color: 'none',
+          surface: 'none',
+          fontScale: 0.045,
+          align: 'left',
+          shape: 'rectangle',
+          lines: [],
+        });
+      });
+    }
+
+    // Copy & Logo nodes from holistic solver (BestState)
+    for (const el of bestState.elements) {
+      if (el.role === 'logo') {
+        planNodes.push({
+          id: el.id || 'brand-mark',
+          kind: 'logo',
+          x: Number(el.rect.x.toFixed(3)),
+          y: Number(el.rect.y.toFixed(3)),
+          width: Number(el.rect.width.toFixed(3)),
+          height: Number(el.rect.height.toFixed(3)),
+          color: el.ink?.color?.hex || 'none',
+          surface: 'none',
+          fontScale: 0.045,
+          align: 'left',
+          shape: 'rectangle',
+          lines: [],
+        });
+        continue;
+      }
+
+      const align: 'left' | 'center' | 'right' =
+        el.rect.x + el.rect.width / 2 > 0.65 ? 'right' :
+        Math.abs(el.rect.x + el.rect.width / 2 - 0.5) < 0.10 ? 'center' : 'left';
+
+      const lines = el.typographyState?.hypothesis?.lines || (el.typographyState as any)?.lines || [el.id];
+
+      const sf = el.surface?.surfaceField;
+      const surfaceColor = sf?.colorField?.baseColor?.hex || 'none';
+      const surfaceOpacity = sf?.opacityField?.peak;
+
+      let scrim: DesignNode['scrim'] | undefined = undefined;
+      if (sf && sf.provenance?.derivationType === 'directional-gradient-field') {
+        const angle = sf.orientationAngleRad ?? 0;
+        const dir: 'down' | 'up' | 'left' | 'right' =
+          Math.abs(angle - Math.PI / 2) < 0.4 ? 'down' :
+          Math.abs(angle + Math.PI / 2) < 0.4 ? 'up' :
+          Math.abs(angle - Math.PI) < 0.4 || Math.abs(angle + Math.PI) < 0.4 ? 'left' : 'right';
+        scrim = {
+          direction: dir,
+          color: surfaceColor === 'none' ? '#000000' : surfaceColor,
+          opacity: surfaceOpacity ?? 0.65,
+        };
+      }
+
+      planNodes.push({
+        id: el.id,
+        kind: 'copy',
+        x: Number(el.rect.x.toFixed(3)),
+        y: Number(el.rect.y.toFixed(3)),
+        width: Number(el.rect.width.toFixed(3)),
+        height: Number(el.rect.height.toFixed(3)),
+        color: el.ink.color.hex,
+        surface: sf && sf.provenance?.derivationType === 'solid-fill-surface' ? surfaceColor : 'none',
+        opacity: surfaceOpacity,
+        scrim,
+        fontFamily: el.typographyState.family,
+        fontWeight: el.typographyState.weight,
+        fontScale: Number(el.typographyState.fontScale.toFixed(4)),
+        tracking: el.typographyState.letterSpacing,
+        lineHeight: el.typographyState.lineHeightMultiplier,
+        align,
+        shape: 'rectangle',
+        lines,
+      });
+    }
+
+    const plan: DesignerPlan = {
+      background: normalizeHex(recipe.background, '#111111'),
+      rationale: bestState.evaluation.reasons.join('; '),
+      visualPrompt: direction.visualStory || direction.concept,
+      nodes: planNodes,
+    };
+
+    // ── STEP 6: Composition Invariant Assertion & Pure Rendering ──
+    assertCompositionStateValid(plan, renderableCopy, {
+      requireLogo: Boolean(input.logo),
+      logoId: 'brand-mark',
+    });
+    assertRenderableCopy(plan, renderableCopy);
+    let rendered: Buffer;
+    let critic: RenderCriticEvaluation;
+    try {
+      const renderStart = Date.now();
+      rendered = await renderDesignerPlan(
+        plan,
+        input,
+        copy,
+        typography,
+        visual,
+        recipe.texture,
+        currentGraphicConcept,
+        typeSystem,
+      );
+      onStageTiming?.('render', Date.now() - renderStart);
+
+      input.onCall?.('text');
+      const criticStart = Date.now();
+      critic = await evaluateRenderedDesign({
+        provider: textProvider,
+        renderedPng: rendered,
+        brief: {
+          userPrompt: direction.subject,
+          goal: context.goal,
+          funnelStage: context.funnelStage,
+          primaryMessage: direction.headline || direction.subject,
+          secondaryMessages: [],
+          subject: direction.subject,
+          event: direction.marketingCreative?.eventBadge,
+          offer: direction.marketingCreative?.offerText,
+          visualStory: direction.visualStory,
+          firstRead: direction.headline || direction.subject,
+          attentionHierarchy: currentGraphicConcept.attentionHierarchy ?? [],
+          emotionalTone: direction.mood || 'confident',
+          brandVoice: { tone: direction.mood || 'confident', personality: ['authentic'] },
+          creativeStyle: {
+            id: styleDna?.style.id || 'editorial',
+            name: styleDna?.style.name || 'Editorial',
+            visualLanguage: [],
+            typographyLanguage: [],
+            compositionLanguage: [],
+            imageTreatment: [],
+            textureLanguage: [],
+            colorLanguage: [],
+            imperfectionLanguage: [],
+          },
+          assets: { productAssets: [], referenceImages: [] },
+          requiredClaims: context.intent?.requiredClaims || [],
+        },
+        concept: currentGraphicConcept,
+        productImages: input.products,
+        referenceImages: input.references,
+        logoImage: input.logo,
+      });
+      onStageTiming?.('critic', Date.now() - criticStart);
+    } catch (renderError) {
+      if (renderError instanceof InvalidRenderableCopyError && attempt === 0) {
+        console.warn('[creative] renderer invariant caught structured artifact; routing to recovery', {
+          invalidContent: renderError.invalidContent,
+        });
+        critic = {
+          passed: false,
+          templateLook: false,
+          humanCraft: false,
+          singleClearIdea: true,
+          layoutExpressesIdea: false,
+          interchangeableWithAnotherEvent: false,
+          problems: [`Renderer invariant: raw code/JSON string artifact detected ("${renderError.invalidContent}")`],
+          reasonsToReject: ['Structured artifact in renderable copy'],
+          redesignFeedback: 'Reconstruct copy without code or JSON syntax.',
+        };
+        rendered = visualBuffer;
+      } else {
+        throw renderError;
+      }
+    }
 
     const currentResult = {
       data: rendered,
@@ -1533,6 +1993,69 @@ export async function designCreative(input: DesignerInput) {
 
     if (attempt === 0) {
       firstAttemptResult = currentResult;
+      const failureAnalysis = classifyCriticFailure(critic);
+      console.info('[creative] critic rejected design — evaluating targeted recovery', {
+        attempt,
+        failures: failureAnalysis.failures,
+        primaryFailureClass: failureAnalysis.failureClass,
+        responsibleLayer: failureAnalysis.responsibleLayer,
+        action: failureAnalysis.action,
+        shouldReuseImage: failureAnalysis.shouldReuseImage,
+        reasons: failureAnalysis.reasons,
+      });
+
+      if (failureAnalysis.shouldReuseImage && visual) {
+        // Targeted downstream composition/copy recovery — preserve generated image and form complete recovery context
+        activeRecoveryContext = {
+          failures: failureAnalysis.failures,
+          reasons: failureAnalysis.reasons,
+          priorRejections: bestState.elements.map((e) => ({
+            id: e.id,
+            rect: { x: e.rect.x, y: e.rect.y, width: e.rect.width, height: e.rect.height },
+            reasons: failureAnalysis.reasons,
+          })),
+        };
+
+        if (
+          failureAnalysis.action === 'REBUILD_COPY' ||
+          failureAnalysis.failureClass === 'COPY_INTEGRITY_FAILURE' ||
+          failureAnalysis.failureClass === 'COPY_VALIDITY_FAILURE'
+        ) {
+          // Reconstruct renderable copy from authoritative pre-render rawCopy
+          renderableCopy = validateAndBuildRenderableCopy(
+            rawCopy,
+            requiredClaims,
+            effectiveCopyPlan.maxTextElements || 3,
+          );
+          copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
+          semanticCopy = renderableCopy.map((r) => ({
+            id: r.id,
+            role: r.role,
+            semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
+            text: r.text,
+          }));
+          typeSystem = buildTypeSystem({ typography, concept: currentGraphicConcept, copy });
+        } else if (
+          failureAnalysis.action === 'REDUCE_COPY' ||
+          failureAnalysis.failureClass === 'COPY_VOLUME_FAILURE'
+        ) {
+          // Dynamically shed lowest-priority optional lines based on maxTextElements and copy priority while retaining essential/required claims
+          const currentLimit = effectiveCopyPlan.maxTextElements ?? renderableCopy.length;
+          const targetCount = Math.max(1, Math.min(currentLimit, renderableCopy.length) - 1);
+          renderableCopy = validateAndBuildRenderableCopy(rawCopy, requiredClaims, targetCount);
+          copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
+          semanticCopy = renderableCopy.map((r) => ({
+            id: r.id,
+            role: r.role,
+            semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
+            text: r.text,
+          }));
+          typeSystem = buildTypeSystem({ typography, concept: currentGraphicConcept, copy });
+        }
+        continue;
+      }
+
+      // Visual / Concept failure: redesign blueprint and regenerate image
       const briefForRedesign = canonicalBrief || {
         userPrompt: direction.subject,
         goal: context.goal,
@@ -1564,6 +2087,7 @@ export async function designCreative(input: DesignerInput) {
       const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
       try {
         const rejectedConcept = currentGraphicConcept;
+        const previousConceptName = currentGraphicConcept.name || currentGraphicConcept.conceptName || 'Unknown';
         const newBlueprint = await redesignBlueprint({
           textProvider,
           brief: briefForRedesign,
@@ -1573,50 +2097,144 @@ export async function designCreative(input: DesignerInput) {
           onStageTiming,
         });
         currentGraphicConcept = newBlueprint;
-        const redesignedCopy = collectCampaignCopy(
-          direction, newBlueprint.elementsToOmit, newBlueprint.copyPlan, requiredClaims,
+        const newConceptName = newBlueprint.name || newBlueprint.conceptName || 'Redesigned Concept';
+
+        console.info('[creative] concept-redesign', {
+          requestId: (input as any)?.requestId || (context as any)?.requestId,
+          previousAttemptId: attempt,
+          previousConceptName,
+          newAttemptId: attempt + 1,
+          newConceptName,
+        });
+
+        // Reconstruct authoritative CreativeRealizationContract for the redesigned concept
+        creativeRealizationContract = buildCreativeRealizationContract({
+          concept: currentGraphicConcept,
+          brief: canonicalBrief || briefForRedesign,
+          direction,
+          styleDna: styleDna?.style,
+          attemptId: attempt + 1,
+          conceptId: currentGraphicConcept.id,
+          requestId: (input as any)?.requestId || (context as any)?.requestId,
+        });
+
+        const userStyleId = styleDna?.style?.id || direction?.selectedStyle?.id || (direction as any)?.selectedStyleId;
+        if (userStyleId === 'creator-ugc' && creativeRealizationContract.artDirectionFamily === 'EDITORIAL_PHOTOGRAPHY') {
+          creativeRealizationContract.artDirectionFamily = 'DOCUMENTARY';
+          currentGraphicConcept.artDirectionFamily = 'DOCUMENTARY';
+        }
+
+        console.info('[creative-fidelity] contract-created', {
+          attemptId: attempt + 1,
+          conceptName: creativeRealizationContract.conceptName,
+          creativeMechanism: creativeRealizationContract.creativeMechanism,
+          dominantVisualObject: creativeRealizationContract.dominantVisualObject,
+          hero: creativeRealizationContract.hero,
+          imageRole: creativeRealizationContract.imageRole,
+          spatialRelationship: creativeRealizationContract.spatialRelationship,
+          strictness: creativeRealizationContract.strictness,
+          hardRequirementsCount: creativeRealizationContract.hardRequirements.length,
+        });
+
+        const effectiveRedesignCopyPlan = newBlueprint.copyPlan ?? effectiveCopyPlan;
+        const rawRedesignedCopy = collectCampaignCopy(
+          direction, newBlueprint.elementsToOmit, effectiveRedesignCopyPlan, requiredClaims,
         );
-        const lost = evaluateIntentFidelity(requiredClaims, redesignedCopy.map((c) => c.text).join(' ')).missingRequirements;
+        renderableCopy = validateAndBuildRenderableCopy(
+          rawRedesignedCopy,
+          requiredClaims,
+          effectiveRedesignCopyPlan.maxTextElements || 3,
+        );
+        const lost = evaluateIntentFidelity(requiredClaims, renderableCopy.map((c) => c.text).join(' ')).missingRequirements;
         if (lost.length) {
           console.warn('[creative] redesign copy plan would drop required facts; keeping the original copy', { lost });
         } else {
-          copy.splice(0, copy.length, ...redesignedCopy);
-          semanticCopy.splice(0, semanticCopy.length, ...buildSemanticCopyList(copy));
+          copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
+          semanticCopy = renderableCopy.map((r) => ({
+            id: r.id,
+            role: r.role,
+            semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
+            text: r.text,
+          }));
         }
-        // A redesign changes both how much copy there is and what the blueprint
-        // declared about scale contrast, and the scale is derived from both.
         typeSystem = buildTypeSystem({ typography, concept: newBlueprint, copy });
-        requiredNodeList = buildRequiredNodeList({
-          semanticCopy,
-          sizes,
-          isPureTypographicPoster: imageIsAbsent(newBlueprint) && sizes.length === 0,
-        });
-        instructions = buildCompositionInstructions({
-          concept: newBlueprint,
-          requiredNodeList,
-          isPureTypographicPoster: imageIsAbsent(newBlueprint) && sizes.length === 0,
-          typeSystem,
-        });
-        feedback = [
-          `The previous creative was rejected: ${rejectionReason}`,
-          redesignDivergenceInstruction(rejectedConcept),
-          'Compose the NEW blueprint from a blank canvas. Do not adapt the previous plan.',
-        ].join('\n');
         visual = undefined;
       } catch (error) {
-        console.warn('[creative] redesign blueprint unavailable; retrying the same idea', {
+        console.warn('[creative] redesign blueprint unavailable; retrying with adjusted parameters', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        feedback = `The previous creative was rejected: ${rejectionReason}`;
       }
     } else if (attempt === 1) {
       if (critic.passed) {
         return currentResult;
       }
+      if (availableFallbacks.length > 0) {
+        const nextConcept = availableFallbacks.shift();
+        if (nextConcept) {
+          console.info('[creative-fallback] attempting fallback to unused valid concept from brief', {
+            failedConcept: activeConceptName,
+            fallbackConcept: nextConcept.conceptName || (nextConcept as any).name,
+            attemptId: attempt + 1,
+          });
+
+          // Style / Brief consistency check on fallback concept
+          const consistency = validateStyleBriefConsistency({
+            brief: canonicalBrief,
+            direction,
+            concept: nextConcept,
+            styleDna,
+            selectedStyleId: userStyleId,
+          });
+          currentGraphicConcept = consistency.repairedConcept ? { ...nextConcept, ...consistency.repairedConcept } : nextConcept;
+
+          // Build fresh contract with new attemptId
+          creativeRealizationContract = buildCreativeRealizationContract({
+            concept: currentGraphicConcept,
+            brief: canonicalBrief,
+            direction,
+            styleDna: styleDna?.style,
+            attemptId: attempt + 1,
+            conceptId: currentGraphicConcept.id,
+            requestId: (input as any)?.requestId || (context as any)?.requestId,
+          });
+
+          // Rebuild concept-aware copy with canonical required claims preserved
+          const fallbackCopyPlan = currentGraphicConcept.copyPlan ?? effectiveCopyPlan;
+          const rawFallbackCopy = collectCampaignCopy(
+            direction, currentGraphicConcept.elementsToOmit, fallbackCopyPlan, requiredClaims,
+          );
+          renderableCopy = validateAndBuildRenderableCopy(
+            rawFallbackCopy,
+            requiredClaims,
+            fallbackCopyPlan.maxTextElements || 3,
+          );
+          copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
+          semanticCopy = renderableCopy.map((r) => ({
+            id: r.id,
+            role: r.role,
+            semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
+            text: r.text,
+          }));
+          typeSystem = buildTypeSystem({ typography, concept: currentGraphicConcept, copy });
+
+          visual = undefined;
+          activeRecoveryContext = undefined;
+          continue;
+        }
+      }
       const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
       throw new Error(`FlowPost could not verify this design after two attempts with the critic. ${rejectionReason}`);
+    } else if (attempt === 2) {
+      if (critic.passed) {
+        return currentResult;
+      }
+      const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
+      throw new Error(`FlowPost could not verify this design after concept fallback. ${rejectionReason}`);
     }
   }
 
-  throw new Error(`The design could not be generated. ${feedback.slice(0, 600)}`);
+  if (firstAttemptResult) {
+    return firstAttemptResult;
+  }
+  throw new Error('The design could not be generated.');
 }

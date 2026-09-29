@@ -64,8 +64,13 @@ export interface TypographySelection {
   hierarchy: Record<FontRole, RoleTypography>;
   /** Render-ready stack for the existing layout geometry (render/layout-plan.ts). */
   baseFontStack: BaseFontStack;
-  /** Every distinct (family, weight, style) the renderer must load ΓÇö see render/text-rasterizer.ts. */
+  /** Every distinct (family, weight, style) the renderer must load — see render/text-rasterizer.ts. */
   facesUsed: Array<{ family: string; weight: number; style: 'normal' | 'italic' }>;
+  /** Approved candidate pool generated from brand, style, scripts, and context ranking */
+  approvedCandidates?: {
+    headline: string[];
+    body: string[];
+  };
 }
 
 export const AVAILABLE_FONTS = FONT_CATALOG.map((f) => ({
@@ -181,10 +186,10 @@ function supportsScripts(font: FontDefinition, required: ScriptTag[]): boolean {
 function scoreFont(font: FontDefinition, ctx: ScoreContext): number {
   if (!supportsScripts(font, ctx.requiredScripts)) return -Infinity;
 
-  // A display-only face is illegible at body/metadata/disclaimer/cta sizes ΓÇö
+  // A display-only or handwritten face is illegible at body/metadata/disclaimer/cta sizes —
   // excluded outright rather than merely penalized.
   const needsReadableBody = ctx.role === 'body' || ctx.role === 'metadata' || ctx.role === 'disclaimer' || ctx.role === 'cta';
-  if (needsReadableBody && font.readability === 'display-only') return -Infinity;
+  if (needsReadableBody && (font.readability === 'display-only' || font.category === 'handwritten')) return -Infinity;
 
   let score = 0;
 
@@ -552,6 +557,20 @@ export async function selectTypography({
     pairing?.reasoning ? `Chosen from the shortlist: ${pairing.reasoning}` : undefined,
   ].filter(Boolean);
 
+  const approvedHeadlineCandidates = createDiverseShortlist(headlineCandidates, 6).map((f) => f.family);
+  const approvedBodyCandidates = createDiverseShortlist(bodyCandidates, 4).map((f) => f.family);
+
+  // Register all approved candidate faces into facesUsed so they can be loaded by Resvg
+  for (const hFam of approvedHeadlineCandidates) {
+    addFace(hFam, nearestAvailableWeight(hFam, preferredHeadlineWeight));
+    addFace(hFam, nearestAvailableWeight(hFam, 700));
+    addFace(hFam, nearestAvailableWeight(hFam, 600));
+  }
+  for (const bFam of approvedBodyCandidates) {
+    addFace(bFam, nearestAvailableWeight(bFam, preferredBodyWeight));
+    addFace(bFam, nearestAvailableWeight(bFam, 400));
+  }
+
   return {
     headlineFont: headlineFont.family,
     bodyFont: bodyFont.family,
@@ -563,5 +582,9 @@ export async function selectTypography({
     hierarchy,
     baseFontStack,
     facesUsed: [...facesUsed.values()],
+    approvedCandidates: {
+      headline: approvedHeadlineCandidates,
+      body: approvedBodyCandidates,
+    },
   };
 }
