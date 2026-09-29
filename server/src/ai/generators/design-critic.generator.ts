@@ -6,52 +6,38 @@ import { claimSatisfied, claimTokens } from '../intent/claim-match';
 
 export interface DesignCriticEvaluation {
   passed: boolean;
-  observedSubject: string;
+  observedSubject?: string;
   observedEvent?: string;
   observedOffer?: string;
-  observedHero: string;
-  firstRead: string;
-  templateLook: boolean;
-  aiLook: boolean;
-  humanCraft: boolean;
-  visualTension: boolean;
-  typographyAsDesign: boolean;
-  styleExpression: string;
-  logoClear: boolean;
+  observedHero?: string;
+  firstRead?: string;
+  templateLook?: boolean;
+  aiLook?: boolean;
+  humanCraft?: boolean;
+  visualTension?: boolean;
+  typographyAsDesign?: boolean;
+  styleExpression?: string;
+  logoClear?: boolean;
   // ─── Template-collapse verdicts (spec §15) ───────────────────────────────
   /** Does the piece communicate ONE clear creative idea, or several half-ideas? */
-  singleClearIdea: boolean;
+  singleClearIdea?: boolean;
   /** Does the LAYOUT express that idea, or is it a container the idea was poured into? */
-  layoutExpressesIdea: boolean;
+  layoutExpressesIdea?: boolean;
   /** Is the imagery doing a job, or occupying a quadrant that would otherwise be blank? */
-  imageFillsEmptyQuadrant: boolean;
+  imageFillsEmptyQuadrant?: boolean;
   /** Is the typography doing a job, or parked opposite the image? */
-  typeParkedOppositeImage: boolean;
+  typeParkedOppositeImage?: boolean;
   /** Text blocks present that carry nothing the idea needed. */
-  unnecessaryTextBlocks: boolean;
+  unnecessaryTextBlocks?: boolean;
   /** Is the occasion/topic integrated into the idea, or applied as decoration on top of it? */
-  contextIntegrated: boolean;
-  /**
-   * Does type sit on top of the thing the picture is of — a face, the product, the
-   * subject's focal mass — in a way that reads as an accident?
-   *
-   * The renderer measures this geometrically before compositing
-   * (render/image-field.ts, render/text-placement.ts), which is what actually
-   * prevents it. This is the visual confirmation of that measurement, and it
-   * catches the case arithmetic cannot: type clear of the subject's bounding box
-   * but still sitting on the one detail that mattered. Type crossing the image is
-   * NOT this defect — that is good design, and often the idea.
-   */
-  textOccludesSubject: boolean;
-  /**
-   * THE decisive question: would this creative still work, unchanged, if the
-   * occasion were swapped for a different one? If yes, the design is generic —
-   * it illustrates a category, not this campaign.
-   */
-  interchangeableWithAnotherEvent: boolean;
-  problems: string[];
-  strengths: string[];
+  contextIntegrated?: boolean;
+  textOccludesSubject?: boolean;
+  interchangeableWithAnotherEvent?: boolean;
+  problems?: string[];
+  strengths?: string[];
   redesignFeedback?: string;
+  reasonsToReject?: string[];
+  critiqueFeedback?: string;
 }
 
 export interface EvaluateRenderedDesignOptions {

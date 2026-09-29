@@ -1,7 +1,6 @@
 import type { FieldRect, ImageField, ToneReading, QuietRect } from './image-field';
 import { SPATIAL_OCCUPANCY_CALIBRATION } from './image-field';
-import type { BrandProfile } from '../brand/brand-profile';
-import type { CreativeDna } from '../brand/creative-dna';
+import type { BrandProfile, ResolvedCreativeDna as CreativeDna } from '../types';
 
 /**
  * FLOWPOST DYNAMIC DESIGN REPRESENTATION — PHASE 1
@@ -156,6 +155,7 @@ export interface BrandDesignRepresentation {
   primaryColors: string[];
   secondaryColors: string[];
   neutralColors: string[];
+  primaryFonts?: string[];
   approvedFonts?: {
     headline?: string[];
     body?: string[];
@@ -167,12 +167,20 @@ export interface BrandDesignRepresentation {
     mimeType?: string;
     aspectRatio?: number;
   };
+  logo?: {
+    aspectRatio?: number;
+    detectedColor?: string;
+    recommendedPlacement?: string;
+    assetUrl?: string;
+    mimeType?: string;
+    data?: string;
+  };
   constraints: string[];
 }
 
 export function createBrandDesignRepresentation(params: {
-  brandProfile?: Partial<BrandProfile['brand']>;
-  creativeDna?: Partial<CreativeDna['creativeDna']>;
+  brandProfile?: any;
+  creativeDna?: any;
   logoAssetUrl?: string;
   logoData?: string;
   approvedFonts?: {
@@ -187,8 +195,8 @@ export function createBrandDesignRepresentation(params: {
     recommendedPlacement?: string;
   };
 }): BrandDesignRepresentation {
-  const brandName = params.brandProfile?.name || 'Brand';
-  const brandTone = params.brandProfile?.tone || params.creativeDna?.mood;
+  const brandName = params.brandProfile?.name || params.brandProfile?.brand?.name || 'Brand';
+  const brandTone = params.brandProfile?.tone || params.brandProfile?.brand?.tone || params.creativeDna?.mood;
   const brandColors = params.colors || params.creativeDna?.brandColors || ['#000000', '#ffffff'];
 
   // Categorize colors

@@ -191,11 +191,11 @@ export function gateByIntent(
   concepts: ScoredCreativeConcept[],
   intent?: CreativeIntentBrief,
 ): ScoredCreativeConcept[] {
-  if (!intent?.requiredClaims.length || concepts.length === 0) return concepts;
+  if (!intent?.requiredClaims?.length || concepts.length === 0) return concepts;
 
   const scored = concepts.map((concept) => ({
     ...concept,
-    intentFidelity: evaluateIntentFidelity(intent.requiredClaims, conceptText(concept)),
+    intentFidelity: evaluateIntentFidelity(intent.requiredClaims ?? [], conceptText(concept)),
   }));
   return scored.filter((c) => c.intentFidelity.missingRequirements.length === 0);
 }
@@ -437,15 +437,15 @@ export async function generateCreativeConcepts({
   concepts = gateByIntent(concepts, intent);
   const dropped = concepts.some((c) => (c.intentFidelity?.missingRequirements.length ?? 0) > 0);
   const shrankBelowThree = concepts.length < Math.min(3, beforeIntentGate);
-  if ((concepts.length === 0 || dropped || shrankBelowThree) && intent?.requiredClaims.length) {
+  if ((concepts.length === 0 || dropped || shrankBelowThree) && intent?.requiredClaims?.length) {
     attempts += 1;
     const keptMissing = [...new Set(concepts.flatMap((c) => c.intentFidelity?.missingRequirements ?? []))];
-    const stillMissing = keptMissing.length > 0 ? keptMissing : intent.requiredClaims;
+    const stillMissing = keptMissing.length > 0 ? keptMissing : (intent.requiredClaims ?? []);
     const retryPayload = (await provider.generateJson({
       systemInstruction: built.systemInstruction,
       prompt: `${built.prompt}\n\nYour previous attempt produced concepts that drop requirements the member explicitly stated: ${stillMissing
         .map((claim) => `"${claim}"`)
-        .join(', ')}. Every concept must carry ALL of ${intent.requiredClaims
+        .join(', ')}. Every concept must carry ALL of ${(intent.requiredClaims ?? [])
           .map((claim) => `"${claim}"`)
           .join(', ')} — through its bigIdea, message or productRole, in the member's own words. Be as creative as you like about HOW; you have no licence to drop, generalise or substitute any of them. Keep the concepts' mechanisms as different from each other as before.`,
       responseSchema: built.responseSchema,

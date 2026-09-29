@@ -195,7 +195,7 @@ export function discoverNaturalAxes(params: {
       orientation: fa.orientation,
       position: Number(fa.position.toFixed(4)),
       strength: fa.strength,
-      source: fa.source === 'subject-boundary' ? 'subject-contour' : 'visual-mass',
+      source: (fa.source as any) === 'subject-boundary' ? 'subject-contour' : 'visual-mass',
       description: `Discovered visual axis (${fa.source})`,
     });
   }

@@ -244,8 +244,8 @@ export function buildCreativeStrategyPrompt(context: {
         intent.offer && `- Offer: ${intent.offer}`,
         intent.audience && `- Audience: ${intent.audience}`,
         intent.venueType && `- Venue/context: ${intent.venueType}`,
-        intent.requiredClaims.length
-          ? `- Must be communicated: ${intent.requiredClaims.map((c) => `"${c}"`).join(', ')}`
+        intent.requiredClaims?.length
+          ? `- Must be communicated: ${(intent.requiredClaims ?? []).map((c) => `"${c}"`).join(', ')}`
           : null,
         '',
         'These are FACTS the creative must carry. None of them describes how the creative should look.',

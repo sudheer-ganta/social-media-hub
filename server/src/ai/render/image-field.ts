@@ -261,7 +261,7 @@ function detailEnergy(luminance: Float32Array, cols: number, rows: number): Floa
  * exposure-independent: a low-contrast photograph is judged on its own range
  * rather than against an absolute that only suits bright studio work.
  */
-function computeSaliency(luminance: Float32Array, energy: Float32Array, cols: number, rows: number): Float32Array {
+export function computeSaliency(luminance: Float32Array, energy: Float32Array, cols: number, rows: number): Float32Array {
   const border: number[] = [];
   for (let x = 0; x < cols; x++) {
     border.push(luminance[x], luminance[(rows - 1) * cols + x]);

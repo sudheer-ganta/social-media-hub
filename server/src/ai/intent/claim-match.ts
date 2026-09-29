@@ -124,6 +124,6 @@ export function missingFromCreative(
   direction: CreativeDirection,
   intent: CreativeIntentBrief | undefined,
 ): string[] {
-  if (!intent?.requiredClaims.length) return [];
-  return evaluateIntentFidelity(intent.requiredClaims, renderedCopyText(direction)).missingRequirements;
+  if (!intent?.requiredClaims?.length) return [];
+  return evaluateIntentFidelity(intent.requiredClaims ?? [], renderedCopyText(direction)).missingRequirements;
 }

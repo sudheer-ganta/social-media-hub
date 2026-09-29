@@ -339,8 +339,8 @@ export function buildCampaignCreativePrompt(context: CampaignCreativeContext): s
     ].join('\n')
     : 'This creative carries NO text at all. Do not render any words, letters, numerals, labels, or typography anywhere in the image — the idea communicates visually.';
 
-  const requirementsBlock = intent?.requiredClaims.length
-    ? `NON-NEGOTIABLE: the finished creative must clearly communicate ${intent.requiredClaims
+  const requirementsBlock = intent?.requiredClaims?.length
+    ? `NON-NEGOTIABLE: the finished creative must clearly communicate ${(intent.requiredClaims ?? [])
       .map((claim) => `"${claim}"`)
       .join(', ')}. These are the member's own stated requirements and are already carried by the copy above — render that copy legibly and prominently enough that a viewer takes them in at a glance. Never omit, abbreviate, or restyle them into illegibility.`
     : null;

@@ -1,4 +1,4 @@
-import type { RenderCriticEvaluation } from '../generators/design-critic.generator';
+import type { DesignCriticEvaluation as RenderCriticEvaluation } from '../generators/design-critic.generator';
 
 export type CriticFailureClass =
   | 'COPY_INTEGRITY_FAILURE'
@@ -40,16 +40,16 @@ export interface CompositionRecoveryContext {
  * Data Integrity > Validity > Volume > Occlusion (Placement) > Legibility (Contrast) > Logo Legibility > Brand > Composition > Concept > Image.
  */
 export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFailureAnalysis {
-  const problems = critic.problems.map((p) => p.toLowerCase());
-  const allFeedback = [critic.redesignFeedback, ...critic.problems].join(' ').toLowerCase();
-  const reasons: string[] = critic.problems.length > 0 ? critic.problems : [critic.redesignFeedback || 'Critic rejected design'];
+  const problems = (critic.problems || []).map((p: string) => p.toLowerCase());
+  const allFeedback = [critic.redesignFeedback, ...(critic.problems || [])].join(' ').toLowerCase();
+  const reasons: string[] = (critic.problems || []).length > 0 ? critic.problems! : [critic.redesignFeedback || 'Critic rejected design'];
 
   const failures: CriticFailureClass[] = [];
 
   // 1. Check for Copy Integrity Failure (raw code/JSON, dict fragments, internal draft labels)
   const isCopyIntegrity =
     problems.some(
-      (p) =>
+      (p: string) =>
         p.includes('raw code') ||
         p.includes('json') ||
         p.includes('string artifact') ||
@@ -70,7 +70,7 @@ export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFai
 
   // 2. Check for Copy Validity Failure (missing required facts or member-mandated claims)
   const isCopyValidity =
-    problems.some((p) => p.includes('missing required facts') || p.includes('missing claim') || p.includes('missing required claim')) ||
+    problems.some((p: string) => p.includes('missing required facts') || p.includes('missing claim') || p.includes('missing required claim')) ||
     allFeedback.includes('missing required facts');
 
   if (isCopyValidity) {
@@ -81,7 +81,7 @@ export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFai
   // 3. Check for Copy Volume Failure (excessive text blocks carrying no creative value)
   const isCopyVolume =
     problems.some(
-      (p) =>
+      (p: string) =>
         p.includes('cut the copy') ||
         p.includes('text blocks carrying nothing') ||
         p.includes('too much copy') ||
@@ -97,9 +97,9 @@ export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFai
 
   // 4. Check for Occlusion / Subject Collision (Placement defect)
   const isOcclusion =
-    critic.textOccludesSubject ||
+    (critic as any).textOccludesSubject ||
     problems.some(
-      (p) =>
+      (p: string) =>
         p.includes('occlude') ||
         p.includes('sits directly over') ||
         p.includes('sitting on the subject') ||
@@ -119,7 +119,7 @@ export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFai
   // 5. Check for Legibility / Contrast Failure (Color/Surface defect)
   const isLegibility =
     problems.some(
-      (p) =>
+      (p: string) =>
         p.includes('contrast') ||
         p.includes('unreadable') ||
         p.includes('illegible') ||
@@ -141,7 +141,7 @@ export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFai
   const isLogoLegibility =
     critic.logoClear === false ||
     problems.some(
-      (p) =>
+      (p: string) =>
         p.includes('logo') &&
         (p.includes('undersized') ||
           p.includes('too small') ||
@@ -166,7 +166,7 @@ export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFai
   // 7. Check for General Brand Failure
   const isBrand =
     problems.some(
-      (p) =>
+      (p: string) =>
         p.includes('brand voice') ||
         p.includes('brand personality') ||
         p.includes('wrong colors'),
@@ -184,9 +184,9 @@ export function classifyCriticFailure(critic: RenderCriticEvaluation): CriticFai
 
   // 9. Check for Image Failure
   const isImage =
-    critic.interchangeableWithAnotherEvent ||
+    (critic as any).interchangeableWithAnotherEvent ||
     problems.some(
-      (p) =>
+      (p: string) =>
         p.includes('swapped picture') ||
         p.includes('wrong event') ||
         p.includes('wrong occasion') ||

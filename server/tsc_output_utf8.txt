@@ -1,0 +1,85 @@
+﻿src/ai/generators/creative-concepts.generator.ts(194,8): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/ai/generators/creative-concepts.generator.ts(198,44): error TS2345: Argument of type 'string[] | undefined' is not assignable to parameter of type 'string[]'.
+  Type 'undefined' is not assignable to type 'string[]'.
+src/ai/generators/creative-concepts.generator.ts(440,65): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/ai/generators/creative-intent.generator.ts(132,43): error TS2488: Type 'string[] | undefined' must have a '[Symbol.iterator]()' method that returns an iterator.
+src/ai/generators/creative-intent.generator.ts(158,5): error TS18048: 'intent.optionalDetails' is possibly 'undefined'.
+src/ai/generators/creative-intent.generator.ts(158,78): error TS18048: 'intent.optionalDetails' is possibly 'undefined'.
+src/ai/generators/creative-intent.generator.ts(161,24): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/ai/generators/creative-intent.generator.ts(164,99): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/ai/intent/claim-match.ts(127,8): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/ai/prompts/campaign-creative.prompt.ts(342,29): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/ai/prompts/creative-concepts.prompt.ts(243,5): error TS18048: 'context.intent.requiredClaims' is possibly 'undefined'.
+src/ai/prompts/creative-strategy.prompt.ts(247,9): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/ai/prompts/creative-strategy.prompt.ts(248,40): error TS18048: 'intent.requiredClaims' is possibly 'undefined'.
+src/scripts/audit-step3-forensics.ts(244,24): error TS18048: 'brand.approvedFonts' is possibly 'undefined'.
+src/scripts/audit-step3-forensics.ts(253,24): error TS18048: 'brand.approvedFonts' is possibly 'undefined'.
+src/scripts/audit-step3-forensics.ts(265,24): error TS18048: 'brand.approvedFonts' is possibly 'undefined'.
+src/scripts/audit-typography-step2.ts(19,82): error TS2307: Cannot find module '../types' or its corresponding type declarations.
+src/scripts/audit-typography-step2.ts(20,39): error TS2307: Cannot find module '../prompts/campaign-creative.prompt' or its corresponding type declarations.
+src/scripts/benchmark-phase7.ts(51,5): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/benchmark-phase7.ts(127,7): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/benchmark-phase8.ts(60,5): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/benchmark-phase8.ts(132,89): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/debug-test2.ts(1,31): error TS2307: Cannot find module './test-helper' or its corresponding type declarations.
+src/scripts/record-baseline-phase0.ts(251,7): error TS2353: Object literal may only specify known properties, and 'surfaceDepth' does not exist in type 'GraphicDesignConcept'.
+src/scripts/run-10-fidelity-acceptance.ts(253,7): error TS2353: Object literal may only specify known properties, and 'tone' does not exist in type 'CreativeDirection'.
+src/scripts/run-10-fidelity-acceptance.ts(255,31): error TS2339: Property 'style' does not exist on type 'StyleDNA'.
+src/scripts/run-10-fidelity-acceptance.ts(284,7): error TS2739: Type 'StyleDNA' is missing the following properties from type 'ResolvedStyleDNA': style, source, variant
+src/scripts/run-10-fidelity-acceptance.ts(342,69): error TS2339: Property 'evidenceDetails' does not exist on type 'FidelityEvidence'.
+src/scripts/run-10-fidelity-acceptance.ts(381,9): error TS2353: Object literal may only specify known properties, and 'brandProfile' does not exist in type 'ResolveCreativeDnaOptions'.
+src/scripts/run-10-fidelity-acceptance.ts(393,13): error TS2353: Object literal may only specify known properties, and 'brandName' does not exist in type 'BrandProfile'.
+src/scripts/run-10-post-occupancy-acceptance.ts(230,5): error TS2353: Object literal may only specify known properties, and 'requiredClaims' does not exist in type 'BuildCanonicalCreativeBriefOptions'.
+src/scripts/run-10-post-occupancy-acceptance.ts(269,33): error TS2339: Property 'callToAction' does not exist on type 'MarketingCreative'.
+src/scripts/run-10-post-occupancy-acceptance.ts(303,59): error TS2554: Expected 1 arguments, but got 4.
+src/scripts/run-10-post-occupancy-acceptance.ts(322,11): error TS2353: Object literal may only specify known properties, and 'funnelStage' does not exist in type 'CreativeIntentBrief'.
+src/scripts/run-10-post-occupancy-acceptance.ts(330,7): error TS2741: Property 'isConfigured' is missing in type '{ generateJson: (schema: any, systemPrompt: string, userPrompt: string, images?: any[]) => Promise<unknown>; id: "gemini"; supportsVision: true; model: string; }' but required in type 'AiTextProvider'.
+src/scripts/run-10-post-occupancy-acceptance.ts(331,7): error TS2741: Property 'isConfigured' is missing in type '{ generateImage: (opts: any) => Promise<GeneratedImagePart[]>; id: "gemini"; model: string; }' but required in type 'AiImageProvider'.
+src/scripts/run-10-production-creatives-v2.ts(224,5): error TS2353: Object literal may only specify known properties, and 'requiredClaims' does not exist in type 'BuildCanonicalCreativeBriefOptions'.
+src/scripts/run-10-production-creatives.ts(15,113): error TS2307: Cannot find module '../types' or its corresponding type declarations.
+src/scripts/run-10-production-creatives.ts(527,50): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/run-10-production-creatives.ts(528,49): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/run-10-production-creatives.ts(529,46): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/run-10-production-recovery-audit.ts(254,7): error TS2353: Object literal may only specify known properties, and 'modelName' does not exist in type 'AiTextProvider'.
+src/scripts/run-10-production-recovery-audit.ts(373,11): error TS2739: Type '{ generateImage(): Promise<{ mimeType: string; data: string; }[]>; }' is missing the following properties from type 'AiImageProvider': id, model, isConfigured
+src/scripts/run-10-production-recovery-audit.ts(389,50): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/run-10-production-recovery-audit.ts(390,46): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/run-secondary-copy-acceptance.ts(18,113): error TS2307: Cannot find module '../types' or its corresponding type declarations.
+src/scripts/run-secondary-copy-acceptance.ts(285,8): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/run-secondary-copy-acceptance.ts(288,8): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/run-secondary-copy-acceptance.ts(290,46): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/test-saliency-combination.ts(3,40): error TS2459: Module '"../ai/render/image-field"' declares 'computeSaliency' locally, but it is not exported.
+src/scripts/test-saliency-combination.ts(3,57): error TS2459: Module '"../ai/render/image-field"' declares 'detailEnergy' locally, but it is not exported.
+src/scripts/verify-10-production-creative-intelligence.ts(14,43): error TS2307: Cannot find module '../brand/creative-brief' or its corresponding type declarations.
+src/scripts/verify-10-production-creative-intelligence.ts(423,59): error TS2345: Argument of type '({ role: "HEADLINE"; text: string; } | { role: "OFFER"; text: string; } | { role: "CTA"; text: string; } | { role: "BODY"; text: string; })[]' is not assignable to parameter of type 'CampaignCopyLine[]'.
+  Type '{ role: "HEADLINE"; text: string; } | { role: "OFFER"; text: string; } | { role: "CTA"; text: string; } | { role: "BODY"; text: string; }' is not assignable to type 'CampaignCopyLine'.
+    Type '{ role: "BODY"; text: string; }' is not assignable to type 'CampaignCopyLine'.
+      Types of property 'role' are incompatible.
+        Type '"BODY"' is not assignable to type '"HEADLINE" | "OFFER" | "EVENT_BADGE" | "SUPPORT" | "BRAND_MESSAGE" | "CTA" | "DETAIL"'.
+src/scripts/verify-creative-intelligence-live.ts(175,9): error TS2322: Type 'PersistedConcept' is not assignable to type 'GraphicDesignConcept'.
+  Types of property 'visualIdea' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/scripts/verify-dogfood-8-campaign.ts(133,33): error TS18048: 'intentA.requiredClaims' is possibly 'undefined'.
+src/scripts/verify-dogfood-8-campaign.ts(134,43): error TS18048: 'intentA.requiredClaims' is possibly 'undefined'.
+src/scripts/verify-ganesh-villy-live.ts(90,7): error TS2353: Object literal may only specify known properties, and 'funnelStage' does not exist in type 'CreativeIntentBrief'.
+src/scripts/verify-ganesh-villy-live.ts(103,5): error TS2353: Object literal may only specify known properties, and 'styleDna' does not exist in type 'GenerateGraphicDesignConceptOptions'.
+src/scripts/verify-ganesh-villy-live.ts(125,7): error TS2353: Object literal may only specify known properties, and 'funnelStage' does not exist in type 'CreativeIntentBrief'.
+src/scripts/verify-ganesh-villy-live.ts(134,58): error TS2339: Property 'ctaText' does not exist on type 'MarketingCreative'.
+src/scripts/verify-ganesh-villy-live.ts(142,38): error TS2339: Property 'ctaText' does not exist on type 'MarketingCreative'.
+src/scripts/verify-ganesh-villy-live.ts(142,98): error TS2339: Property 'ctaText' does not exist on type 'MarketingCreative'.
+src/scripts/verify-ganesh-villy-live.ts(180,9): error TS2353: Object literal may only specify known properties, and 'funnelStage' does not exist in type 'CreativeIntentBrief'.
+src/scripts/verify-ganesh-villy-live.ts(214,67): error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/scripts/verify-ganesh-villy-live.ts(217,31): error TS7006: Parameter 'node' implicitly has an 'any' type.
+src/scripts/verify-ganesh-villy-live.ts(217,37): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+src/scripts/verify-phase6-creatives.ts(65,7): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase6-creatives.ts(136,7): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase6-creatives.ts(203,7): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase7-creatives.ts(63,7): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase7-creatives.ts(141,7): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase7-creatives.ts(210,7): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase8-creatives.ts(59,119): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase8-creatives.ts(133,119): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-phase8-creatives.ts(186,119): error TS2353: Object literal may only specify known properties, and 'discoveredAxes' does not exist in type '{ candidates: PlacementCandidate[]; field: DesignField; canvas: CanvasRepresentation; existingElements?: FieldRect[] | undefined; brand?: BrandDesignRepresentation | undefined; customWeights?: Partial<...> | undefined; }'.
+src/scripts/verify-production-creatives.ts(246,88): error TS2339: Property 'role' does not exist on type 'InkStateCandidate'.
+src/scripts/verify-production-creatives.ts(246,169): error TS2339: Property 'background' does not exist on type 'SurfaceField'.

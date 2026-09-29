@@ -1,15 +1,7 @@
-/**
- * The AI module's contracts.
- *
- * These types are the *backend's* shapes, deliberately independent of the
- * frontend's `src/ai/types.ts`. The two meet at the HTTP boundary and nowhere
- * else: the browser posts a {@link CaptionRequest} and receives a
- * {@link CaptionResult}. Keeping them separate is what lets the studio
- * envelope on the frontend evolve without dragging the generator with it.
- *
- * Nothing in this file knows about Gemini. The provider interface takes a
- * prompt and returns text; everything above it is model-agnostic.
- */
+import type { AiTextProvider, InlineImagePart } from './providers/provider.interface';
+import type { AiImageProvider } from './providers/image-provider.interface';
+export type { AiTextProvider, InlineImagePart, AiImageProvider };
+export type StyleId = string;
 
 // ─── Request ─────────────────────────────────────────────────────────────────
 
@@ -43,7 +35,10 @@ export type MarketingGoal =
   | 'event_promotion'
   | 'newsletter'
   | 'community_building'
-  | 'customer_retention';
+  | 'customer_retention'
+  | 'engagement'
+  | 'conversions'
+  | string;
 
 export type FunnelStage = 'TOFU' | 'MOFU' | 'BOFU' | 'Retention';
 
@@ -1028,6 +1023,7 @@ export interface CreativeDnaInput {
    */
   headlineFont?: string;
   bodyFont?: string;
+  personalityArchetype?: string;
 }
 
 /** Resolved Creative DNA: user-set fields plus whatever Vision filled in. */
@@ -1081,7 +1077,9 @@ export type ArtDirectionFamily =
   | 'PLAYFUL_GRAPHIC'
   | 'CULTURAL_EDITORIAL'
   | 'INFORMATIONAL'
-  | 'ILLUSTRATIVE';
+  | 'ILLUSTRATIVE'
+  | 'DESI_MAXIMALISM'
+  | string;
 
 /**
  * The register a creative is art-directed in — chosen by the Creative
@@ -1390,6 +1388,12 @@ export interface GraphicDesignConcept {
   graphicDevices?: string[];
   elementsToOmit?: string[];
   visualMetaphor?: string;
+  id?: string;
+  name?: string;
+  artDirectionFamily?: ArtDirectionFamily;
+  selectedStyleId?: string;
+  paletteStrategy?: string;
+  textureStrategy?: string;
   // Structured composition grammar:
   compositionFamily?: CompositionFamily | string;
   anchor?: SpatialAnchor | string;
@@ -1402,6 +1406,9 @@ export interface GraphicDesignConcept {
   logoPlacementStrategy?: LogoPlacementStrategy | string;
   allowedBleed?: string[];
   intentionalRotation?: Array<{ target: string; degrees: number }>;
+  surfaceDepth?: string;
+  tensionAnchor?: string;
+  brandIntegration?: string;
 }
 
 export interface CompositionIntent {
@@ -1457,6 +1464,11 @@ export interface CreativeDirection {
   graphicConcept?: GraphicDesignConcept;
   /** Dynamic composition intent derived from the concept and Style DNA. */
   compositionIntent?: CompositionIntent;
+  selectedStyle?: any;
+  copyLines?: any[];
+  brandName?: string;
+  ctaText?: string;
+  audience?: string;
 }
 
 /** What stage one hands the image call: the direction, and its provenance. */
@@ -1607,6 +1619,16 @@ export interface ScoredCreativeConcept extends CreativeConcept {
   scores: CreativeConceptScores;
   /** How well this idea carries the member's hard requirements. Absent when no intent brief was extracted. */
   intentFidelity?: IntentFidelity;
+  creativeMechanism?: string;
+  hero?: any;
+  imageRole?: any;
+  spatialRelationship?: any;
+  typeBehavior?: any;
+  imageBehavior?: any;
+  compositionFamily?: any;
+  dominantVisualObject?: string;
+  firstRead?: string;
+  visualIdea?: string;
 }
 
 export interface RawCreativeConceptPayload {
@@ -1662,20 +1684,21 @@ export interface CreativeConceptsOutcome {
  */
 export interface CreativeIntentBrief {
   /** False when extraction was skipped or failed — the raw request is then all that's known. */
-  extracted: boolean;
-  event: string;
-  culturalContext: string;
-  productCategory: string;
-  offer: string;
-  promotionType: string;
-  venueType: string;
-  audience: string;
+  extracted?: boolean;
+  event?: string;
+  culturalContext?: string;
+  productCategory?: string;
+  offer?: string;
+  promotionType?: string;
+  venueType?: string;
+  audience?: string;
+  goal?: MarketingGoal;
   /** Facts explicitly supplied by the member. The final creative must communicate every one. */
-  requiredClaims: string[];
+  requiredClaims?: string[];
   /** Nice-to-haves the member mentioned that the creative may drop. */
-  optionalDetails: string[];
+  optionalDetails?: string[];
   /** 0–100 per field name, for fields the model was less than sure about. */
-  confidence: Record<string, number>;
+  confidence?: Record<string, number>;
 }
 
 /** How completely one artifact (a concept, a direction's copy) carries the hard requirements. */

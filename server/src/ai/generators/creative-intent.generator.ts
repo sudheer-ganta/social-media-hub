@@ -129,7 +129,7 @@ export async function generateCreativeIntent({
   const intent = normaliseIntent((payload && typeof payload === 'object') ? payload : { requiredClaims: [] });
   // Literal discount offers cannot disappear because the model omitted a field.
   const discounts = request.match(/\d+(?:\.\d+)?\s*%\s*(?:off|discount)\b/gi) ?? [];
-  intent.requiredClaims = [...new Set([...intent.requiredClaims, ...discounts])];
+  intent.requiredClaims = [...new Set([...(intent.requiredClaims ?? []), ...discounts])];
     console.info('[creative] intent extracted', {
       model: provider.model,
       durationMs: Date.now() - startedAt,
@@ -155,13 +155,13 @@ export function renderIntentSection(intent?: CreativeIntentBrief): string | null
     intent.promotionType && `- Promotion type: ${intent.promotionType}`,
     intent.venueType && `- Venue/business type: ${intent.venueType}`,
     intent.audience && `- Audience: ${intent.audience}`,
-    intent.optionalDetails.length && `- Optional details (may be dropped): ${intent.optionalDetails.join('; ')}`,
+    intent.optionalDetails?.length && `- Optional details (may be dropped): ${intent.optionalDetails.join('; ')}`,
   ].filter((line): line is string => typeof line === 'string' && line.length > 0);
 
-  const requirements = intent.requiredClaims.length
+  const requirements = intent.requiredClaims?.length
     ? [
         '',
-        `HARD REQUIREMENTS — the finished creative MUST visibly communicate every one of these: ${intent.requiredClaims
+        `HARD REQUIREMENTS — the finished creative MUST visibly communicate every one of these: ${(intent.requiredClaims ?? [])
           .map((claim) => `"${claim}"`)
           .join(', ')}.`,
         'You have complete freedom over HOW these are communicated — the idea, the metaphor, the wording, the art direction are all yours. You have no freedom to remove, replace, weaken, generalise or contradict them. A clever concept that drops the offer, the event, or the product is a failed concept, not a bold one.',

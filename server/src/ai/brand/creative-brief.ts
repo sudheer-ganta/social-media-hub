@@ -86,6 +86,8 @@ export interface CreativeBrief {
   requiredClaims: string[];
   /** The idea layer this brief was built alongside, when one was resolved. */
   creativeStrategy?: CreativeStrategy;
+  primaryIntent?: string;
+  brandPersonality?: string[];
 }
 
 export interface BuildCanonicalCreativeBriefOptions {

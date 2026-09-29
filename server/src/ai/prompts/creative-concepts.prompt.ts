@@ -240,8 +240,8 @@ export function buildCreativeConceptsPrompt(context: {
     researchSection,
     recentCreativesSection,
 
-    context.intent?.requiredClaims.length
-      ? `Propose 3–5 genuinely different concepts, EVERY one of which carries all of these requirements: ${context.intent.requiredClaims.join(', ')}. Score each honestly. Return a single JSON object matching the provided schema. Nothing else.`
+    context.intent?.requiredClaims?.length
+      ? `Propose 3–5 genuinely different concepts, EVERY one of which carries all of these requirements: ${(context.intent.requiredClaims ?? []).join(', ')}. Score each honestly. Return a single JSON object matching the provided schema. Nothing else.`
       : 'Propose 3–5 genuinely different concepts and score each honestly. Return a single JSON object matching the provided schema. Nothing else.',
   ]
     .filter((part): part is string => typeof part === 'string' && part.length > 0)

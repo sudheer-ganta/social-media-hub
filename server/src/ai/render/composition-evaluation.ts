@@ -879,7 +879,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
   const availableWidth = 1.0 - safeMargin * 2;
 
   for (const item of copyItems) {
-    const semanticRole = item.role === 'headline' ? 'primary-hook' : item.role === 'subheadline' ? 'secondary-hook' : 'supporting-body';
+    const semanticRole = item.role === 'headline' ? 'primary-hook' : item.role === 'subheadline' ? 'secondary-hook' : 'supporting-note';
     const copyObj = createDynamicCopyModel(item.id, item.text, semanticRole, item.priority);
 
     const isHeadline = item.role === 'headline';
@@ -900,8 +900,8 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
           ? brand.approvedFonts.body
           : item.font
             ? [item.font]
-            : brand?.primaryFonts?.length
-              ? brand.primaryFonts
+            : (brand as any)?.primaryFonts?.length
+              ? (brand as any).primaryFonts
               : ['Inter'];
 
     // Dynamic typography candidate evaluation against the physical DesignField
@@ -923,7 +923,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
         spatialBox: box,
         canvas,
         field,
-        brand: brand || { primaryColors: [], brandTone: '' },
+        brand: brand || { brandName: 'Brand', primaryColors: [], secondaryColors: [], neutralColors: [], constraints: [] },
       });
       evaluatedTypographyCandidates.push({
         family: cf,
@@ -992,12 +992,12 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
       refineContinuous: true,
     });
 
-    const alignedPlacements = enhancePlacementCandidatesWithAlignment({
+    const alignedPlacements: any[] = enhancePlacementCandidatesWithAlignment({
       candidates: rawPlacements,
       field,
       canvas,
       discoveredAxes,
-    });
+    } as any);
 
     for (const topPlacement of alignedPlacements) {
       // Build candidate layout arrangements for secondary copy elements
@@ -1169,7 +1169,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
             });
             if (!hasOverlap) {
               chosenRect = cand.rect;
-              chosenAxis = cand.associatedAxisId;
+              chosenAxis = (cand as any).associatedAxisId;
               break;
             }
           }
@@ -1379,7 +1379,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
 
           for (const tl of topLogos) {
             const logoTypeState: LineStructureState = {
-              hypothesis: { lines: ['Logo'], maxCharsPerLine: 4, naturalBreaksPreserved: true, punctuationOrphansAvoided: true, balanceScore: 1.0, tokenCount: 1, lineCount: 1, structuralScore: 1.0, ragVariance: 0, syntacticPenalty: 0, hasWidowOrOrphan: false },
+              hypothesis: { lines: ['Logo'], maxCharsPerLine: 4, naturalBreaksPreserved: true, punctuationOrphansAvoided: true, balanceScore: 1.0, tokenCount: 1, lineCount: 1, structuralScore: 1.0, ragVariance: 0, syntacticPenalty: 0, hasWidowOrOrphan: false } as any,
               family: 'Inter',
               weight: 400,
               style: 'normal',
@@ -1403,9 +1403,9 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
               ink: tl.ink,
               surface: {
                 id: 'surface-none',
-                scores: { aggregateSurfaceScore: 0.9, legibilityBoostScore: 0, imageIntegrityScore: 1.0, brandAlignmentScore: 1.0, necessityScore: 0 },
-                signals: { contrastGain: 0, visualDisruption: 0, imagePreservation: 1.0, surfaceComplexity: 0, postSurfaceWcag: tl.ink.contrast.wcagRatio, postSurfaceApca: tl.ink.contrast.apcaEstimatedLc },
-              },
+                scores: { aggregateSurfaceScore: 0.9, legibilityBoostScore: 0, imageIntegrityScore: 1.0, brandAlignmentScore: 1.0, necessityScore: 0 } as any,
+                signals: { contrastGain: 0, visualDisruption: 0, imagePreservation: 1.0, surfaceComplexity: 0, postSurfaceWcag: tl.ink.contrast.wcagRatio, postSurfaceApca: tl.ink.contrast.apcaEstimatedLc } as any,
+              } as any,
             });
           }
         }

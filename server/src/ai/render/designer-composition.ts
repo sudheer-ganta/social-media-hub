@@ -18,7 +18,7 @@ import { evaluateIntentFidelity } from '../intent/claim-match';
 import { esc, renderTexture } from './primitives';
 import { detectCheckerboard } from './render-validation';
 import { validateAntiTemplateQuality } from './anti-template-validator';
-import { evaluateRenderedDesign } from '../generators/design-critic.generator';
+import { evaluateRenderedDesign, type DesignCriticEvaluation } from '../generators/design-critic.generator';
 import { generateGraphicDesignConcept } from '../generators/art-director.generator';
 import { compareGraphicConcepts, redesignDivergenceInstruction } from '../strategy/concept-similarity';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
@@ -1428,7 +1428,7 @@ export async function designCreative(input: DesignerInput) {
   const effectiveCopyPlan = currentGraphicConcept.copyPlan ?? (
     direction.copyTreatment === 'none'
       ? { requiredRoles: [], maxTextElements: 0, rationale: 'Visual hero without copy overlay' }
-      : direction.copyTreatment === 'headline_only'
+      : (direction.copyTreatment as any) === 'headline_only'
       ? { requiredRoles: ['HEADLINE'], maxTextElements: 1, rationale: 'Single punchy headline' }
       : direction.copyTreatment === 'headline_support'
       ? { requiredRoles: ['HEADLINE', 'SUPPORT', 'CTA'], maxTextElements: 3, rationale: 'Headline with supporting statement and action' }
@@ -1523,7 +1523,7 @@ export async function designCreative(input: DesignerInput) {
     concept: currentGraphicConcept,
     brief: canonicalBrief,
     direction,
-    styleDna: styleDna?.style,
+    styleDna: (styleDna as any)?.style || styleDna,
     attemptId: 0,
     conceptId: currentGraphicConcept.id,
     requestId: (input as any)?.requestId || (context as any)?.requestId,
@@ -1575,8 +1575,7 @@ export async function designCreative(input: DesignerInput) {
           ? baseVisualPrompt
           : buildTargetedRegenerationPrompt(
               creativeRealizationContract,
-              lastFidelityResult.failures,
-              imgAttempt + 1,
+              lastFidelityResult || undefined,
             );
 
         console.info('[creative] generating visual asset', {
@@ -1694,7 +1693,7 @@ export async function designCreative(input: DesignerInput) {
       }
 
       // Assert architectural invariant: unverified image MUST NEVER enter composition
-      assertCreativeIntentFidelityPassed(visual, lastFidelityResult, {
+      assertCreativeIntentFidelityPassed(visual, lastFidelityResult || undefined, {
         requiresImage: !isPureTypographicPoster && !input.products.length,
         attemptId: attempt,
         expectedConceptName: activeConceptName,
@@ -1756,7 +1755,7 @@ export async function designCreative(input: DesignerInput) {
         creativeMechanism: creativeRealizationContract.creativeMechanism,
         dominantVisualObject: creativeRealizationContract.dominantVisualObject,
         hero: creativeRealizationContract.hero,
-        imageRole: creativeRealizationContract.imageRole,
+        imageRole: creativeRealizationContract.imageRole as any,
         spatialRelationship: creativeRealizationContract.spatialRelationship,
         typeBehavior: creativeRealizationContract.typeBehavior,
         imageBehavior: creativeRealizationContract.imageBehavior,
@@ -1871,7 +1870,7 @@ export async function designCreative(input: DesignerInput) {
         width: Number(el.rect.width.toFixed(3)),
         height: Number(el.rect.height.toFixed(3)),
         color: el.ink.color.hex,
-        surface: sf && sf.provenance?.derivationType === 'solid-fill-surface' ? surfaceColor : 'none',
+        surface: sf && (sf.provenance?.derivationType as any) === 'solid-fill-surface' ? surfaceColor : 'none',
         opacity: surfaceOpacity,
         scrim,
         fontFamily: el.typographyState.family,
@@ -1886,7 +1885,7 @@ export async function designCreative(input: DesignerInput) {
     }
 
     const plan: DesignerPlan = {
-      background: normalizeHex(recipe.background, '#111111'),
+      background: normalizeHex((recipe as any).background || '#111111', '#111111'),
       rationale: bestState.evaluation.reasons.join('; '),
       visualPrompt: direction.visualStory || direction.concept,
       nodes: planNodes,
@@ -1899,7 +1898,7 @@ export async function designCreative(input: DesignerInput) {
     });
     assertRenderableCopy(plan, renderableCopy);
     let rendered: Buffer;
-    let critic: RenderCriticEvaluation;
+    let critic: DesignCriticEvaluation;
     try {
       const renderStart = Date.now();
       rendered = await renderDesignerPlan(
@@ -2084,7 +2083,7 @@ export async function designCreative(input: DesignerInput) {
         assets: { productAssets: [], referenceImages: [] },
         requiredClaims: context.intent?.requiredClaims || [],
       };
-      const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
+      const rejectionReason = critic.redesignFeedback || (critic.problems || []).join('; ');
       try {
         const rejectedConcept = currentGraphicConcept;
         const previousConceptName = currentGraphicConcept.name || currentGraphicConcept.conceptName || 'Unknown';
@@ -2112,7 +2111,7 @@ export async function designCreative(input: DesignerInput) {
           concept: currentGraphicConcept,
           brief: canonicalBrief || briefForRedesign,
           direction,
-          styleDna: styleDna?.style,
+          styleDna: (styleDna as any)?.style || styleDna,
           attemptId: attempt + 1,
           conceptId: currentGraphicConcept.id,
           requestId: (input as any)?.requestId || (context as any)?.requestId,
@@ -2192,7 +2191,7 @@ export async function designCreative(input: DesignerInput) {
             concept: currentGraphicConcept,
             brief: canonicalBrief,
             direction,
-            styleDna: styleDna?.style,
+            styleDna: (styleDna as any)?.style || styleDna,
             attemptId: attempt + 1,
             conceptId: currentGraphicConcept.id,
             requestId: (input as any)?.requestId || (context as any)?.requestId,
@@ -2222,7 +2221,7 @@ export async function designCreative(input: DesignerInput) {
           continue;
         }
       }
-      const rejectionReason = critic.redesignFeedback || critic.problems.join('; ');
+      const rejectionReason = critic.redesignFeedback || (critic.problems || []).join('; ');
       const msg = input.fallbackConcepts?.length
         ? `FlowPost could not verify this design after concept fallback. ${rejectionReason}`
         : `FlowPost could not verify this design after two attempts with the critic. ${rejectionReason}`;

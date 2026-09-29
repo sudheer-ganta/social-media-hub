@@ -859,12 +859,13 @@ export async function fetchLogoAsset(logoUrl: string, brandId?: string): Promise
 
   // If retries exhausted and network error occurred:
   const isFetchErr = lastError instanceof ImageFetchError;
-  const detail = isFetchErr ? lastError.detail : String(lastError);
+  const detail = isFetchErr ? (lastError as ImageFetchError).detail : String(lastError);
 
   // If we had a cached version, fall back to cached version
-  if (cached) {
+  const fallbackCached = logoAssetCache.get(logoUrl);
+  if (fallbackCached) {
     console.warn('[brand-logo] resolved-from-cache', { assetId, brandId, fallbackAfterRetry: true });
-    return { image: cached.image, failure: null };
+    return { image: fallbackCached.image, failure: null };
   }
 
   console.error('[brand-logo] retrieval-failed', { assetId, brandId, errorType: 'network', detail });
@@ -1150,7 +1151,7 @@ async function finishGeneration({
   try {
     const [products, references, logoResult, previous] = await Promise.all([
       fetchReferenceImages(referenceUrls), fetchReferenceImages(styleReferenceUrls),
-      logoAssetUrl ? fetchLogoAsset(logoAssetUrl, renderContext?.brand?.id) : Promise.resolve(null),
+      logoAssetUrl ? fetchLogoAsset(logoAssetUrl, (renderContext?.brand as any)?.id) : Promise.resolve(null),
       priorVisualUrl ? fetchReferenceImages([priorVisualUrl]) : Promise.resolve({ images: [], failures: [] }),
     ]);
     if (products.failures.length || products.images.length !== referenceUrls.length) {
@@ -1291,6 +1292,7 @@ async function resolveConceptAndResearch(
         compositionFamily: (s as any).compositionFamily || 'asymmetric-editorial',
         artDirectionFamily: s.artDirectionFamily,
         selectedStyleId: s.styleId,
+        firstRead: (s as any).firstRead || s.bigIdea,
       })) as GraphicDesignConcept[];
     return { concept: request.selectedConcept, research: undefined, fallbackConcepts };
   }
@@ -1336,6 +1338,7 @@ async function resolveConceptAndResearch(
       compositionFamily: c.compositionFamily || 'asymmetric-editorial',
       artDirectionFamily: c.artDirectionFamily,
       selectedStyleId: c.styleId,
+      firstRead: c.firstRead || c.bigIdea,
     })) as GraphicDesignConcept[];
 
   return { concept: topConcept, research, fallbackConcepts };
