@@ -35,7 +35,13 @@ import { exploreLineStructures, type LineStructureState } from '../typography/dy
 import { evaluateFontCandidates, evaluateFontFit } from '../typography/dynamic-typography';
 import { getFontDefinition, nearestAvailableWeight } from '../typography/font-catalog';
 import { discoverPlacementCandidates, type PlacementCandidate } from './dynamic-placement';
-import { discoverNaturalAxes, enhancePlacementCandidatesWithAlignment, type AlignmentEnhancedCandidate } from './dynamic-alignment';
+import {
+  discoverNaturalAxes,
+  enhancePlacementCandidatesWithAlignment,
+  evaluateCompositionAlignment,
+  type AlignmentEnhancedCandidate,
+  type CompositionAlignmentEvaluation,
+} from './dynamic-alignment';
 import { enhanceMultiElementCompositionWithSpacing, type SpacingElement, type SpacingEnhancedComposition } from './dynamic-spacing';
 import { discoverInkCandidates, type InkStateCandidate, type ColorDescriptor } from './dynamic-color';
 import { discoverSurfaceCandidates, type SurfaceField, type SurfaceCandidate } from './dynamic-surface';
@@ -172,6 +178,7 @@ export interface OptimizedCompositionState {
   signals: CompositionSignalVector;
   interactionSignals: CompositionInteractions;
   tradeoffProfile: CompositionTradeoffProfile;
+  alignmentEvaluation?: CompositionAlignmentEvaluation;
   evaluation: {
     aggregateScore: number;
     reasons: string[];
@@ -325,22 +332,24 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
   const lineRhythm = Number(avgLineScore.toFixed(3));
   const typographicDensity = Number(Math.min(1.0, occupiedArea * 2.5).toFixed(3));
 
-  // 3. Alignment Signals
-  let alignedCount = 0;
-  for (let i = 0; i < elements.length; i++) {
-    for (let j = i + 1; j < elements.length; j++) {
-      const e1 = elements[i];
-      const e2 = elements[j];
-      const leftDiff = Math.abs(e1.rect.x - e2.rect.x);
-      const centerDiff = Math.abs((e1.rect.x + e1.rect.width / 2) - (e2.rect.x + e2.rect.width / 2));
-      if (leftDiff < 0.02 || centerDiff < 0.02) alignedCount++;
-    }
-  }
-  const maxPairs = (elements.length * (elements.length - 1)) / 2;
-  const axisCoherence = Number(Math.min(1.0, (alignedCount + 1) / Math.max(1, maxPairs + 1)).toFixed(3));
-  const relationshipCoherence = axisCoherence;
-  const opticalAlignment = Number((axisCoherence * 0.8 + edgePressure * 0.2).toFixed(3));
-  const alignmentConflict = Number(Math.max(0, 1.0 - axisCoherence).toFixed(3));
+  // 3. Alignment Signals (Evaluated via Research-Backed Relational Substrate & Graph Engine)
+  const alignmentEval = evaluateCompositionAlignment({
+    elements: elements.map((el) => ({
+      id: el.id,
+      role: el.role,
+      rect: el.rect,
+      typographyState: el.typographyState,
+    })),
+    field,
+    canvas,
+    brand,
+    concept: input.concept,
+  });
+
+  const axisCoherence = Number(alignmentEval.alignmentScoreContributions.substrateCoherence.toFixed(3));
+  const relationshipCoherence = Number(alignmentEval.alignmentScoreContributions.relationalCoherence.toFixed(3));
+  const opticalAlignment = Number(alignmentEval.alignmentScoreContributions.opticalCoherence.toFixed(3));
+  const alignmentConflict = Number(alignmentEval.alignmentScoreContributions.driftPenalty.toFixed(3));
 
   // 4. Spacing Signals (Measured from actual inter-element geometry)
   let groupingCoherence = 1.0;
@@ -746,6 +755,7 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
     tradeoffProfile,
     aggregateScore,
     reasons,
+    alignmentEvaluation: alignmentEval,
   };
 }
 
@@ -1472,6 +1482,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
                 signals: evaluation.signals,
                 interactionSignals: evaluation.interactionSignals,
                 tradeoffProfile: evaluation.tradeoffProfile,
+                alignmentEvaluation: evaluation.alignmentEvaluation,
                 evaluation: {
                   aggregateScore: evaluation.aggregateScore,
                   reasons: evaluation.reasons,
