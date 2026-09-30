@@ -1,0 +1,53 @@
+{
+  "runId": "RUN-02",
+  "testName": "02-dense-food",
+  "category": "dense food",
+  "requestId": "req-live-audit-2-1790747861637",
+  "assetId": "f79cade8-f926-4ff7-88f4-a969d01e78b1",
+  "timestamp": "2026-09-30T05:59:06.797Z",
+  "totalDurationMs": 117219,
+  "requestedStyleId": "organic-raw",
+  "resolvedStyleId": "editorial",
+  "styleRepairOccurred": true,
+  "concept": "The Edible Canvas",
+  "visualMechanism": "Fine-art culinary landscape transformation where full-bleed food textures function as canvas and brushstrokes.",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image",
+  "dimensions": {
+    "width": 1280,
+    "height": 1600,
+    "aspectRatio": "4:5"
+  },
+  "copy": {
+    "headline": "Artistry You Can Taste.",
+    "supportingLine": "Bespoke charcuterie grazing tables crafted for extraordinary occasions.",
+    "cta": "Explore Bespoke Grazing"
+  },
+  "typography": {
+    "headlineFont": "Playfair Display",
+    "headlineWeight": 700,
+    "bodyFont": "Lora",
+    "bodyWeight": 400,
+    "headlineFontSizeRel": 0.08279999999999998,
+    "bodyFontSizeRel": 0.022,
+    "reasoning": "Headline: Playfair Display (elegant/high-contrast/editorial) for its serif character. matched to a food context. Body: Lora, a neutral, readable partner from the headlineΓÇÖs own pairing list. Chosen from the shortlist: Playfair Display brings high-contrast, editorial luxury to the headline, capturing the lavish and artistic tone of bespoke grazing tables. Pairing it with Lora provides an elegant serif continuation that maintains the warm, high-end culinary narrative while ensuring comfortable body readability.."
+  },
+  "graphicConcept": {
+    "hero": "image",
+    "anchor": "bottom-left",
+    "imageRole": "full-bleed",
+    "dominantRegion": "center-full",
+    "spatialRelationship": "Typography rests over a natural sanctuary within the deep shadowed, organic negative space of the imagery, creating an elegant contrast between opulent texture and restrained type.",
+    "typeBehavior": "Quiet, crisp, typographic gallery inscription that sits with serene confidence over a dedicated quiet region of the visual composition without obscuring the intricate culinary craftsmanship.",
+    "compositionFamily": "asymmetric-editorial"
+  },
+  "urls": {
+    "visualImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790747975/flowpost/generated/itukevvnnocowxqliqbj.png",
+    "finalImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790747976/flowpost/generated/te7b19ry1zj9axsd8fkv.png",
+    "cloudinaryPublicId": "flowpost/generated/te7b19ry1zj9axsd8fkv"
+  },
+  "rawImageSaved": true,
+  "finalImageSaved": true,
+  "affordances": null,
+  "status": "SUCCESS"
+}

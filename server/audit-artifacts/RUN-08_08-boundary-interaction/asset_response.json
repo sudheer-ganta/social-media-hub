@@ -1,0 +1,554 @@
+{
+  "id": "f9984cfa-98a5-4404-b412-2410e174730c",
+  "userId": "d15e131b-34da-43d2-bfaf-a9ba332506fd",
+  "contextType": "personal",
+  "brandId": null,
+  "prompt": "Geometric brutalist concrete architecture with strong structural vertical columns, hard contrast shadow split line dividing the canvas into light and dark geometric zones, designed for boundary anchor text alignment",
+  "creativeBrief": {
+    "cta": "",
+    "mode": "EDITORIAL",
+    "mood": "Architectural, monumental, structured, uncompromising.",
+    "concept": "The Razor Line",
+    "palette": [
+      "#000000",
+      "#ffffff",
+      "#ccff00",
+      "#111111"
+    ],
+    "subject": "Monolithic brutalist concrete columns cast in harsh sunlight with a sharp diagonal shadow split across the architectural surface.",
+    "headline": "MONOGRAPHS IN CONCRETE",
+    "lighting": "Harsh, direct, high-contrast sunlight producing deep, razor-sharp shadows across the concrete surface.",
+    "platform": "instagram",
+    "background": "A sunlit brutalist concrete facade sliced by a deep, high-contrast diagonal shadow.",
+    "aspectRatio": "4:5",
+    "composition": "Asymmetric, edge-collision layout with strong vertical emphasis and a hard diagonal shadow split dividing the canvas into light and dark geometric zones.",
+    "environment": "Exterior shot of a raw, towering brutalist concrete structure under bright, intense daylight.",
+    "visualStory": "A towering, sunlit brutalist facade cast in extreme high-contrast light and shadow. A razor-sharp diagonal shadow boundary slices across raw concrete columns, serving as the structural baseline for monumental typography.",
+    "copyTreatment": "headline_support",
+    "supportingLine": "BRUT ARCHIVE: PUBLISHING MONUMENTAL MODERNISM",
+    "layoutDirection": {
+      "safeAreas": "Keep outer 10% margins clear for dynamic platform framing.",
+      "layoutType": "Asymmetric diagonal geometric split composition with boundary-anchored text alignment.",
+      "logoPlacement": "Top-left boundary, minimal and flush-aligned with edge margins.",
+      "textHierarchy": [
+        "HOOK — headline, flush along diagonal shadow split",
+        "EXPLAIN — supporting line, directly beneath headline along shadow boundary"
+      ],
+      "visualDensity": "Minimal, hyper-structured graphic density with massive scale",
+      "brandTreatment": "Raw, stark contrast using high-visibility electric acid yellow and absolute black.",
+      "productPlacement": "The architectural subject spans the entire frame, providing the physical shadow line.",
+      "textureDirection": "Exposed concrete aggregate, subtle mineral grain, and hard-edged shadow contrast.",
+      "headlinePlacement": "Flush-anchored along the sharp diagonal shadow split line in the upper geometric zone.",
+      "backgroundElements": "Sunlit brutalist concrete wall with deeply recessed structural vertical columns.",
+      "foregroundElements": "Razor-sharp diagonal shadow boundary slicing across the architectural face.",
+      "typographyDirection": "Bold, industrial, high-impact sans-serif uppercase typography with tight tracking.",
+      "supportingCopyPlacement": "Positioned beneath the main headline, flush against the lower edge of the shadow boundary."
+    },
+    "brandConstraints": [
+      "Maintain raw modernist architectural integrity.",
+      "No soft gradients, warm filters, or decorative floating shapes.",
+      "Typography must act as a rigid structural element."
+    ],
+    "productTreatment": "The brutalist concrete columns and their intense shadow split act as the primary graphic framework and structural baseline.",
+    "marketingCreative": {
+      "brandMessage": "Brutalist architecture does not just hold space; it organizes thought through absolute structural clarity.",
+      "logoTreatment": "Clean, stark monospaced wordmark positioned flush against the frame boundary.",
+      "requiredElements": [
+        "Hard-contrast light/dark spatial shadow split line",
+        "Flush-anchored monumental headline typography"
+      ]
+    },
+    "artDirectionFamily": "TYPOGRAPHY_LED",
+    "interactionInstructions": "",
+    "negativeVisualConstraints": [
+      "Centered text overlay with a drop shadow",
+      "Soft gradient fades to make text readable",
+      "Decorative floating 3D geometric shapes",
+      "Warm tint filters softening raw concrete textures",
+      "Casual hand-drawn or human-centered accent lines",
+      "Monotone grey aesthetic without high-contrast light play",
+      "Generic urban photography with heavy text overlays"
+    ]
+  },
+  "renderContext": {
+    "goal": "brand_awareness",
+    "brand": {
+      "usp": "",
+      "name": "Brut Archive",
+      "tone": "architectural, monumental, structured, uncompromising",
+      "mission": "",
+      "audience": "",
+      "ctaStyle": "",
+      "industry": "",
+      "products": [],
+      "services": [],
+      "emojiStyle": "",
+      "provenance": {
+        "name": "brand",
+        "tone": "brand",
+        "description": "brand"
+      },
+      "wordsToUse": [],
+      "brandColors": [],
+      "competitors": [],
+      "description": "Monographic publishing house celebrating modernist architecture and brutalist heritage",
+      "personality": "",
+      "completeness": 25,
+      "wordsToAvoid": [],
+      "writingStyle": ""
+    },
+    "intent": {
+      "event": "",
+      "offer": "",
+      "audience": "",
+      "extracted": true,
+      "venueType": "",
+      "confidence": {},
+      "promotionType": "",
+      "requiredClaims": [],
+      "culturalContext": "",
+      "optionalDetails": [
+        "Geometric brutalist concrete architecture",
+        "strong structural vertical columns",
+        "hard contrast shadow split line dividing the canvas into light and dark geometri",
+        "designed for boundary anchor text alignment"
+      ],
+      "productCategory": ""
+    },
+    "styleDna": {
+      "id": "neo-brutalism",
+      "source": "prompt",
+      "variant": 1606187317
+    },
+    "platforms": [
+      "instagram"
+    ],
+    "creativeDna": {
+      "mood": "",
+      "spacing": "",
+      "bodyFont": "",
+      "lighting": "",
+      "provenance": {},
+      "brandColors": [],
+      "composition": "",
+      "visualStyle": "",
+      "completeness": 0,
+      "headlineFont": "",
+      "logoAssetUrl": "",
+      "logoTreatment": "",
+      "avoidedElements": [],
+      "photographyStyle": "",
+      "productTreatment": "",
+      "preferredElements": [],
+      "referenceAssetUrls": [],
+      "typographyCharacter": ""
+    },
+    "funnelStage": "TOFU",
+    "canonicalBrief": {
+      "goal": "brand_awareness",
+      "assets": {
+        "productAssets": [],
+        "referenceImages": []
+      },
+      "subject": "The Razor Line",
+      "firstRead": "THE RAZOR LINE",
+      "brandVoice": {
+        "tone": "architectural, monumental, structured, uncompromising",
+        "vocabulary": [],
+        "constraints": [],
+        "personality": [
+          "authentic",
+          "purposeful"
+        ]
+      },
+      "userPrompt": "Geometric brutalist concrete architecture with strong structural vertical columns, hard contrast shadow split line dividing the canvas into light and dark geometric zones, designed for boundary anchor text alignment",
+      "funnelStage": "TOFU",
+      "visualStory": "Typography anchored precisely along the sharp diagonal shadow split of a sunlit brutalist facade.",
+      "chosenConcept": {
+        "bigIdea": "Typography anchored precisely along the sharp diagonal shadow split of a sunlit brutalist facade.",
+        "message": "BRUT ARCHIVE: MONOGRAPHS IN CONCRETE",
+        "conceptName": "The Razor Line",
+        "visualMetaphor": "Shadow line as graphic ruler and structural anchor.",
+        "visualMechanism": "Hard-contrast light/dark spatial division with edge-aligned typography"
+      },
+      "creativeStyle": {
+        "id": "neo-brutalism",
+        "name": "Neo Brutalism",
+        "colorLanguage": [
+          "hard complementary blocks"
+        ],
+        "imageTreatment": [
+          "aggressive crop"
+        ],
+        "visualLanguage": [
+          "raw",
+          "bold",
+          "unapologetic"
+        ],
+        "textureLanguage": [
+          "noise",
+          "none"
+        ],
+        "typographyLanguage": [
+          "display: bold, industrial, impactful",
+          "hierarchy: dramatic",
+          "tracking: tight"
+        ],
+        "compositionLanguage": [
+          "alignment: optical alignment",
+          "symmetry: asymmetric",
+          "whitespace: tight"
+        ],
+        "imperfectionLanguage": [
+          "deliberate optical asymmetry"
+        ]
+      },
+      "emotionalTone": "architectural, monumental, structured, uncompromising",
+      "primaryMessage": "BRUT ARCHIVE: MONOGRAPHS IN CONCRETE",
+      "requiredClaims": [],
+      "creativeStrategy": {
+        "domainContext": {
+          "meaning": "",
+          "occasion": "",
+          "sensitivities": [],
+          "relevantSymbols": [],
+          "visualClichesToAvoid": [
+            "Monotone grey aesthetic without high-contrast light play",
+            "Generic urban photography with heavy text overlays"
+          ],
+          "emotionalAssociations": []
+        },
+        "visualMetaphor": "Shadow line as graphic ruler and structural anchor.",
+        "audienceTension": "In a world of soft, fluid, and chaotic digital media, the audience craves permanent, rigid, and uncompromising physical structure.",
+        "brandConnection": "Only Brut Archive treats brutalist shadows not as decorative darkness, but as precise structural grids for typographic publishing.",
+        "distinctiveness": "Instead of treating architecture as a background wallpaper for text, the physical shadow of the building literally dictates the layout and bounds of the typography.",
+        "communicationIdea": "Brutalist architecture does not just hold space; it organizes thought through absolute structural clarity.",
+        "creativeMechanism": "Hard-contrast light/dark spatial division with edge-aligned typography",
+        "visualOpportunity": "Exploiting a natural high-contrast shadow edge as a rigid, zero-tolerance alignment guide for typographic setting, fusing letterforms directly into the physical geometry of concrete.",
+        "emotionalDirection": "Awestruck, disciplined, and uncompromisingly grounded.",
+        "prohibitedVisualCliches": [
+          "Centered text overlay with a drop shadow",
+          "Soft gradient fades to make text readable",
+          "Decorative floating 3D geometric shapes",
+          "Warm tint filters softening raw concrete textures",
+          "Casual hand-drawn or human-centered accent lines"
+        ]
+      },
+      "secondaryMessages": [],
+      "attentionHierarchy": [
+        "CHOSEN CONCEPT: \"The Razor Line\""
+      ]
+    },
+    "graphicConcept": {
+      "hero": "image",
+      "anchor": "shadow-split-line",
+      "copyPlan": {
+        "rationale": "Only the campaign title and primary subject are required to convey absolute architectural discipline without clutter.",
+        "requiredRoles": [
+          "HEADLINE",
+          "SUPPORT"
+        ],
+        "maxTextElements": 2
+      },
+      "strategy": {
+        "domainContext": {
+          "meaning": "",
+          "occasion": "",
+          "sensitivities": [],
+          "relevantSymbols": [],
+          "visualClichesToAvoid": [
+            "Monotone grey aesthetic without high-contrast light play",
+            "Generic urban photography with heavy text overlays"
+          ],
+          "emotionalAssociations": []
+        },
+        "visualMetaphor": "Shadow line as graphic ruler and structural anchor.",
+        "audienceTension": "In a world of soft, fluid, and chaotic digital media, the audience craves permanent, rigid, and uncompromising physical structure.",
+        "brandConnection": "Only Brut Archive treats brutalist shadows not as decorative darkness, but as precise structural grids for typographic publishing.",
+        "distinctiveness": "Instead of treating architecture as a background wallpaper for text, the physical shadow of the building literally dictates the layout and bounds of the typography.",
+        "communicationIdea": "Brutalist architecture does not just hold space; it organizes thought through absolute structural clarity.",
+        "creativeMechanism": "Hard-contrast light/dark spatial division with edge-aligned typography",
+        "visualOpportunity": "Exploiting a natural high-contrast shadow edge as a rigid, zero-tolerance alignment guide for typographic setting, fusing letterforms directly into the physical geometry of concrete.",
+        "emotionalDirection": "Awestruck, disciplined, and uncompromisingly grounded.",
+        "prohibitedVisualCliches": [
+          "Centered text overlay with a drop shadow",
+          "Soft gradient fades to make text readable",
+          "Decorative floating 3D geometric shapes",
+          "Warm tint filters softening raw concrete textures",
+          "Casual hand-drawn or human-centered accent lines"
+        ]
+      },
+      "firstRead": "Stark division of light and dark across raw concrete with a monumental typography line flush along the boundary.",
+      "imageRole": "full-bleed",
+      "secondRead": "The precise typographic setting of 'BRUT ARCHIVE: MONOGRAPHS IN CONCRETE' revealing itself as a structural publication grid.",
+      "visualIdea": "A sunlit brutalist facade cast in extreme high-contrast light and shadow, where the razor-sharp edge of the architectural shadow serves as the zero-tolerance structural baseline for flush-set monumental typography.",
+      "conceptName": "The Razor Line",
+      "pointOfView": "Low-angle looking up at monumental vertical concrete columns.",
+      "allowedBleed": [
+        "top",
+        "bottom",
+        "left",
+        "right"
+      ],
+      "movementAxis": "diagonal-downward",
+      "typeBehavior": "Typography acts as a structural anchor, setting flush against the high-contrast shadow line to enforce architectural discipline.",
+      "emotionalTone": "Awestruck, disciplined, and uncompromisingly grounded.",
+      "imageBehavior": "Full-bleed architectural raw concrete image, divided into stark light and pitch-black geometric shadow zones.",
+      "logoSanctuary": "Clean light-zone concrete margin with 0.05 safety clearance.",
+      "visualTension": "The extreme tension between blinding light on raw texture and pitch-black void, bridged by rigid typographic alignment.",
+      "dominantRegion": "center-diagonal",
+      "elementsToOmit": [
+        "Centered text overlay with a drop shadow",
+        "Soft gradient fades to make text readable",
+        "Decorative floating 3D geometric shapes",
+        "Warm tint filters softening raw concrete textures",
+        "Casual hand-drawn or human-centered accent lines",
+        "Monotone grey aesthetic without high-contrast light play",
+        "Generic urban photography with heavy text overlays"
+      ],
+      "graphicDevices": [],
+      "imageTreatment": "Raw, un-filtered, hyper-sharp contrast monochrome concrete with deep blacks and blinding highlights.",
+      "visualMetaphor": "Shadow line as graphic ruler and structural anchor.",
+      "graphicBehavior": "none",
+      "materialBehavior": "Screen-native tactile rendering of poured raw concrete and high-contrast sunlight.",
+      "compositionFamily": "asymmetric-editorial",
+      "creativeMechanism": "Hard-contrast light/dark spatial division with edge-aligned typography",
+      "hierarchyStrategy": "The razor-thin line dividing light from shadow leads the eye, followed immediately by the flush-anchored monumental text.",
+      "attentionHierarchy": [
+        "High-contrast light/dark shadow division line",
+        "Monumental flush-aligned headline along the shadow split",
+        "Support monograph tag line at the structural margin"
+      ],
+      "typographyStrategy": "Edge-aligned architectural sans-serif locked precisely to the physical geometry of the building's shadow.",
+      "compositionStrategy": "Extreme asymmetric visual weight with light concrete occupying one half and deep shadow occupying the other, separated by a crisp diagonal alignment guide.",
+      "negativeSpaceRegion": "deep shadow geometric zone",
+      "spatialRelationship": "Typography meets image along the exact boundary line of the physical shadow, using the light/dark split as a natural baseline and margin.",
+      "dominantVisualObject": "A sunlit concrete architectural facade sharply divided by a dark diagonal shadow line.",
+      "overlapRelationships": [
+        "Typography aligns flush against the shadow boundary without entering the dark void."
+      ],
+      "logoPlacementStrategy": "margin-aligned",
+      "intentionalImperfection": [
+        "Unpolished tactile concrete grain and micro-pitting exposed under harsh sunlight"
+      ],
+      "typographyScaleContrast": "1:6 scale ratio between the monumental hero title and the refined supporting text."
+    },
+    "visualImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790755102/flowpost/generated/tlzfdgkoeqohnw4eazzf.png",
+    "referenceImageUrls": []
+  },
+  "sourceAssetUrls": [],
+  "imageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790755111/flowpost/generated/nwdsjkxdrhysjwy5lcpr.png",
+  "cloudinaryPublicId": "flowpost/generated/nwdsjkxdrhysjwy5lcpr",
+  "width": 1280,
+  "height": 1600,
+  "format": "png",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image",
+  "typography": {
+    "bodyFont": "Inter",
+    "facesUsed": [
+      {
+        "style": "normal",
+        "family": "Oswald",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Anton",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Oswald",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Archivo Black",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Montserrat",
+        "weight": 800
+      },
+      {
+        "style": "normal",
+        "family": "Montserrat",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Montserrat",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Bebas Neue",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Space Grotesk",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Space Grotesk",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Oswald",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Montserrat",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Space Grotesk",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Manrope",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Manrope",
+        "weight": 400
+      }
+    ],
+    "hierarchy": {
+      "cta": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 600,
+        "fontSize": 0.021,
+        "caseTransform": "upper",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.1
+      },
+      "body": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.022,
+        "caseTransform": "sentence",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.1
+      },
+      "offer": {
+        "family": "Oswald",
+        "italic": false,
+        "weight": 700,
+        "fontSize": 0.03,
+        "caseTransform": "upper",
+        "letterSpacing": -1.4,
+        "lineHeightMult": 1.1
+      },
+      "accent": {
+        "family": "Oswald",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.024,
+        "caseTransform": "sentence",
+        "letterSpacing": -1.4,
+        "lineHeightMult": 1.1
+      },
+      "eyebrow": {
+        "family": "Oswald",
+        "italic": false,
+        "weight": 600,
+        "fontSize": 0.02,
+        "caseTransform": "upper",
+        "letterSpacing": -1.4,
+        "lineHeightMult": 1.1
+      },
+      "headline": {
+        "family": "Oswald",
+        "italic": false,
+        "weight": 700,
+        "fontSize": 0.08279999999999998,
+        "caseTransform": "upper",
+        "letterSpacing": -1.4,
+        "lineHeightMult": 1.1
+      },
+      "metadata": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.018,
+        "caseTransform": "sentence",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.1
+      },
+      "disclaimer": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.015,
+        "caseTransform": "none",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.1
+      },
+      "subheadline": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 500,
+        "fontSize": 0.026,
+        "caseTransform": "sentence",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.1
+      }
+    },
+    "bodyWeight": 700,
+    "headlineFont": "Oswald",
+    "baseFontStack": {
+      "body": "Inter",
+      "headline": "Oswald",
+      "bodyWeight": 700,
+      "letterSpacing": -1.4,
+      "headlineWeight": 700,
+      "lineHeightMult": 1.1,
+      "headlineCharWidth": 0.4592
+    },
+    "headlineWeight": 700,
+    "approvedCandidates": {
+      "body": [
+        "Oswald",
+        "Montserrat",
+        "Space Grotesk",
+        "Manrope"
+      ],
+      "headline": [
+        "Anton",
+        "Oswald",
+        "Archivo Black",
+        "Montserrat",
+        "Bebas Neue",
+        "Space Grotesk"
+      ]
+    },
+    "typographyReasoning": "Headline: Oswald (condensed/bold/editorial-poster) for its sans-serif character. Body: Inter, a neutral, readable partner from the headlineΓÇÖs own pairing list. Chosen from the shortlist: Oswald provides a tall, condensed, and monumental silhouette that evokes structural concrete forms, while Inter acts as a highly legible, neutral counterpoint that keeps the layout strictly utilitarian and grounded.."
+  },
+  "source": "AI_GENERATED",
+  "status": "COMPLETED",
+  "campaignId": null,
+  "parentAssetId": null,
+  "createdAt": "2026-09-30T07:57:03.653Z"
+}

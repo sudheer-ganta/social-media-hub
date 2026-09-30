@@ -544,10 +544,14 @@ function logMetrics(metrics: CreativeMetrics, requestId?: string) {
     creativeStrategyDurationMs: s.creativeStrategy ?? 0,
     artDirectorDurationMs: s.artDirector ?? 0,
     copySynthesisDurationMs: s.copySynthesis ?? 0,
+    imageGenerationDurationMs: s.imageGeneration ?? 0,
+    fidelityDurationMs: s.fidelity ?? 0,
+    imageAnalysisDurationMs: s.imageAnalysis ?? 0,
+    affordanceDurationMs: s.affordance ?? 0,
     compositionDurationMs: s.composition ?? 0,
-    mechanicalRepairDurationMs: s.mechanicalRepair ?? 0,
     renderDurationMs: s.render ?? s.renderer ?? 0,
     criticDurationMs: s.critic ?? 0,
+    cloudinaryDurationMs: s.cloudinary ?? 0,
     totalDurationMs: Date.now() - metrics.startedAt,
     imageCalls: metrics.imageCalls,
     textCalls: metrics.textCalls,
@@ -1181,7 +1185,7 @@ async function finishGeneration({
       logoAsset = { mimeType: 'image/png', data: buf.toString('base64') };
     }
 
-    const result = await timed(metrics, 'render', () => designCreative({
+    const result = await timed(metrics, 'designerComposition', () => designCreative({
       direction, context: { ...renderContext, creativeDna, referenceStyle }, styleDna,
       canonicalBrief, graphicConcept, fallbackConcepts,
       products: products.images, references: references.images, logo: logoAsset, priorVisual: previous.images[0],
@@ -1203,13 +1207,18 @@ async function finishGeneration({
       result.visual ? cloudinaryService.uploadImageBuffer(Buffer.from(result.visual.data, 'base64'), result.visual.mimeType)
         .catch(() => undefined) : Promise.resolve(undefined),
     ]);
+    const finalResolvedStyleId = styleDna?.style?.id || (direction as any)?.selectedStyleId || direction?.selectedStyle?.id;
     const completion = {
       imageUrl: uploaded.url, cloudinaryPublicId: uploaded.publicId,
       ...(uploaded.width !== undefined && { width: uploaded.width }),
       ...(uploaded.height !== undefined && { height: uploaded.height }),
       ...(uploaded.format !== undefined && { format: uploaded.format }),
-      renderContext: { ...renderContext, referenceImageUrls: styleReferenceUrls,
-        ...(visualUpload && { visualImageUrl: visualUpload.url }) },
+      renderContext: {
+        ...renderContext,
+        referenceImageUrls: styleReferenceUrls,
+        ...(styleDna && { styleDna: { id: finalResolvedStyleId || styleDna.style.id, variant: styleDna.variant, source: styleDna.source } }),
+        ...(visualUpload && { visualImageUrl: visualUpload.url })
+      },
       typography: result.typography,
     };
     const completed = canonicalConceptId
@@ -1217,7 +1226,7 @@ async function finishGeneration({
       : await generatedAssetRepository.markCompleted(asset.id, completion);
     console.info('[creative] verified designer composition complete', { requestId, assetId: asset.id,
       productCount: products.images.length, referenceCount: references.images.length,
-      selectedStyleId: styleDna?.style.id, generationVersion: GENERATION_VERSION });
+      selectedStyleId: finalResolvedStyleId, generationVersion: GENERATION_VERSION });
     return completed;
   } catch (error) {
     await generatedAssetRepository.markFailed(asset.id);

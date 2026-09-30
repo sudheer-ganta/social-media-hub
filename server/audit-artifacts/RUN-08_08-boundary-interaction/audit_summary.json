@@ -1,0 +1,53 @@
+{
+  "runId": "RUN-08",
+  "testName": "08-boundary-interaction",
+  "category": "boundary interaction",
+  "requestId": "req-live-audit-8-1790754852038",
+  "assetId": "f9984cfa-98a5-4404-b412-2410e174730c",
+  "timestamp": "2026-09-30T07:57:03.653Z",
+  "totalDurationMs": 261567,
+  "requestedStyleId": "editorial",
+  "resolvedStyleId": "neo-brutalism",
+  "styleRepairOccurred": true,
+  "concept": "The Razor Line",
+  "visualMechanism": "Hard-contrast light/dark spatial division with edge-aligned typography",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image",
+  "dimensions": {
+    "width": 1280,
+    "height": 1600,
+    "aspectRatio": "4:5"
+  },
+  "copy": {
+    "headline": "MONOGRAPHS IN CONCRETE",
+    "supportingLine": "BRUT ARCHIVE: PUBLISHING MONUMENTAL MODERNISM",
+    "cta": ""
+  },
+  "typography": {
+    "headlineFont": "Oswald",
+    "headlineWeight": 700,
+    "bodyFont": "Inter",
+    "bodyWeight": 700,
+    "headlineFontSizeRel": 0.08279999999999998,
+    "bodyFontSizeRel": 0.022,
+    "reasoning": "Headline: Oswald (condensed/bold/editorial-poster) for its sans-serif character. Body: Inter, a neutral, readable partner from the headlineΓÇÖs own pairing list. Chosen from the shortlist: Oswald provides a tall, condensed, and monumental silhouette that evokes structural concrete forms, while Inter acts as a highly legible, neutral counterpoint that keeps the layout strictly utilitarian and grounded.."
+  },
+  "graphicConcept": {
+    "hero": "image",
+    "anchor": "shadow-split-line",
+    "imageRole": "full-bleed",
+    "dominantRegion": "center-diagonal",
+    "spatialRelationship": "Typography meets image along the exact boundary line of the physical shadow, using the light/dark split as a natural baseline and margin.",
+    "typeBehavior": "Typography acts as a structural anchor, setting flush against the high-contrast shadow line to enforce architectural discipline.",
+    "compositionFamily": "asymmetric-editorial"
+  },
+  "urls": {
+    "visualImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790755102/flowpost/generated/tlzfdgkoeqohnw4eazzf.png",
+    "finalImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790755111/flowpost/generated/nwdsjkxdrhysjwy5lcpr.png",
+    "cloudinaryPublicId": "flowpost/generated/nwdsjkxdrhysjwy5lcpr"
+  },
+  "rawImageSaved": true,
+  "finalImageSaved": true,
+  "affordances": null,
+  "status": "SUCCESS"
+}

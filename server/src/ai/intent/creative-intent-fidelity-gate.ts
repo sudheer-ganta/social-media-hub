@@ -99,6 +99,14 @@ const VISION_FIDELITY_SCHEMA = {
     isCgiOrGenericAiRender: { type: 'BOOLEAN' as const },
     artDirectionCompliant: { type: 'BOOLEAN' as const },
     styleCompliant: { type: 'BOOLEAN' as const },
+    physicalPlausibility: {
+      type: 'OBJECT' as const,
+      properties: {
+        plausibleLightingAndShadows: { type: 'BOOLEAN' as const },
+        anatomicalAndStructuralIntegrity: { type: 'BOOLEAN' as const },
+        materialPlausibilityObserved: { type: 'STRING' as const },
+      },
+    },
     unverifiableRequiredElements: {
       type: 'ARRAY' as const,
       items: { type: 'STRING' as const },
@@ -453,6 +461,19 @@ EVALUATION RULES:
       evidence: { unverifiable: imageGenUnverifiable },
       severity: 'CRITICAL',
       responsibleLayer: 'IMAGE_GENERATION',
+    });
+  }
+
+  // Record Physical Plausibility Evidence (Evaluation-Only)
+  if ((visionResult as any).physicalPlausibility) {
+    evidenceList.push({
+      dimension: 'PHYSICAL_PLAUSIBILITY',
+      verified: Boolean(
+        (visionResult as any).physicalPlausibility?.plausibleLightingAndShadows !== false &&
+        (visionResult as any).physicalPlausibility?.anatomicalAndStructuralIntegrity !== false
+      ),
+      confidence: visionResult.confidence,
+      details: (visionResult as any).physicalPlausibility,
     });
   }
 

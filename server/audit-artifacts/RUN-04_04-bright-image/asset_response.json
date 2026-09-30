@@ -1,0 +1,549 @@
+{
+  "id": "5cd73886-13b9-4fdb-89e8-d3362eb63de0",
+  "userId": "d15e131b-34da-43d2-bfaf-a9ba332506fd",
+  "contextType": "personal",
+  "brandId": null,
+  "prompt": "Minimalist Scandinavian ceramic studio bathed in intense morning sunlight, high-key bright white porcelain vases on bleached white oak table, expansive airy white linen negative space, clean soft shadows",
+  "creativeBrief": {
+    "cta": "",
+    "mode": "EDITORIAL",
+    "mood": "Serene, tranquil, atmospheric, precise.",
+    "concept": "Shadow Dial",
+    "palette": [
+      "#ffffff",
+      "#f4f2ee",
+      "#e2dfd8",
+      "#c8c4bc",
+      "#2c2c2c"
+    ],
+    "subject": "Three high-key bright white porcelain vases of varying architectural shapes resting on a bleached white oak surface wrapped in soft white linen.",
+    "headline": "First Light. Pure Form.",
+    "lighting": "Intense, high-key morning light pouring from a low angle, creating bright white highlights and long, clean soft shadows.",
+    "platform": "instagram",
+    "background": "Expansive airy white linen textured surface catching low-angled morning sunlight and long shadows.",
+    "aspectRatio": "4:5",
+    "composition": "Asymmetrical composition with the porcelain vases placed off-center, allowing wide, airy negative space for long directional light shadows to cross the frame.",
+    "environment": "Minimalist Scandinavian ceramic studio filled with luminous daylight.",
+    "visualStory": "In a Scandinavian ceramic studio bathed in intense morning sunlight, handcrafted bright white porcelain vases sit on a bleached white oak table. Their crisp, razor-sharp shadows stretch across an expansive field of airy white linen, marking time through pure light.",
+    "copyTreatment": "headline_support",
+    "supportingLine": "Handcrafted porcelain vases sculpted for moments of quiet stillness.",
+    "layoutDirection": {
+      "safeAreas": "Keep upper right and lower third mostly clear of non-essential elements.",
+      "layoutType": "Minimalist full-bleed editorial photograph with wide tracking micro-copy at margins.",
+      "logoPlacement": "Bottom right margin in small, pristine sans-serif type.",
+      "textHierarchy": [
+        "HOOK — headline, upper left edge",
+        "EXPLAIN — supportingLine, directly below headline"
+      ],
+      "visualDensity": "Minimalist, generous whitespace.",
+      "brandTreatment": "Minimalist hairline text alignment.",
+      "productPlacement": "Shifted to the upper-center left quadrant to leave sweeping negative space for the cast shadows.",
+      "textureDirection": "Subtle natural weave of airy white linen and fine smooth porcelain glaze.",
+      "headlinePlacement": "Top margin, aligned to the upper left in small ultra-refined hairline typography.",
+      "backgroundElements": "Bleached white oak table top covered partially in unbleached white linen catching soft sun shadow gradients.",
+      "foregroundElements": "Soft, razor-sharp shadows cast by the white porcelain vessels across the linen texture.",
+      "typographyDirection": "Ultra-light geometric sans-serif with generous letter spacing, pristine and quiet.",
+      "supportingCopyPlacement": "Immediately beneath headline in ultra-delicate tracked type."
+    },
+    "brandConstraints": [
+      "Must reflect Nordic Clay's pure, serene aesthetic",
+      "Sans-serif minimalist typography with extreme precision",
+      "High-key white-on-white visual tone"
+    ],
+    "productTreatment": "The bright white porcelain vases capture direct morning sunlight, emphasizing their smooth architectural silhouette and pristine matte texture.",
+    "artDirectionFamily": "EDITORIAL_PHOTOGRAPHY",
+    "interactionInstructions": "",
+    "negativeVisualConstraints": [
+      "dark pitch-black backgrounds",
+      "glowing 3D effects",
+      "heavy badges",
+      "rustic mud splatters",
+      "saturated neon colors",
+      "steam or overly staged hygge fireplace setups",
+      "bold promotional callouts"
+    ]
+  },
+  "renderContext": {
+    "goal": "brand_awareness",
+    "brand": {
+      "usp": "",
+      "name": "Nordic Clay",
+      "tone": "pure, serene, minimalist, airy",
+      "mission": "",
+      "audience": "",
+      "ctaStyle": "",
+      "industry": "",
+      "products": [],
+      "services": [],
+      "emojiStyle": "",
+      "provenance": {
+        "name": "brand",
+        "tone": "brand",
+        "description": "brand"
+      },
+      "wordsToUse": [],
+      "brandColors": [],
+      "competitors": [],
+      "description": "Handcrafted Scandinavian ceramic art and architectural home vessels",
+      "personality": "",
+      "completeness": 25,
+      "wordsToAvoid": [],
+      "writingStyle": ""
+    },
+    "intent": {
+      "event": "",
+      "offer": "",
+      "audience": "",
+      "extracted": true,
+      "venueType": "Scandinavian ceramic studio",
+      "confidence": {},
+      "promotionType": "",
+      "requiredClaims": [
+        "porcelain vases"
+      ],
+      "culturalContext": "",
+      "optionalDetails": [
+        "Minimalist Scandinavian ceramic studio",
+        "bathed in intense morning sunlight",
+        "high-key bright white porcelain vases on bleached white oak table",
+        "expansive airy white linen negative space",
+        "clean soft shadows"
+      ],
+      "productCategory": "porcelain vases"
+    },
+    "styleDna": {
+      "id": "minimalist",
+      "source": "prompt",
+      "variant": 18036
+    },
+    "platforms": [
+      "instagram"
+    ],
+    "creativeDna": {
+      "mood": "",
+      "spacing": "",
+      "bodyFont": "",
+      "lighting": "",
+      "provenance": {},
+      "brandColors": [],
+      "composition": "",
+      "visualStyle": "",
+      "completeness": 0,
+      "headlineFont": "",
+      "logoAssetUrl": "",
+      "logoTreatment": "",
+      "avoidedElements": [],
+      "photographyStyle": "",
+      "productTreatment": "",
+      "preferredElements": [],
+      "referenceAssetUrls": [],
+      "typographyCharacter": ""
+    },
+    "funnelStage": "TOFU",
+    "canonicalBrief": {
+      "goal": "brand_awareness",
+      "assets": {
+        "productAssets": [],
+        "referenceImages": []
+      },
+      "subject": "Shadow Dial",
+      "location": "Scandinavian ceramic studio",
+      "firstRead": "SHADOW DIAL",
+      "brandVoice": {
+        "tone": "pure, serene, minimalist, airy",
+        "vocabulary": [],
+        "constraints": [],
+        "personality": [
+          "authentic",
+          "purposeful"
+        ]
+      },
+      "userPrompt": "Minimalist Scandinavian ceramic studio bathed in intense morning sunlight, high-key bright white porcelain vases on bleached white oak table, expansive airy white linen negative space, clean soft shadows",
+      "funnelStage": "TOFU",
+      "visualStory": "The changing angle of high-key morning light on porcelain vessels acts as a natural sun clock, capturing pure serenity.",
+      "chosenConcept": {
+        "bigIdea": "The changing angle of high-key morning light on porcelain vessels acts as a natural sun clock, capturing pure serenity.",
+        "message": "First light. Pure form.",
+        "conceptName": "Shadow Dial",
+        "visualMechanism": "Juxtaposition of clean time-lapse shadows cast across pristine linen negative space by handcrafted porcelain vases."
+      },
+      "creativeStyle": {
+        "id": "minimalist",
+        "name": "Minimalist",
+        "colorLanguage": [
+          "dominant neutral with one controlled accent"
+        ],
+        "imageTreatment": [
+          "intentional crop"
+        ],
+        "visualLanguage": [
+          "restrained",
+          "precise",
+          "airy"
+        ],
+        "textureLanguage": [
+          "none"
+        ],
+        "typographyLanguage": [
+          "display: quiet, modern, precise",
+          "hierarchy: restrained",
+          "tracking: normal"
+        ],
+        "compositionLanguage": [
+          "alignment: optical alignment",
+          "symmetry: mixed",
+          "whitespace: generous"
+        ],
+        "imperfectionLanguage": []
+      },
+      "emotionalTone": "pure, serene, minimalist, airy",
+      "primaryMessage": "First light. Pure form.",
+      "requiredClaims": [
+        "porcelain vases"
+      ],
+      "creativeStrategy": {
+        "domainContext": {
+          "meaning": "",
+          "occasion": "",
+          "sensitivities": [],
+          "relevantSymbols": [],
+          "visualClichesToAvoid": [
+            "Overly staged hygge fireplace setups",
+            "Hand holding a mug with visible steam",
+            "Rustic earthy dirt and pottery wheel splatters"
+          ],
+          "emotionalAssociations": []
+        },
+        "visualMetaphor": "The ceramic vessel as a sundial gnomon marking moments of stillness.",
+        "audienceTension": "The frantic, high-speed noise of daily digital life leaves no room for quiet contemplation or appreciation of form.",
+        "brandConnection": "Nordic Clay embodies the Scandinavian philosophy of light and form; only a brand rooted in architectural ceramics would use its own physical vessels to turn sunlight into a quiet, functional timekeeper.",
+        "distinctiveness": "Instead of presenting ceramics as static, decorative objects, this creative transforms them into quiet, living instruments of natural light and time.",
+        "narrativeDevice": "sequence",
+        "communicationIdea": "Nordic Clay ceramic vessels measure time through the quiet purity of natural morning light.",
+        "creativeMechanism": "Shadow Dial Sequential Progression",
+        "visualOpportunity": "The designer can use light and precise shadow geometry as the dynamic structural element against extreme white-on-white negative space, allowing time itself to be visualized without clutter.",
+        "emotionalDirection": "A profound sense of meditative calm and slow, deliberate serenity.",
+        "prohibitedVisualCliches": [
+          "Centered product on a flat gradient background",
+          "Giant bold promotional headlines and heavy text blocks",
+          "Artificial drop shadows, high saturation filters, and floating 3D graphics",
+          "Heavy vignette filters or cluttered lifestyle prop arrangements"
+        ]
+      },
+      "secondaryMessages": [
+        "Scandinavian ceramic studio"
+      ],
+      "attentionHierarchy": [
+        "CHOSEN CONCEPT: \"Shadow Dial\"",
+        "REQUIRED FACT: \"porcelain vases\""
+      ]
+    },
+    "graphicConcept": {
+      "hero": "image",
+      "anchor": "shadow-line-intersection",
+      "copyPlan": {
+        "rationale": "Only two understated statements are needed to frame the visual experience; additional text would clutter the serene, meditative expanse of light.",
+        "requiredRoles": [
+          "HEADLINE",
+          "SUPPORT"
+        ],
+        "maxTextElements": 2
+      },
+      "strategy": {
+        "domainContext": {
+          "meaning": "",
+          "occasion": "",
+          "sensitivities": [],
+          "relevantSymbols": [],
+          "visualClichesToAvoid": [
+            "Overly staged hygge fireplace setups",
+            "Hand holding a mug with visible steam",
+            "Rustic earthy dirt and pottery wheel splatters"
+          ],
+          "emotionalAssociations": []
+        },
+        "visualMetaphor": "The ceramic vessel as a sundial gnomon marking moments of stillness.",
+        "audienceTension": "The frantic, high-speed noise of daily digital life leaves no room for quiet contemplation or appreciation of form.",
+        "brandConnection": "Nordic Clay embodies the Scandinavian philosophy of light and form; only a brand rooted in architectural ceramics would use its own physical vessels to turn sunlight into a quiet, functional timekeeper.",
+        "distinctiveness": "Instead of presenting ceramics as static, decorative objects, this creative transforms them into quiet, living instruments of natural light and time.",
+        "narrativeDevice": "sequence",
+        "communicationIdea": "Nordic Clay ceramic vessels measure time through the quiet purity of natural morning light.",
+        "creativeMechanism": "Shadow Dial Sequential Progression",
+        "visualOpportunity": "The designer can use light and precise shadow geometry as the dynamic structural element against extreme white-on-white negative space, allowing time itself to be visualized without clutter.",
+        "emotionalDirection": "A profound sense of meditative calm and slow, deliberate serenity.",
+        "prohibitedVisualCliches": [
+          "Centered product on a flat gradient background",
+          "Giant bold promotional headlines and heavy text blocks",
+          "Artificial drop shadows, high saturation filters, and floating 3D graphics",
+          "Heavy vignette filters or cluttered lifestyle prop arrangements"
+        ]
+      },
+      "firstRead": "Intense, crisp morning light illuminating high-key porcelain forms and casting precise linear shadows across a vast white field.",
+      "imageRole": "full-bleed",
+      "secondRead": "The text 'First light. Pure form.' reading as a calm calibration mark against the shadow's trajectory.",
+      "visualIdea": "Handcrafted high-key porcelain vessels cast crisp, razor-sharp morning shadows across a field of pristine white linen, using the geometric angle of light to transform space into a functional visual clock.",
+      "conceptName": "Shadow Dial",
+      "pointOfView": "Slightly elevated, intimate architectural view of a bleached oak studio table.",
+      "allowedBleed": [
+        "full-image-bleed"
+      ],
+      "movementAxis": "diagonal-downward-shadow-cast",
+      "typeBehavior": "Typography acts as an ultra-refined, architectural whisper — razor-thin, wide-tracked hairline type positioned precisely to meet the edge of a cast shadow like a calibration line.",
+      "emotionalTone": "A profound sense of meditative calm and slow, deliberate serenity.",
+      "imageBehavior": "Full-bleed immersive high-key morning light inside a Scandinavian ceramic studio; pristine white porcelain vessels stand as luminous monoliths casting razor-sharp soft grey shadows.",
+      "logoSanctuary": "Isolated within pristine negative space at top right with generous clearance.",
+      "visualTension": "The extreme stillness of the porcelain object juxtaposed with the implied invisible movement of sunlight and time.",
+      "dominantRegion": "top-right-to-bottom-left-diagonal",
+      "elementsToOmit": [
+        "Centered product on a flat gradient background",
+        "Giant bold promotional headlines and heavy text blocks",
+        "Artificial drop shadows, high saturation filters, and floating 3D graphics",
+        "Heavy vignette filters or cluttered lifestyle prop arrangements",
+        "Overly staged hygge fireplace setups",
+        "Hand holding a mug with visible steam",
+        "Rustic earthy dirt and pottery wheel splatters",
+        "CTA buttons or badges"
+      ],
+      "graphicDevices": [],
+      "imageTreatment": "High-key, luminous daylight exposure with ultra-crisp micro-texture detail in bleached linen and porcelain glazes.",
+      "visualMetaphor": "The ceramic vessel as a sundial gnomon marking moments of stillness.",
+      "graphicBehavior": "none",
+      "visualPlacement": "full-canvas-background",
+      "materialBehavior": "Photographed natural architectural light and physical porcelain glazed textures.",
+      "compositionFamily": "minimal-field",
+      "creativeMechanism": "Shadow Dial Sequential Progression: using precise, elongated natural shadow angles as the primary graphic structure that intersects understated typography.",
+      "headlinePlacement": "lower-left-negative-space",
+      "hierarchyStrategy": "The dramatic geometry of natural light and shadow commands absolute dominance; the key message follows quietly in microscopic, pristine hairline type.",
+      "attentionHierarchy": [
+        "Crisp diagonal morning shadow across white linen",
+        "High-key white porcelain vase silhouette",
+        "Quiet hairline headline text alignment"
+      ],
+      "typographyStrategy": "Ultra-light sans-serif with generous tracking, functioning as a quiet architectural caption rather than a promotional hook.",
+      "compositionStrategy": "Extreme off-center asymmetric balance; vast airy white negative space occupies 80% of the frame, weighted by precise shadow geometry.",
+      "negativeSpaceRegion": "center-left-and-upper-field",
+      "spatialRelationship": "Elongated diagonal shadow paths cross vast empty linen space, anchoring and intersecting the subtle horizontal line of typography.",
+      "dominantVisualObject": "The sharp diagonal morning shadow cast by a porcelain vase across white linen.",
+      "overlapRelationships": [
+        "Shadow tip lightly skimming the baseline of the small hairline headline"
+      ],
+      "logoPlacementStrategy": "margin-aligned",
+      "intentionalImperfection": [
+        "Natural weave texture visible in the high-key white linen"
+      ],
+      "typographyScaleContrast": "Extreme contrast through radical reduction; typography is deliberately tiny against a massive expanse of pure white space."
+    },
+    "visualImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790748285/flowpost/generated/sgmw462ile1xgjdclgoh.png",
+    "referenceImageUrls": []
+  },
+  "sourceAssetUrls": [],
+  "imageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790748285/flowpost/generated/pvhdfynmov6agkrtg8ar.png",
+  "cloudinaryPublicId": "flowpost/generated/pvhdfynmov6agkrtg8ar",
+  "width": 1280,
+  "height": 1600,
+  "format": "png",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image",
+  "typography": {
+    "bodyFont": "Inter",
+    "facesUsed": [
+      {
+        "style": "normal",
+        "family": "Outfit",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Outfit",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "DM Sans",
+        "weight": 500
+      },
+      {
+        "style": "normal",
+        "family": "DM Sans",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Barlow Condensed",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Barlow Condensed",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Poppins",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Poppins",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Manrope",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Manrope",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Outfit",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "DM Sans",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Roboto",
+        "weight": 400
+      }
+    ],
+    "hierarchy": {
+      "cta": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 600,
+        "fontSize": 0.021,
+        "caseTransform": "title",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "body": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.022,
+        "caseTransform": "sentence",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "offer": {
+        "family": "Outfit",
+        "italic": false,
+        "weight": 700,
+        "fontSize": 0.03,
+        "caseTransform": "title",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "accent": {
+        "family": "Outfit",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.024,
+        "caseTransform": "sentence",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "eyebrow": {
+        "family": "Outfit",
+        "italic": false,
+        "weight": 600,
+        "fontSize": 0.02,
+        "caseTransform": "title",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "headline": {
+        "family": "Outfit",
+        "italic": false,
+        "weight": 700,
+        "fontSize": 0.06336,
+        "caseTransform": "title",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "metadata": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.018,
+        "caseTransform": "sentence",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "disclaimer": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.015,
+        "caseTransform": "none",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      },
+      "subheadline": {
+        "family": "Inter",
+        "italic": false,
+        "weight": 500,
+        "fontSize": 0.026,
+        "caseTransform": "sentence",
+        "letterSpacing": 1.6,
+        "lineHeightMult": 1.1
+      }
+    },
+    "bodyWeight": 400,
+    "headlineFont": "Outfit",
+    "baseFontStack": {
+      "body": "Inter",
+      "headline": "Outfit",
+      "bodyWeight": 400,
+      "letterSpacing": 1.6,
+      "headlineWeight": 600,
+      "lineHeightMult": 1.1,
+      "headlineCharWidth": 0.56
+    },
+    "headlineWeight": 600,
+    "approvedCandidates": {
+      "body": [
+        "Inter",
+        "Outfit",
+        "DM Sans",
+        "Roboto"
+      ],
+      "headline": [
+        "Inter",
+        "Outfit",
+        "DM Sans",
+        "Barlow Condensed",
+        "Poppins",
+        "Manrope"
+      ]
+    },
+    "typographyReasoning": "Headline: Outfit (clean/modern/minimal) for its sans-serif character. Body: Inter, a neutral, readable partner from the headlineΓÇÖs own pairing list. Chosen from the shortlist: Outfit's refined geometric shapes capture the serene, minimalist precision required for porcelain crafts, while Inter provides invisible, pristine legibility for the descriptive body copy.."
+  },
+  "source": "AI_GENERATED",
+  "status": "COMPLETED",
+  "campaignId": null,
+  "parentAssetId": null,
+  "createdAt": "2026-09-30T06:04:15.341Z"
+}

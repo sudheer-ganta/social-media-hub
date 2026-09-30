@@ -35,6 +35,7 @@ import type { FieldRect } from './image-field';
 import { SPATIAL_OCCUPANCY_CALIBRATION } from './image-field';
 import type { LineStructureState } from '../typography/dynamic-line-structure';
 import type { DynamicTypeStep } from '../typography/dynamic-typography';
+import type { TextImageRelationshipMode } from '../intent/text-image-relationship';
 
 // ─── Spatial Interaction Signals & Scores ───────────────────────────────────
 
@@ -132,6 +133,7 @@ export interface PlacementCandidate {
 
 export interface PlacementDiscoveryOptions {
   preferredRegion?: 'upper' | 'top' | 'lower' | 'bottom' | 'center';
+  relationshipMode?: TextImageRelationshipMode;
   typographyState: LineStructureState | DynamicTypeStep | { copyId?: string; id?: string; widthNormalized: number; heightNormalized: number; widthPx?: number; heightPx?: number };
   field: DesignField;
   canvas: CanvasRepresentation;
@@ -165,6 +167,7 @@ export function evaluatePlacementRegion(params: {
   safeMargin?: number;
   weights?: PlacementScoringWeights;
   preferredRegion?: 'upper' | 'top' | 'lower' | 'bottom' | 'center';
+  relationshipMode?: TextImageRelationshipMode;
 }): { signals: SpatialInteractionSignals; scores: PlacementScores; reasons: string[] } {
   const {
     rect,
@@ -174,6 +177,7 @@ export function evaluatePlacementRegion(params: {
     safeMargin = canvas.safeBounds ? canvas.safeBounds.x : 0.04,
     weights = DEFAULT_PLACEMENT_WEIGHTS,
     preferredRegion,
+    relationshipMode,
   } = params;
 
   // 1. ImageField Regional Evaluation (O(1) SAT backend)
@@ -262,10 +266,20 @@ export function evaluatePlacementRegion(params: {
 
   // Subject Harmony: gentle penalty for peripheral overlap, strong penalty for core occlusion
   const maxOverlapSignal = Math.max(overlapRatio, subjectOcclusionRatio);
+  const isIntentionalMaterial =
+    relationshipMode === 'MATERIAL_INTERACTION' ||
+    relationshipMode === 'BOUNDARY_INTERACTION' ||
+    relationshipMode === 'CONTAINED' ||
+    relationshipMode === 'EMBEDDED';
+
   let subjectPenalty = 0;
-  if (classification === 'focal-core') subjectPenalty = 0.85 * maxOverlapSignal;
-  else if (classification === 'textured-field') subjectPenalty = 0.30 * maxOverlapSignal;
-  else if (classification === 'peripheral') subjectPenalty = 0.12 * maxOverlapSignal;
+  if (classification === 'focal-core') {
+    subjectPenalty = (isIntentionalMaterial ? 0.35 : 0.85) * maxOverlapSignal;
+  } else if (classification === 'textured-field') {
+    subjectPenalty = (isIntentionalMaterial ? 0.08 : 0.30) * maxOverlapSignal;
+  } else if (classification === 'peripheral') {
+    subjectPenalty = (isIntentionalMaterial ? 0.02 : 0.12) * maxOverlapSignal;
+  }
   const subjectHarmonyScore = Number(Math.max(0, 1.0 - subjectPenalty).toFixed(3));
 
   // Art Director Spatial Sanctuary Guidance (gentle guidance, allowing natural image field discovery)
@@ -352,6 +366,7 @@ export function discoverPlacementCandidates(
     refineContinuous = true,
     samplingResolution,
     preferredRegion,
+    relationshipMode = options.relationshipMode,
   } = options;
 
   const weights: PlacementScoringWeights = {
@@ -427,6 +442,7 @@ export function discoverPlacementCandidates(
       safeMargin,
       weights,
       preferredRegion,
+      relationshipMode,
     });
 
     evaluatedSeeds.push({
@@ -473,6 +489,7 @@ export function discoverPlacementCandidates(
             safeMargin,
             weights,
             preferredRegion,
+            relationshipMode,
           });
 
           if (testEval.scores.compositeScore > bestScore) {

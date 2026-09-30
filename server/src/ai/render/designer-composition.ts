@@ -5,7 +5,7 @@ import type { AiTextProvider, AiImageProvider } from '../providers';
 import type { InlineImagePart } from '../providers/provider.interface';
 import type { CreativeDirection, CreativeRenderContext, CreativeResearch } from '../types';
 import type { ResolvedStyleDNA } from '../style-dna/style-dna';
-import { renderStyleDnaInstructions } from '../style-dna/style-dna';
+import { renderStyleDnaInstructions, resolveStyleDNA } from '../style-dna/style-dna';
 import { resolveDesignRecipe } from './design-recipe';
 import { selectTypography, type TypographySelection } from '../typography/font-selector';
 import { buildTypeSystem, type TypeSystem } from '../typography/type-system';
@@ -40,6 +40,15 @@ import {
 } from '../intent/copy-sanitizer';
 import { validateStyleBriefConsistency } from '../intent/style-brief-consistency';
 import { classifyCriticFailure, type CompositionRecoveryContext } from './critic-recovery';
+import {
+  buildImageRealizationSpec,
+  compileImagePromptFromSpec,
+  type ImageRealizationSpec,
+} from '../intent/image-realization-spec';
+import {
+  evaluateImageAffordance,
+  type ImageAffordanceEvaluation,
+} from '../intent/image-affordance-evaluation';
 
 export class InvalidRenderableCopyError extends Error {
   constructor(message: string, readonly invalidContent: string) {
@@ -1374,6 +1383,16 @@ function describeReservedZone(nodes: DesignNode[]): string | null {
   );
 }
 
+export type DesignIntelligenceMode = 'OFF' | 'SHADOW' | 'ON';
+
+export function getDesignIntelligenceMode(): DesignIntelligenceMode {
+  const envMode = process.env.FLOWPOST_DESIGN_INTELLIGENCE_MODE?.toUpperCase();
+  if (envMode === 'OFF' || envMode === 'SHADOW' || envMode === 'ON') {
+    return envMode;
+  }
+  return 'ON';
+}
+
 export function composeHighFidelityVisualPrompt(options: {
   candidatePrompt?: string;
   direction: CreativeDirection;
@@ -1382,45 +1401,57 @@ export function composeHighFidelityVisualPrompt(options: {
   styleDna?: ResolvedStyleDNA;
   /** The composed plan's nodes, so the image can be briefed to leave room for the copy. */
   nodes?: DesignNode[];
+  copySummary?: {
+    copyCount: number;
+    hasHeadline: boolean;
+    hasSupport: boolean;
+    hasCta: boolean;
+    hasBadge: boolean;
+  };
+  mode?: DesignIntelligenceMode;
 }): string {
-  const { candidatePrompt, direction, concept, context, styleDna, nodes } = options;
+  const { direction, concept, context, styleDna, nodes, copySummary } = options;
+  const mode = options.mode ?? getDesignIntelligenceMode();
 
-  const subject = direction.subject || context.canonicalBrief?.subject || '';
-  const visualStory = direction.visualStory || '';
-  const dominant = concept?.dominantVisualObject || '';
-  const mechanism = concept?.creativeMechanism || '';
-  const claims = (context.intent?.requiredClaims || []).join(', ');
+  if (mode === 'OFF') {
+    const prompt = direction.visualStory || direction.concept || 'Commercial product photography';
+    const reserve = nodes ? describeReservedZone(nodes) : null;
+    return [prompt, reserve].filter(Boolean).join('\n\n');
+  }
 
-  const coreParts = [
-    dominant,
-    subject,
-    visualStory,
-    mechanism,
-    claims ? `Key elements to depict: ${claims}` : '',
-    candidatePrompt,
-  ].filter((p): p is string => Boolean(p && p.trim().length > 0));
+  const spec = buildImageRealizationSpec({
+    concept,
+    brief: context.canonicalBrief,
+    direction,
+    styleDna,
+    copySummary,
+    referenceUrls: (context as any)?.sourceAssetUrls || (context as any)?.assetUrls || [],
+    styleReferenceUrls: context.referenceImageUrls || [],
+    requestId: (context as any)?.requestId,
+  });
 
-  const aestheticDirectives = [
-    'High-end commercial and editorial visual aesthetics with impeccable craft, vibrant clarity, ultra-high-definition 8k resolution, and rich macro detail.',
-    'Full-bleed immersive photography with rich tangible textures (fresh leaves, sesame seeds, glistening glaze, natural wood grain), bright natural daylight or high-key studio lighting, clear visibility, clean well-lit backgrounds, and realistic depth of field.',
-    'Depict concrete, vibrant, authentic real-world subjects and settings directly relevant to the brand, campaign subject, and environment.',
-    'CULTURAL & CATEGORY AUTHENTICITY: For cultural and occasion-driven campaigns, faithfully depict the authentic cultural atmosphere, emotional warmth, and signature festive or contextual elements described in the strategy. For brand and commercial categories, clearly depict authentic category visual cues and appetizing, true-to-life subject matter so the product and context are instantly recognizable.',
-    'STRICT PROHIBITION: Never generate a miniature picture frame hanging on an empty wall, a poster pinned to a concrete wall, a flyer on a table, or a blank room mockup. The visual MUST BE the direct, expansive, immersive subject or destination itself.',
-    'STRICT LIGHTING RULE: Ensure bright, luminous, well-lit scenes with clean, light backgrounds (white, pastel, soft warm cream, airy daylight). AVOID dark gloomy voids, pitch-black backgrounds, murky underexposed shadows, heavy dark vignetting, or dim dark moody lighting unless explicitly requested.',
-    'Leave clean, balanced composition areas and natural breathing room for graphic overlay.',
-    'CRITICAL: Absolutely wordless and clean — NO text, NO lettering, NO numerals, NO typography, NO logos, NO watermark in the image.',
-  ].join(' ');
+  if (mode === 'SHADOW') {
+    console.info('[image-intelligence-shadow] spec-evaluated', {
+      conceptId: spec.conceptId,
+      conceptName: spec.conceptName,
+      copyLoadProfile: spec.copyLoadProfile,
+      readingSpaceRequirement: spec.readingSpaceRequirement,
+    });
+    const prompt = direction.visualStory || direction.concept || 'Commercial product photography';
+    const reserve = nodes ? describeReservedZone(nodes) : null;
+    return [prompt, reserve].filter(Boolean).join('\n\n');
+  }
 
-  const styleInstructions = styleDna ? renderStyleDnaInstructions(styleDna) : '';
+  const compiledPrompt = compileImagePromptFromSpec(spec, styleDna, direction);
   const reserve = nodes ? describeReservedZone(nodes) : null;
 
-  return [`${coreParts.join('. ')}`, aestheticDirectives, reserve, styleInstructions]
+  return [compiledPrompt, reserve]
     .filter((part): part is string => Boolean(part && part.trim().length > 0))
     .join('\n\n');
 }
 
 export async function designCreative(input: DesignerInput) {
-  const { direction, context, styleDna, textProvider, imageProvider, canonicalBrief, graphicConcept, onStageTiming } = input;
+  let { direction, context, styleDna, textProvider, imageProvider, canonicalBrief, graphicConcept, onStageTiming } = input;
   let currentGraphicConcept: GraphicDesignConcept =
     graphicConcept || direction.graphicConcept || fallbackConceptFrom(direction);
 
@@ -1496,7 +1527,7 @@ export async function designCreative(input: DesignerInput) {
   });
 
   // ── STYLE / BRIEF CONSISTENCY GATE ──
-  const userStyleId = styleDna?.style?.id || direction?.selectedStyle?.id || (direction as any)?.selectedStyleId;
+  let userStyleId = styleDna?.style?.id || direction?.selectedStyle?.id || (direction as any)?.selectedStyleId;
   const consistencyResult = validateStyleBriefConsistency({
     brief: canonicalBrief,
     direction,
@@ -1515,6 +1546,16 @@ export async function designCreative(input: DesignerInput) {
     }
     if (consistencyResult.repairedDirection) {
       Object.assign(direction, consistencyResult.repairedDirection);
+    }
+    if (consistencyResult.repairedStyleId) {
+      userStyleId = consistencyResult.repairedStyleId;
+      direction.selectedStyleId = consistencyResult.repairedStyleId;
+      const repairedDna = resolveStyleDNA({ styleId: consistencyResult.repairedStyleId, prompt: direction.subject || '' });
+      if (repairedDna) {
+        styleDna = repairedDna;
+      } else if (styleDna?.style) {
+        styleDna.style.id = consistencyResult.repairedStyleId;
+      }
     }
   }
 
@@ -1557,6 +1598,41 @@ export async function designCreative(input: DesignerInput) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const activeConceptName = currentGraphicConcept.name || currentGraphicConcept.conceptName;
 
+    const copySummary = {
+      copyCount: renderableCopy.length,
+      hasHeadline: renderableCopy.some(c => c.role === 'HEADLINE' || c.semanticRole === 'primary-hook'),
+      hasSupport: renderableCopy.some(c => c.role === 'SUPPORT' || c.role === 'OFFER' || c.semanticRole === 'secondary-hook'),
+      hasCta: renderableCopy.some(c => c.role === 'CTA'),
+      hasBadge: renderableCopy.some(c => c.role === 'EVENT_BADGE' || c.role === 'OFFER'),
+    };
+
+    const imageSpec = buildImageRealizationSpec({
+      concept: currentGraphicConcept,
+      brief: canonicalBrief,
+      direction,
+      styleDna,
+      copySummary,
+      referenceUrls: (context as any)?.sourceAssetUrls || (context as any)?.assetUrls || [],
+      styleReferenceUrls: context.referenceImageUrls || [],
+      attemptId: attempt,
+      requestId: (input as any)?.requestId || (context as any)?.requestId,
+    });
+
+    console.info('[image-realization] spec-created', {
+      requestId: (input as any)?.requestId || (context as any)?.requestId,
+      attemptId: attempt,
+      conceptId: imageSpec.conceptId,
+      conceptName: imageSpec.conceptName,
+      creativeMechanism: imageSpec.creativeMechanism,
+      dominantVisualObject: imageSpec.dominantVisualObject,
+      hero: imageSpec.hero,
+      imageRole: imageSpec.imageRole,
+      copyLoadProfile: imageSpec.copyLoadProfile,
+      readingSpaceRequirement: imageSpec.readingSpaceRequirement,
+      textImageRelationship: imageSpec.textImageRelationship,
+      textRelationshipMode: imageSpec.textRelationshipMode,
+    });
+
     // ── STEP 1: Generate Visual Asset (if required) & Apply Creative Intent Fidelity Gate ──
     if (!input.products.length && !visual && !isPureTypographicPoster) {
       const maxImageTries = 2;
@@ -1569,6 +1645,7 @@ export async function designCreative(input: DesignerInput) {
           concept: currentGraphicConcept,
           context,
           styleDna,
+          copySummary,
         });
 
         const visualPrompt = imgAttempt === 0 || !lastFidelityResult
@@ -1578,18 +1655,24 @@ export async function designCreative(input: DesignerInput) {
               lastFidelityResult || undefined,
             );
 
-        console.info('[creative] generating visual asset', {
+        console.info('[image-generation] start', {
           requestId: (input as any)?.requestId || (context as any)?.requestId,
           attemptId: attempt,
           attempt: imgAttempt + 1,
+          provider: imageProvider.id,
+          model: (imageProvider as any).model || 'gemini-2.5-flash-image',
           isTargetedRegeneration: imgAttempt > 0,
           conceptName: activeConceptName,
+          dominantVisualObject: imageSpec.dominantVisualObject,
+          imageRole: imageSpec.imageRole,
+          copyLoadProfile: imageSpec.copyLoadProfile,
+          textImageRelationship: imageSpec.textImageRelationship,
         });
 
         input.onCall?.('image');
         const imageStart = Date.now();
         const candidateVisual = await imageProvider.generateImage({
-          prompt: `${visualPrompt}\nCampaign context: ${direction.subject}. ${direction.visualStory}. Follow the attached STYLE references for visual language only; never import their text, products or logos. No lettering, logos, numbers or placeholders. Do not default to photography if the selected style calls for another medium. Ensure bright, radiant daylight or high-key studio lighting with clean, luminous, airy backgrounds. Avoid dark, pitch-black, or dim shadowy lighting.`,
+          prompt: `${visualPrompt}\nCampaign context: ${direction.subject}. ${direction.visualStory}. Follow the attached STYLE references for visual language only; never import their text, products or logos. No lettering, logos, numbers or placeholders. Do not default to photography if the selected style calls for another medium.`,
           referenceImages: [...input.references, ...(input.priorVisual ? [input.priorVisual] : [])],
           aspectRatio: direction.aspectRatio,
         });
@@ -1620,12 +1703,14 @@ export async function designCreative(input: DesignerInput) {
         }
 
         // Apply Creative Intent Fidelity Gate
+        const fidelityStart = Date.now();
         const fidelityResult = await evaluateCreativeIntentFidelity({
           image: visualPart,
           contract: creativeRealizationContract,
           provider: textProvider,
           attempt: imgAttempt + 1,
         });
+        onStageTiming?.('fidelity', Date.now() - fidelityStart);
 
         console.info('[creative-fidelity] image-evaluated', {
           requestId: (input as any)?.requestId || (context as any)?.requestId,
@@ -1721,6 +1806,27 @@ export async function designCreative(input: DesignerInput) {
     const designField = createDesignField(rawImageField);
     onStageTiming?.('imageAnalysis', Date.now() - analysisStart);
 
+    // Evaluate Image Affordance
+    const affordanceStart = Date.now();
+    const affordanceEvaluation = evaluateImageAffordance(rawImageField, imageSpec);
+    onStageTiming?.('affordance', Date.now() - affordanceStart);
+    console.info('[image-affordance] evaluated', {
+      requestId: (input as any)?.requestId || (context as any)?.requestId,
+      attemptId: attempt,
+      passed: affordanceEvaluation.passed,
+      readingRegionCount: affordanceEvaluation.readingRegionCount,
+      copyLoadSuitability: affordanceEvaluation.copyLoadSuitability,
+      localDensity: affordanceEvaluation.localDensity,
+      textImageRelationshipFeasibility: affordanceEvaluation.textImageRelationshipFeasibility,
+      confidence: affordanceEvaluation.affordanceConfidence,
+      recommendation: affordanceEvaluation.recommendation,
+      strongestRegions: affordanceEvaluation.strongestReadingRegions.slice(0, 5).map((r) => ({
+        rect: { x: Number(r.rect.x.toFixed(2)), y: Number(r.rect.y.toFixed(2)), width: Number(r.rect.width.toFixed(2)), height: Number(r.rect.height.toFixed(2)) },
+        calmScore: Number(r.calmScore.toFixed(2)),
+        suitableFor: r.suitableFor,
+      })),
+    });
+
     // ── STEP 3: Form Copy Visual Items ──
     const copyItems = renderableCopy.map((c) => {
       const isHeadline = c.role === 'HEADLINE' || c.semanticRole === 'primary-hook';
@@ -1768,6 +1874,49 @@ export async function designCreative(input: DesignerInput) {
     });
     onStageTiming?.('composition', Date.now() - discoveryStart);
     const bestState = discoveryResult.bestState;
+
+    console.info('[typography] state-evaluated', {
+      elementCount: bestState.elements.length,
+      headlineFont: typography.headlineFont,
+      bodyFont: typography.bodyFont,
+    });
+    console.info('[alignment] state-evaluated', {
+      alignmentScore: bestState.alignmentEvaluation?.compositeScore ?? bestState.signals.axisCoherence,
+    });
+    console.info('[spacing] state-evaluated', {
+      spacingScore: Number(((bestState.signals.groupingCoherence + bestState.signals.proximityQuality) / 2).toFixed(3)),
+    });
+    console.info('[color] state-evaluated', {
+      colorScore: Number(bestState.tradeoffProfile.legibilityScore.toFixed(3)),
+    });
+    console.info('[surface] state-evaluated', {
+      surfaceScore: bestState.surfaces.length > 0
+        ? Number(Math.max(0, 1.0 - bestState.signals.surfaceDisruption).toFixed(3))
+        : 1.0,
+    });
+    console.info('[logo] state-evaluated', {
+      hasLogo: Boolean(input.logo),
+    });
+    console.info('[text-image-relationship] state-evaluated', {
+      mode: bestState.textImageRelationshipState?.relationshipMode ?? 'OVERLAY_INTENTIONAL',
+      confidence: bestState.textImageRelationshipState?.confidence ?? 1.0,
+      harmonyScore: bestState.textImageRelationshipState?.relationshipHarmonyScore ?? 1.0,
+      legibilityRisk: bestState.textImageRelationshipState?.legibilityRisk ?? 'LOW',
+      intentionalOverlap: bestState.textImageRelationshipState?.intentionalOverlap ?? false,
+      observedOverlap: bestState.textImageRelationshipState?.evidence.observedOverlapRatio ?? 0,
+      isAccidentalCollision: bestState.textImageRelationshipState?.evidence.isAccidentalCollision ?? false,
+    });
+    console.info('[best-state] resolved', {
+      overallScore: bestState.evaluation.aggregateScore,
+      elementCount: bestState.elements.length,
+      signals: {
+        spatialCoherence: Number(((bestState.signals.spatialBalance + bestState.signals.whitespaceDistribution + bestState.signals.edgePressure) / 3).toFixed(3)),
+        axisCoherence: bestState.signals.axisCoherence,
+        groupingCoherence: bestState.signals.groupingCoherence,
+        contrastQuality: bestState.tradeoffProfile.legibilityScore,
+        imagePreservation: bestState.tradeoffProfile.imagePreservationScore,
+      },
+    });
 
     // ── STEP 5: Handoff to Authoritative DesignerPlan ──
     const planNodes: DesignNode[] = [];
@@ -1952,6 +2101,33 @@ export async function designCreative(input: DesignerInput) {
         logoImage: input.logo,
       });
       onStageTiming?.('critic', Date.now() - criticStart);
+
+      // Section 7 Acceptance Invariant: Explicit arbitration between relationship intelligence and critic judgment
+      if (
+        critic.passed &&
+        bestState.textImageRelationshipState?.legibilityRisk === 'CRITICAL' &&
+        bestState.textImageRelationshipState?.evidence.isAccidentalCollision
+      ) {
+        console.warn('[creative-arbitration] CRITICAL legibility risk / accidental collision overrides soft visual pass', {
+          harmonyScore: bestState.textImageRelationshipState.relationshipHarmonyScore,
+          observedOverlap: bestState.textImageRelationshipState.evidence.observedOverlapRatio,
+          legibilityRisk: bestState.textImageRelationshipState.legibilityRisk,
+        });
+        critic = {
+          ...critic,
+          passed: false,
+          textOccludesSubject: true,
+          problems: [
+            ...(critic.problems || []),
+            `Severe accidental collision: typography collides with primary image subject (overlap: ${(bestState.textImageRelationshipState.evidence.observedOverlapRatio * 100).toFixed(0)}%, legibilityRisk: CRITICAL)`,
+          ],
+          reasonsToReject: [
+            ...(critic.reasonsToReject || []),
+            'Accidental text collision with primary image subject under critical legibility risk',
+          ],
+          redesignFeedback: 'Relocate typography into identified quiet negative space away from subject.',
+        };
+      }
     } catch (renderError) {
       if (renderError instanceof InvalidRenderableCopyError && attempt === 0) {
         console.warn('[creative] renderer invariant caught structured artifact; routing to recovery', {
@@ -2185,6 +2361,16 @@ export async function designCreative(input: DesignerInput) {
             selectedStyleId: userStyleId,
           });
           currentGraphicConcept = consistency.repairedConcept ? { ...nextConcept, ...consistency.repairedConcept } : nextConcept;
+          if (consistency.repairedStyleId) {
+            userStyleId = consistency.repairedStyleId;
+            direction.selectedStyleId = consistency.repairedStyleId;
+            const repairedDna = resolveStyleDNA({ styleId: consistency.repairedStyleId, prompt: direction.subject || '' });
+            if (repairedDna) {
+              styleDna = repairedDna;
+            } else if (styleDna?.style) {
+              styleDna.style.id = consistency.repairedStyleId;
+            }
+          }
 
           // Build fresh contract with new attemptId
           creativeRealizationContract = buildCreativeRealizationContract({

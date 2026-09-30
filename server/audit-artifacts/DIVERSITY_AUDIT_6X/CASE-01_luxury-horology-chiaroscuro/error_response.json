@@ -1,0 +1,7 @@
+{
+  "status": 422,
+  "error": {
+    "error": "FlowPost could not verify this design against your brief, assets and style. Please try again."
+  },
+  "durationMs": 171740
+}

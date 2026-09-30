@@ -1,0 +1,531 @@
+{
+  "id": "f79cade8-f926-4ff7-88f4-a969d01e78b1",
+  "userId": "d15e131b-34da-43d2-bfaf-a9ba332506fd",
+  "contextType": "personal",
+  "brandId": null,
+  "prompt": "Lavish gourmet charcuterie grazing table feast overflowing with artisan cheeses, cured meats, fresh figs, grapes, nuts, rustic sourdough bread, olive branches, and textured marble platter filling the entire frame from edge to edge with complex textures",
+  "creativeBrief": {
+    "cta": "Explore Bespoke Grazing",
+    "mode": "EDITORIAL",
+    "mood": "Lavish, indulgent, artistic, mouth-watering.",
+    "concept": "The Edible Canvas",
+    "palette": [
+      "#3e1e1b",
+      "#8c2d38",
+      "#d9a66c",
+      "#4a5d43",
+      "#e8ece9"
+    ],
+    "subject": "Full-bleed edge-to-edge charcuterie grazing table feast with artisan cheeses, cured meats, fresh figs, grapes, nuts, and rustic sourdough bread on a marble platter.",
+    "headline": "Artistry You Can Taste.",
+    "lighting": "Warm, natural directional side lighting highlighting moisture on fresh figs, specular gleam on grapes, and rich textures on cured meats.",
+    "platform": "instagram",
+    "background": "Textured white and grey veined marble, completely covered by an abundant arrangement of gourmet charcuterie and produce.",
+    "aspectRatio": "4:5",
+    "composition": "Full-frame overhead high-density composition with deep depth of field, corner-to-corner visual richness, dynamic diagonal lines formed by prosciutto and olive sprigs, zero empty background.",
+    "environment": "An upscale, rustic-luxury banquet setting with direct natural light streaming across a long marble dining surface.",
+    "visualStory": "A lavish gourmet charcuterie grazing table fills the frame entirely from edge to edge, transformed into a rich, fine-art canvas. Dense layers of artisan cheeses, ruffled prosciutto, glistening honeycomb, sliced dark figs, and glossy grapes interweave with olive branches and rustic sourdough atop a veined marble surface.",
+    "copyTreatment": "headline_support",
+    "supportingLine": "Bespoke charcuterie grazing tables crafted for extraordinary occasions.",
+    "layoutDirection": {
+      "safeAreas": "Keep top 10% and bottom 10% clean for legible typography overlay.",
+      "layoutType": "Editorial full-bleed photograph with quiet, minimal typography overlays.",
+      "ctaPlacement": "Bottom right, minimalist serif typography.",
+      "logoPlacement": "Top center above headline.",
+      "textHierarchy": [
+        "HOOK — headline, top center",
+        "EXPLAIN — supporting line, top center below headline",
+        "DIRECT — cta, bottom right"
+      ],
+      "visualDensity": "Dense visual sensory feast balanced by ultra-minimal copy zo",
+      "brandTreatment": "Refined editorial typography mimicking an art gallery plaque.",
+      "productPlacement": "Hero grazing table fills 100% of the canvas.",
+      "textureDirection": "Rich tactile grain, natural food moisture, cool marble smoothness.",
+      "headlinePlacement": "Top center with generous margins and breathing room over darker culinary tones.",
+      "backgroundElements": "Full-frame gourmet food arrangement spanning edge-to-edge.",
+      "foregroundElements": "Glistening cut figs, layered prosciutto, olive sprigs in crisp macro focus.",
+      "typographyDirection": "High-contrast editorial serif paired with lightweight tracked sans-serif.",
+      "supportingCopyPlacement": "Directly below headline in quiet, light sans-serif."
+    },
+    "brandConstraints": [
+      "No synthetic plastic sheen on food elements",
+      "No bright stock corporate lighting",
+      "Maintain high-end bespoke artisanal aesthetic"
+    ],
+    "productTreatment": "The charcuterie grazing table spans edge-to-edge, treated as a masterwork canvas of contrasting colors and rich, natural food textures.",
+    "marketingCreative": {
+      "brandMessage": "Bespoke culinary grazing experiences crafted as living art.",
+      "logoTreatment": "Clean wordmark in high-contrast crisp white.",
+      "secondaryInfo": [
+        "Bespoke Catering",
+        "Artisanal Grazing Tables"
+      ],
+      "requiredElements": [
+        "Charcuterie grazing table"
+      ]
+    },
+    "artDirectionFamily": "EDITORIAL_PHOTOGRAPHY",
+    "interactionInstructions": "",
+    "negativeVisualConstraints": [
+      "plastic catering trays",
+      "folding tables",
+      "centered isolated items with empty backdrop",
+      "oversized text boxes obscuring food",
+      "synthetic plastic sheen",
+      "bright blue corporate tones"
+    ]
+  },
+  "renderContext": {
+    "goal": "brand_awareness",
+    "brand": {
+      "usp": "",
+      "name": "Artisan Feast",
+      "tone": "warm, rustic, lavish, mouth-watering",
+      "mission": "",
+      "audience": "",
+      "ctaStyle": "",
+      "industry": "",
+      "products": [],
+      "services": [],
+      "emojiStyle": "",
+      "provenance": {
+        "name": "brand",
+        "tone": "brand",
+        "description": "brand"
+      },
+      "wordsToUse": [],
+      "brandColors": [],
+      "competitors": [],
+      "description": "Bespoke catering and artisanal culinary grazing experiences",
+      "personality": "",
+      "completeness": 25,
+      "wordsToAvoid": [],
+      "writingStyle": ""
+    },
+    "intent": {
+      "event": "",
+      "offer": "",
+      "audience": "",
+      "extracted": true,
+      "venueType": "",
+      "confidence": {},
+      "promotionType": "",
+      "requiredClaims": [
+        "charcuterie grazing table"
+      ],
+      "culturalContext": "",
+      "optionalDetails": [
+        "gourmet charcuterie grazing table feast",
+        "artisan cheeses",
+        "cured meats",
+        "fresh figs",
+        "grapes",
+        "nuts"
+      ],
+      "productCategory": "charcuterie grazing table"
+    },
+    "platforms": [
+      "instagram"
+    ],
+    "creativeDna": {
+      "mood": "",
+      "spacing": "",
+      "bodyFont": "",
+      "lighting": "",
+      "provenance": {},
+      "brandColors": [],
+      "composition": "",
+      "visualStyle": "",
+      "completeness": 0,
+      "headlineFont": "",
+      "logoAssetUrl": "",
+      "logoTreatment": "",
+      "avoidedElements": [],
+      "photographyStyle": "",
+      "productTreatment": "",
+      "preferredElements": [],
+      "referenceAssetUrls": [],
+      "typographyCharacter": ""
+    },
+    "funnelStage": "MOFU",
+    "canonicalBrief": {
+      "goal": "brand_awareness",
+      "assets": {
+        "productAssets": [],
+        "referenceImages": []
+      },
+      "subject": "The Edible Canvas",
+      "firstRead": "THE EDIBLE CANVAS",
+      "brandVoice": {
+        "tone": "warm, rustic, lavish, mouth-watering",
+        "vocabulary": [],
+        "constraints": [],
+        "personality": [
+          "authentic",
+          "purposeful"
+        ]
+      },
+      "userPrompt": "Lavish gourmet charcuterie grazing table feast overflowing with artisan cheeses, cured meats, fresh figs, grapes, nuts, rustic sourdough bread, olive branches, and textured marble platter filling the entire frame from edge to edge with complex textures",
+      "funnelStage": "MOFU",
+      "visualStory": "Transforming an edge-to-edge charcuterie grazing table into a grand, tactile fine-art canvas where fresh produce, artisan cheeses, and marble textures layer like rich brushstrokes.",
+      "chosenConcept": {
+        "bigIdea": "Transforming an edge-to-edge charcuterie grazing table into a grand, tactile fine-art canvas where fresh produce, artisan cheeses, and marble textures layer like rich brushstrokes.",
+        "message": "Artistry you can taste.",
+        "conceptName": "The Edible Canvas",
+        "visualMetaphor": "A Renaissance still-life painting reimagined as a modern, vibrant grazing feast.",
+        "visualMechanism": "Fine-art culinary composition framing food as an abundant canvas"
+      },
+      "creativeStyle": {
+        "id": "editorial",
+        "name": "Editorial",
+        "colorLanguage": [],
+        "imageTreatment": [],
+        "visualLanguage": [],
+        "textureLanguage": [],
+        "typographyLanguage": [],
+        "compositionLanguage": [],
+        "imperfectionLanguage": []
+      },
+      "emotionalTone": "warm, rustic, lavish, mouth-watering",
+      "primaryMessage": "Artistry you can taste.",
+      "requiredClaims": [
+        "charcuterie grazing table"
+      ],
+      "creativeStrategy": {
+        "domainContext": {
+          "meaning": "",
+          "occasion": "Bespoke hosting and celebratory gatherings",
+          "sensitivities": [],
+          "relevantSymbols": [],
+          "visualClichesToAvoid": [
+            "Plastic catering trays on folding tables",
+            "Symmetrical neat stack of deli meats",
+            "Overly bright stock photography lighting"
+          ],
+          "emotionalAssociations": []
+        },
+        "visualMetaphor": "A Renaissance still-life masterwork constructed from edible, freshly sliced, highly tactile ingredients.",
+        "audienceTension": "Hosts want their events to feel extraordinarily generous and visually striking, but worry standard catering looks utilitarian and bland.",
+        "brandConnection": "Only Artisan Feast treats food not as catering portions, but as an edge-to-edge living canvas crafted with bespoke culinary artistry.",
+        "distinctiveness": "Instead of showing a neat event setup or a staged buffet line, this treats the physical surface as an edge-to-edge oil painting composed entirely of raw, delicious ingredients.",
+        "communicationIdea": "A catered grazing table is not just food served; it is a grand, tactile work of fine art crafted to be devoured.",
+        "creativeMechanism": "Fine-art culinary landscape transformation",
+        "visualOpportunity": "The designer can treat food textures—creamy rinds, glossy fig seeds, cracked crusts—as heavy paint strokes and chiseled forms that fully occupy every millimeter of space, completely abandoning empty void or artificial backgrounds.",
+        "emotionalDirection": "Awestruck, indulgent sensory craving and appreciation for master craftsmanship.",
+        "prohibitedVisualCliches": [
+          "Overlapping giant text blocks over the center of the food",
+          "Floating isolated cheese wheels on plain seamless backgrounds",
+          "Synthetic hyper-smooth AI plastic sheen on fruit and meat",
+          "Generic 'Order Now' discount sticker overlays or badges",
+          "Centred overhead view with clean, empty margins"
+        ]
+      },
+      "secondaryMessages": [],
+      "attentionHierarchy": [
+        "CHOSEN CONCEPT: \"The Edible Canvas\"",
+        "REQUIRED FACT: \"charcuterie grazing table\""
+      ]
+    },
+    "graphicConcept": {
+      "hero": "image",
+      "anchor": "bottom-left",
+      "copyPlan": {
+        "rationale": "The imagery carries 90% of the emotional persuasion. Only a restrained headline and essential detail role are required to frame the brand promise without cluttering the canvas.",
+        "requiredRoles": [
+          "HEADLINE",
+          "SUPPORT"
+        ],
+        "maxTextElements": 2
+      },
+      "strategy": {
+        "domainContext": {
+          "meaning": "",
+          "occasion": "Bespoke hosting and celebratory gatherings",
+          "sensitivities": [],
+          "relevantSymbols": [],
+          "visualClichesToAvoid": [
+            "Plastic catering trays on folding tables",
+            "Symmetrical neat stack of deli meats",
+            "Overly bright stock photography lighting"
+          ],
+          "emotionalAssociations": []
+        },
+        "visualMetaphor": "A Renaissance still-life masterwork constructed from edible, freshly sliced, highly tactile ingredients.",
+        "audienceTension": "Hosts want their events to feel extraordinarily generous and visually striking, but worry standard catering looks utilitarian and bland.",
+        "brandConnection": "Only Artisan Feast treats food not as catering portions, but as an edge-to-edge living canvas crafted with bespoke culinary artistry.",
+        "distinctiveness": "Instead of showing a neat event setup or a staged buffet line, this treats the physical surface as an edge-to-edge oil painting composed entirely of raw, delicious ingredients.",
+        "communicationIdea": "A catered grazing table is not just food served; it is a grand, tactile work of fine art crafted to be devoured.",
+        "creativeMechanism": "Fine-art culinary landscape transformation",
+        "visualOpportunity": "The designer can treat food textures—creamy rinds, glossy fig seeds, cracked crusts—as heavy paint strokes and chiseled forms that fully occupy every millimeter of space, completely abandoning empty void or artificial backgrounds.",
+        "emotionalDirection": "Awestruck, indulgent sensory craving and appreciation for master craftsmanship.",
+        "prohibitedVisualCliches": [
+          "Overlapping giant text blocks over the center of the food",
+          "Floating isolated cheese wheels on plain seamless backgrounds",
+          "Synthetic hyper-smooth AI plastic sheen on fruit and meat",
+          "Generic 'Order Now' discount sticker overlays or badges",
+          "Centred overhead view with clean, empty margins"
+        ]
+      },
+      "firstRead": "An overwhelming, lavish sensory spectacle of artisan food textures that feels like a classic masterwork oil painting.",
+      "imageRole": "full-bleed",
+      "secondRead": "The crisp statement 'Artistry you can taste.' confirming the bespoke nature of the visual feast.",
+      "visualIdea": "The entire frame is treated as a lush, high-density oil painting composed entirely of tactile charcuterie ingredients, with understated editorial typography acting as an authentic gallery plaque.",
+      "conceptName": "The Edible Canvas",
+      "pointOfView": "Slightly elevated 45-degree angle immersive macro field-of-view.",
+      "allowedBleed": [
+        "top",
+        "bottom",
+        "left",
+        "right"
+      ],
+      "movementAxis": "diagonal-down-left",
+      "typeBehavior": "Quiet, crisp, typographic gallery inscription that sits with serene confidence over a dedicated quiet region of the visual composition without obscuring the intricate culinary craftsmanship.",
+      "emotionalTone": "Awestruck, indulgent, deeply sensory, and masterfully artisanal.",
+      "imageBehavior": "Full-bleed, ultra-tactile hero visual displaying an edge-to-edge Renaissance still-life feast of rich cheeses, glistening honeycomb, prosciutto folds, and deeply textured fig seeds.",
+      "logoSanctuary": "Lower right clearance over deep dark marble texture.",
+      "visualTension": "The clash between chaotic, overflowing organic food abundance and extreme, disciplined typographic restraint.",
+      "dominantRegion": "center-full",
+      "elementsToOmit": [
+        "Overlapping giant text blocks over the center of the food",
+        "Floating isolated cheese wheels on plain seamless backgrounds",
+        "Synthetic hyper-smooth AI plastic sheen on fruit and meat",
+        "Generic 'Order Now' discount sticker overlays or badges",
+        "Centred overhead view with clean, empty margins",
+        "Plastic catering trays on folding tables",
+        "Symmetrical neat stack of deli meats",
+        "Overly bright stock photography lighting"
+      ],
+      "graphicDevices": [],
+      "imageTreatment": "Rich, hyper-detailed natural lighting with high dynamic range emphasizing wet glazes, rough crusts, and soft rinds.",
+      "visualMetaphor": "A Renaissance still-life masterwork rendered in real, edible, artisan ingredients.",
+      "graphicBehavior": "none",
+      "visualPlacement": "full-frame edge-to-edge",
+      "materialBehavior": "Richly photographed oil-painting aesthetic with physical tactile depths.",
+      "compositionFamily": "asymmetric-editorial",
+      "creativeMechanism": "Fine-art culinary landscape transformation where full-bleed food textures function as canvas and brushstrokes.",
+      "headlinePlacement": "lower-left",
+      "hierarchyStrategy": "The staggering, mouth-watering imagery claims total emotional dominance; a single crisp line of editorial copy provides quiet, authoritative framing.",
+      "attentionHierarchy": [
+        "1. Deeply textured, tactile charcuterie grazing visual spanning edge-to-edge",
+        "2. Editorial headline 'Artistry you can taste.' in fine serif type",
+        "3. Subtle detail identifier 'Bespoke Charcuterie Grazing Tables'"
+      ],
+      "typographyStrategy": "Classic editorial serif styling, high tracking, refined character execution serving as a luxury mark of authenticity.",
+      "compositionStrategy": "Full-frame visual abundance with an intentional offset concentration of dark, shadowed negative space providing a clear sanctuary for small-scale, ultra-refined typography.",
+      "negativeSpaceRegion": "lower-left dark marble shadow zone",
+      "spatialRelationship": "Typography rests over a natural sanctuary within the deep shadowed, organic negative space of the imagery, creating an elegant contrast between opulent texture and restrained type.",
+      "dominantVisualObject": "An immersive, edge-to-edge gourmet charcuterie grazing table feast.",
+      "overlapRelationships": [
+        "Crisp typography subtly overlays deep shadow tone of the marble slab without touching the bright food elements."
+      ],
+      "logoPlacementStrategy": "negative-space-anchor",
+      "intentionalImperfection": [
+        "Cracked honeycomb drips",
+        "Scattered sourdough crumbs across dark marble"
+      ],
+      "typographyScaleContrast": "Extreme ratio: massive high-density photography versus small, immaculate high-contrast serif typography."
+    },
+    "visualImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790747975/flowpost/generated/itukevvnnocowxqliqbj.png",
+    "referenceImageUrls": []
+  },
+  "sourceAssetUrls": [],
+  "imageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790747976/flowpost/generated/te7b19ry1zj9axsd8fkv.png",
+  "cloudinaryPublicId": "flowpost/generated/te7b19ry1zj9axsd8fkv",
+  "width": 1280,
+  "height": 1600,
+  "format": "png",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image",
+  "typography": {
+    "bodyFont": "Lora",
+    "facesUsed": [
+      {
+        "style": "normal",
+        "family": "Playfair Display",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Lora",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Lora",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Montserrat",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Montserrat",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Lora",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Libre Baskerville",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Poppins",
+        "weight": 700
+      },
+      {
+        "style": "normal",
+        "family": "Poppins",
+        "weight": 600
+      },
+      {
+        "style": "normal",
+        "family": "Playfair Display",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Montserrat",
+        "weight": 400
+      },
+      {
+        "style": "normal",
+        "family": "Inter",
+        "weight": 400
+      }
+    ],
+    "hierarchy": {
+      "cta": {
+        "family": "Lora",
+        "italic": false,
+        "weight": 600,
+        "fontSize": 0.021,
+        "caseTransform": "title",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "body": {
+        "family": "Lora",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.022,
+        "caseTransform": "sentence",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "offer": {
+        "family": "Playfair Display",
+        "italic": false,
+        "weight": 700,
+        "fontSize": 0.03,
+        "caseTransform": "title",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "accent": {
+        "family": "Playfair Display",
+        "italic": true,
+        "weight": 400,
+        "fontSize": 0.024,
+        "caseTransform": "sentence",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "eyebrow": {
+        "family": "Playfair Display",
+        "italic": false,
+        "weight": 700,
+        "fontSize": 0.02,
+        "caseTransform": "title",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "headline": {
+        "family": "Playfair Display",
+        "italic": false,
+        "weight": 700,
+        "fontSize": 0.08279999999999998,
+        "caseTransform": "title",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "metadata": {
+        "family": "Lora",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.018,
+        "caseTransform": "sentence",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "disclaimer": {
+        "family": "Lora",
+        "italic": false,
+        "weight": 400,
+        "fontSize": 0.015,
+        "caseTransform": "none",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      },
+      "subheadline": {
+        "family": "Lora",
+        "italic": true,
+        "weight": 500,
+        "fontSize": 0.026,
+        "caseTransform": "sentence",
+        "letterSpacing": -0.6,
+        "lineHeightMult": 1.15
+      }
+    },
+    "bodyWeight": 400,
+    "headlineFont": "Playfair Display",
+    "baseFontStack": {
+      "body": "Lora",
+      "headline": "Playfair Display",
+      "bodyWeight": 400,
+      "letterSpacing": -0.6,
+      "headlineWeight": 700,
+      "lineHeightMult": 1.15,
+      "headlineCharWidth": 0.54
+    },
+    "headlineWeight": 700,
+    "approvedCandidates": {
+      "body": [
+        "Playfair Display",
+        "Montserrat",
+        "Lora",
+        "Inter"
+      ],
+      "headline": [
+        "Playfair Display",
+        "Montserrat",
+        "Lora",
+        "Inter",
+        "Libre Baskerville",
+        "Poppins"
+      ]
+    },
+    "typographyReasoning": "Headline: Playfair Display (elegant/high-contrast/editorial) for its serif character. matched to a food context. Body: Lora, a neutral, readable partner from the headlineΓÇÖs own pairing list. Chosen from the shortlist: Playfair Display brings high-contrast, editorial luxury to the headline, capturing the lavish and artistic tone of bespoke grazing tables. Pairing it with Lora provides an elegant serif continuation that maintains the warm, high-end culinary narrative while ensuring comfortable body readability.."
+  },
+  "source": "AI_GENERATED",
+  "status": "COMPLETED",
+  "campaignId": null,
+  "parentAssetId": null,
+  "createdAt": "2026-09-30T05:59:06.797Z"
+}

@@ -46,6 +46,11 @@ import { enhanceMultiElementCompositionWithSpacing, type SpacingElement, type Sp
 import { discoverInkCandidates, type InkStateCandidate, type ColorDescriptor } from './dynamic-color';
 import { discoverSurfaceCandidates, type SurfaceField, type SurfaceCandidate } from './dynamic-surface';
 import type { CompositionRecoveryContext } from './critic-recovery';
+import {
+  evaluateTextImageRelationship,
+  resolveTextImageRelationshipMode,
+  type TextImageRelationshipState,
+} from '../intent/text-image-relationship';
 
 // ─── 1. Composition State Data Models ───────────────────────────────────────
 
@@ -179,6 +184,7 @@ export interface OptimizedCompositionState {
   interactionSignals: CompositionInteractions;
   tradeoffProfile: CompositionTradeoffProfile;
   alignmentEvaluation?: CompositionAlignmentEvaluation;
+  textImageRelationshipState?: TextImageRelationshipState;
   evaluation: {
     aggregateScore: number;
     reasons: string[];
@@ -585,6 +591,19 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
     }
   }
 
+  // ─── 9B. Text–Image Composition Intelligence Evaluation ───────────────────
+  const textImageRelState = evaluateTextImageRelationship({
+    elements: elements.map((e) => ({
+      id: e.id,
+      role: e.role,
+      rect: e.rect,
+      fontScale: e.typographyState?.fontScale,
+    })),
+    field,
+    concept,
+    realizationContext,
+  });
+
   const interactionSignals: CompositionInteractions = {
     typeImage,
     typePlacement,
@@ -594,6 +613,7 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
     subjectType,
     logoType,
     conceptRealization,
+    textImageHarmony: textImageRelState.relationshipHarmonyScore,
   };
 
   // ─── 10. Multi-Objective Tradeoff Profile ─────────────────────────────────
@@ -668,7 +688,7 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
   const netDisruption = Math.max(0, surfaceDisruption - surfaceNecessity * 0.7);
   const surfaceScore = Number(Math.max(0, Math.min(1.0, 1.0 - netDisruption + Math.min(0.2, contrastGain * 0.04))).toFixed(3));
   const hierScore = hierarchyClarity;
-  const interactScore = (typeImage + colorSurface + placementAlignment + spacingHierarchy + subjectType) / 5;
+  const interactScore = (typeImage + colorSurface + placementAlignment + spacingHierarchy + subjectType + textImageRelState.relationshipHarmonyScore) / 6;
 
   // Element Overlap Penalty: Text elements must never physically collide or overlap
   let maxElementOverlap = 0;
@@ -688,6 +708,14 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
   // Direct Subject Occlusion Penalty: Prevent text elements from sitting on primary subject mass
   const subjectMultiplier = input.recoveryContext?.failures?.includes('OCCLUSION_FAILURE') ? 0.85 : 0.45;
   const subjectOcclusionPenalty = subjectInterference > 0.15 ? (subjectInterference * subjectMultiplier) : 0;
+
+  // Accidental Collision Penalty: Text-Image Relationship Intelligence participation in complete-state scoring
+  const accidentalCollisionPenalty =
+    textImageRelState.evidence.isAccidentalCollision && textImageRelState.legibilityRisk === 'CRITICAL'
+      ? 0.35
+      : textImageRelState.evidence.isAccidentalCollision && textImageRelState.legibilityRisk === 'HIGH'
+      ? 0.15
+      : 0;
 
   // Active Logo Legibility Enforcement under LOGO_LEGIBILITY_FAILURE recovery
   let logoRecoveryPenalty = 0;
@@ -732,6 +760,7 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
     interactScore * w.interactionWeight -
     overlapPenalty -
     subjectOcclusionPenalty -
+    accidentalCollisionPenalty -
     logoRecoveryPenalty -
     priorRejectionPenalty -
     genericCompositionPenalty;
@@ -756,6 +785,7 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
     aggregateScore,
     reasons,
     alignmentEvaluation: alignmentEval,
+    textImageRelationshipState: textImageRelState,
   };
 }
 
@@ -968,6 +998,11 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
   const primaryItem = copyItems[0];
   const primaryLineStates = lineStatesByCopyId.get(primaryItem.id) || [];
   
+  const { mode: relationshipMode } = resolveTextImageRelationshipMode(
+    input.concept,
+    input.realizationContext
+  );
+
   const spatialText = (input.concept?.spatialRelationship || '').toLowerCase();
   const preferredRegion: 'upper' | 'lower' | undefined =
     spatialText.includes('upper') || spatialText.includes('top') || spatialText.includes('void') || input.concept?.negativeSpaceRegion === 'top' || input.concept?.hero === 'whitespace'
@@ -997,6 +1032,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
       field,
       canvas,
       preferredRegion,
+      relationshipMode,
       existingElements: priorAvoidBoxes.length > 0 ? priorAvoidBoxes : undefined,
       maxCandidates: config.maxPlacementsPerType,
       refineContinuous: true,
@@ -1164,6 +1200,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
             canvas,
             existingElements: placedBoxes,
             preferredRegion,
+            relationshipMode,
             maxCandidates: 2,
             refineContinuous: true,
           });
@@ -1483,6 +1520,7 @@ export function discoverOptimizedComposition(input: CompositionDiscoveryInput): 
                 interactionSignals: evaluation.interactionSignals,
                 tradeoffProfile: evaluation.tradeoffProfile,
                 alignmentEvaluation: evaluation.alignmentEvaluation,
+                textImageRelationshipState: evaluation.textImageRelationshipState,
                 evaluation: {
                   aggregateScore: evaluation.aggregateScore,
                   reasons: evaluation.reasons,

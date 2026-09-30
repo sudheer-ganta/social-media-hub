@@ -1,0 +1,89 @@
+{
+  "totalRuns": 6,
+  "successfulRuns": 1,
+  "uniqueRawImagesCount": 0,
+  "uniqueFinalImagesCount": 0,
+  "duplicateReusesDetected": 0,
+  "allHashesDistinct": false,
+  "records": [
+    {
+      "id": "CASE-01",
+      "name": "luxury-horology-chiaroscuro",
+      "category": "Luxury / Watchmaking",
+      "status": "EXPECTED_REJECTION",
+      "httpStatus": 422,
+      "error": {
+        "error": "FlowPost could not verify this design against your brief, assets and style. Please try again."
+      },
+      "totalDurationMs": 171740
+    },
+    {
+      "id": "CASE-02",
+      "name": "kinetic-athletics-sprint",
+      "category": "Kinetic Sports / Athletic Performance",
+      "status": "EXPECTED_REJECTION",
+      "httpStatus": 422,
+      "error": {
+        "error": "FlowPost could not verify this design against your brief, assets and style. Please try again."
+      },
+      "totalDurationMs": 136052
+    },
+    {
+      "id": "CASE-03",
+      "name": "botanical-skincare-serenity",
+      "category": "Organic Skincare / Botanicals",
+      "status": "EXPECTED_REJECTION",
+      "httpStatus": 422,
+      "error": {
+        "error": "FlowPost could not verify this design against your brief, assets and style. Please try again."
+      },
+      "totalDurationMs": 274375
+    },
+    {
+      "id": "CASE-04",
+      "name": "architectural-brutalist-geometry",
+      "category": "Brutalist Architecture / Concrete Form",
+      "status": "SUCCESS",
+      "requestId": "req-diversity-CASE-04-1790758574971",
+      "assetId": "e439119f-50be-46eb-93ee-19bd6d7ac744",
+      "timestamp": "2026-09-30T08:57:05.429Z",
+      "totalDurationMs": 81105,
+      "conceptId": "Architectural Inscription — Brutalist Structural Shadow Grid",
+      "conceptName": "Architectural Inscription — Brutalist Structural Shadow Grid",
+      "headline": "RAW FORM.",
+      "style": "neo-brutalism",
+      "mechanism": "Typographic shadow-carving: extreme high-contrast architectural shadows slice through monumental headline lettering, treating light and shade as physical editing tools.",
+      "relationshipMode": "asymmetric-editorial",
+      "anchor": "top-left diagonal vector",
+      "rawImageSha256": "",
+      "rawImageBytes": 0,
+      "finalImageUrl": "https://res.cloudinary.com/dx8gkv9yq/image/upload/v1790758653/flowpost/generated/jd4ythbntbn85clvcgi4.png",
+      "finalImageSha256": "",
+      "finalImageBytes": 0,
+      "isUniqueRawImage": true,
+      "isUniqueFinalImage": true
+    },
+    {
+      "id": "CASE-05",
+      "name": "artisanal-specialty-coffee",
+      "category": "Artisanal Food / Coffee Roasting",
+      "status": "EXPECTED_REJECTION",
+      "httpStatus": 422,
+      "error": {
+        "error": "FlowPost could not verify this design against your brief, assets and style. Please try again."
+      },
+      "totalDurationMs": 64569
+    },
+    {
+      "id": "CASE-06",
+      "name": "cyber-interface-tech-hardware",
+      "category": "High-Tech / Mechanical Hardware",
+      "status": "EXPECTED_REJECTION",
+      "httpStatus": 422,
+      "error": {
+        "error": "FlowPost could not verify this design against your brief, assets and style. Please try again."
+      },
+      "totalDurationMs": 151175
+    }
+  ]
+}

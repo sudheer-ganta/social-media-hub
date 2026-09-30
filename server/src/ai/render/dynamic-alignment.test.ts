@@ -117,7 +117,11 @@ describe('Dynamic Alignment Engine — Phase 6 (Research-Backed Model)', () => {
     const img = await makeTestImage({ bgLuminance: 220 });
     const field = createDesignField(await analyzeImageField(img));
 
-    c
+    const elements = [
+      { id: 'headline', role: 'headline', rect: { x: 0.08, y: 0.12, width: 0.60, height: 0.18 } },
+      { id: 'support', role: 'subheadline', rect: { x: 0.08, y: 0.32, width: 0.40, height: 0.08 } },
+    ];
+
     const substrate = deriveDesignSubstrate({ elements, field, canvas });
 
     expect(substrate.semanticGroups.length).toBeGreaterThan(0);
