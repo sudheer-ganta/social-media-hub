@@ -35,7 +35,7 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 p-1 backdrop-blur shadow-sm">
               <FlowPostIcon className="h-8 w-8 text-white" />
             </div>
-            <span className="text-xl font-extrabold tracking-tight">FlowPost</span>
+            <span className="text-xl font-extrabold tracking-tight">Rally</span>
           </div>
 
           <div className="space-y-6">
@@ -66,7 +66,7 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
           </div>
 
           <p className="text-xs text-primary-foreground/70">
-            © {new Date().getFullYear()} Flow Post
+            © {new Date().getFullYear()} Rally
           </p>
         </div>
       </div>
@@ -83,7 +83,7 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950 p-1 border border-blue-200/50 dark:border-blue-800/50">
               <FlowPostIcon className="h-7 w-7 text-primary" />
             </div>
-            <span className="text-lg font-extrabold tracking-tight">FlowPost</span>
+            <span className="text-lg font-extrabold tracking-tight">Rally</span>
           </div>
 
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>

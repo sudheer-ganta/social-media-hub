@@ -773,7 +773,7 @@ function Report({
       : "No song chosen — optional.",
     ...(music?.trim() &&
       platforms.includes("instagram") && {
-        why: "Instagram's API cannot attach audio to a photo post, so this travels with the post inside FlowPost but will not play on Instagram.",
+        why: "Instagram's API cannot attach audio to a photo post, so this travels with the post inside Rally but will not play on Instagram.",
       }),
   });
 

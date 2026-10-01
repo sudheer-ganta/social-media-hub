@@ -98,7 +98,7 @@ export function Masthead() {
   return (
     <header className="glass sticky top-0 z-30 border-b">
       <div className="flex h-14 items-center gap-6 px-4 sm:px-6 lg:px-8">
-        <Link to="/" aria-label="FlowPost home" className="shrink-0">
+        <Link to="/" aria-label="Rally home" className="shrink-0">
           {/* Supplied brand asset. Rendered, never restyled. */}
           <Logo size="sm" />
         </Link>

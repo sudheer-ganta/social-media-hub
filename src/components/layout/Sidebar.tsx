@@ -101,7 +101,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
           collapsed && "justify-center px-0",
         )}
       >
-        <Link to="/" className="flex items-center gap-2.5" aria-label="FlowPost Home">
+        <Link to="/" className="flex items-center gap-2.5" aria-label="Rally Home">
           <Logo iconOnly={collapsed} size="md" />
         </Link>
       </div>

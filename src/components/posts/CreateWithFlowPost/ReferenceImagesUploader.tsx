@@ -91,9 +91,9 @@ export function ReferenceImagesUploader({ images, onChange, disabled }: Referenc
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm font-semibold">Show FlowPost what you like</Label>
+      <Label className="text-sm font-semibold">Show Rally what you like</Label>
       <p className="text-xs text-muted-foreground">
-        Add designs whose look you want to follow. FlowPost uses their typography, composition and visual treatment with your own content. Add products in the product-images section above.
+        Add designs whose look you want to follow. Rally uses their typography, composition and visual treatment with your own content. Add products in the product-images section above.
       </p>
 
       {images.length > 0 && (

@@ -120,7 +120,7 @@ function VoiceMix({ view }: { view: BrandIntelligenceView }) {
   if (view.voice.entries.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        Not enough writing yet. Publish a few more posts and FlowPost will start
+        Not enough writing yet. Publish a few more posts and Rally will start
         reading the voice from them.
       </p>
     );
@@ -201,7 +201,7 @@ export function BrandIntelligenceSettings() {
         result.cleared ? "Learned voice cleared" : "There was nothing to clear",
         {
           description:
-            "Your posts are untouched — FlowPost will learn again from them.",
+            "Your posts are untouched — Rally will learn again from them.",
         },
       );
     },
@@ -254,7 +254,7 @@ export function BrandIntelligenceSettings() {
                 Brand Intelligence
               </CardTitle>
               <CardDescription>
-                What FlowPost has learned from this context&rsquo;s own published
+                What Rally has learned from this context&rsquo;s own published
                 posts. Nothing here needs setting up.
               </CardDescription>
             </div>
@@ -323,7 +323,7 @@ export function BrandIntelligenceSettings() {
                       ? "No measured posts yet. Once analytics have collected, patterns show up here."
                       : `Nothing stands out yet across ${view.sampleSize} measured ${
                           view.sampleSize === 1 ? "post" : "posts"
-                        }. FlowPost will not call a pattern early.`}
+                        }. Rally will not call a pattern early.`}
                   </p>
                 ) : (
                   <div className="space-y-3">

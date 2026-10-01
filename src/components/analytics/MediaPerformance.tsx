@@ -51,7 +51,7 @@ export function MediaPerformance({
         </div>
       ) : rows.length === 0 ? (
         <p className="max-w-prose border-t border-border pt-4 text-sm text-muted-foreground">
-          Once you've published a few posts, FlowPost will compare their formats
+          Once you've published a few posts, Rally will compare their formats
           here and tell you which is landing.
         </p>
       ) : (

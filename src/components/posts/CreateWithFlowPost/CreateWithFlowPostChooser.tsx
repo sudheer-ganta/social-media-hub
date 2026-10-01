@@ -19,7 +19,7 @@ interface CreateWithFlowPostChooserProps {
 }
 
 const OPTIONS = [
-  { id: "flowpost", icon: Sparkles, label: "Create with FlowPost", hint: "AI, tuned to your brand" },
+  { id: "flowpost", icon: Sparkles, label: "Create with Rally", hint: "AI, tuned to your brand" },
   { id: "upload", icon: Upload, label: "Upload your content", hint: "Your own photo or video" },
   { id: "manual", icon: PenLine, label: "Create manually", hint: "Start from scratch" },
 ] as const;

@@ -56,6 +56,8 @@ export function FlowPostIcon({ className = "h-8 w-8" }: { className?: string }) 
   );
 }
 
+export const RallyIcon = FlowPostIcon;
+
 export function Logo({
   className,
   iconOnly = false,
@@ -80,11 +82,7 @@ export function Logo({
       <FlowPostIcon className={sizeClasses.icon} />
       {!iconOnly && (
         <span className={cn(sizeClasses.text, textColor, "font-extrabold tracking-tight")}>
-          {/* Pinned to the brand blue the wordmark has always rendered as.
-              It read `text-primary` when `--primary` happened to be this
-              colour; now that actions are ink, pinning is what preserves the
-              asset unchanged. */}
-          Flow<span className="text-[#2563EB]">Post</span>
+          R<span className="text-[#2563EB]">ally</span>
         </span>
       )}
     </div>

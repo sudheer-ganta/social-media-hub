@@ -136,7 +136,7 @@ const TITLES: Record<CardKey, string> = {
 
 const SUBTITLES: Record<CardKey, string> = {
   published: "Every publication that reached a network successfully.",
-  engagement: "Every interaction FlowPost has measured, and where it came from.",
+  engagement: "Every interaction Rally has measured, and where it came from.",
   reach: "Each network under the figure it actually reports.",
   clicks: "Only the networks that report clicks at all.",
   growth: "Followers per account, and how they have moved.",
@@ -163,7 +163,7 @@ function EngagementBreakdown({
   if (totalInteractions === null && byKind.length === 0) {
     return (
       <Blank>
-        Nothing has been measured yet. FlowPost collects interactions
+        Nothing has been measured yet. Rally collects interactions
         automatically once a post is live.
       </Blank>
     );
@@ -203,7 +203,7 @@ function VisibilityBreakdown({
   const publishedTo = new Set(platforms.map((entry) => entry.provider));
 
   if (rows.length === 0) {
-    return <Blank>Connect a network and FlowPost will track what it reports.</Blank>;
+    return <Blank>Connect a network and Rally will track what it reports.</Blank>;
   }
 
   return (
@@ -243,7 +243,7 @@ function VisibilityBreakdown({
 
       <p className="mt-4 text-xs text-muted-foreground">
         Reach counts the people who saw a post. Impressions count how many times
-        it appeared. FlowPost keeps them apart because they aren't the same
+        it appeared. Rally keeps them apart because they aren't the same
         thing.
       </p>
     </>
@@ -268,7 +268,7 @@ function ClickBreakdown({
     return (
       <Blank>
         {anyConnected
-          ? "None of your connected platforms has reported a link click yet. FlowPost will show them here as soon as they do."
+          ? "None of your connected platforms has reported a link click yet. Rally will show them here as soon as they do."
           : "Connect a network that reports link clicks and they will appear here."}
       </Blank>
     );
@@ -301,7 +301,7 @@ function GrowthBreakdown({
   if (audience.length === 0) {
     return (
       <Blank>
-        FlowPost hasn't recorded your follower count yet. It starts as soon as
+        Rally hasn't recorded your follower count yet. It starts as soon as
         the first update comes in.
       </Blank>
     );

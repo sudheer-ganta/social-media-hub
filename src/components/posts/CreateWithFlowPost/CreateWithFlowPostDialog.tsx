@@ -468,7 +468,7 @@ export function CreateWithFlowPostDialog({
     try {
       await creativeService.rejectCreativeConcept(concept.conceptId, activeBrand.id);
       setConcepts((items) => items.filter((item) => item.conceptId !== concept.conceptId));
-      toast.success("FlowPost will learn from that choice.");
+      toast.success("Rally will learn from that choice.");
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Could not record that preference.");
     }
@@ -528,14 +528,14 @@ export function CreateWithFlowPostDialog({
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2 font-display text-lg">
             <Sparkles className="h-4 w-4" />
-            Create with FlowPost
+            Create with Rally
           </DialogTitle>
           <DialogDescription className="text-xs">
             {step === "concepts"
-              ? "FlowPost found these creative directions. Pick the idea, not just a look."
+              ? "Rally found these creative directions. Pick the idea, not just a look."
               : step === "generating" || step === "discovering"
-              ? "FlowPost AI is crafting your bespoke visual identity and campaign composition."
-              : "Describe the creative you want. FlowPost brings your brand's visual identity to it."}
+              ? "Rally AI is crafting your bespoke visual identity and campaign composition."
+              : "Describe the creative you want. Rally brings your brand's visual identity to it."}
           </DialogDescription>
         </DialogHeader>
 
@@ -784,7 +784,7 @@ export function CreateWithFlowPostDialog({
               {referenceStyle && referenceStyle.analysed && (
                 <div className="rounded-md border border-dashed px-3 py-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    FlowPost understood your style
+                    Rally understood your style
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {summariseReferenceStyleTags(referenceStyle).map((tag) => (

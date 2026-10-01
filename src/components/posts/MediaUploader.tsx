@@ -112,7 +112,7 @@ function rejectionMessage(rejection: FileRejection): string {
       ? `${rejection.file.name} is over 1GB.`
       : `${rejection.file.name} is over 20MB.`;
   }
-  return `${rejection.file.name} isn't an image or video FlowPost can use.`;
+  return `${rejection.file.name} isn't an image or video Rally can use.`;
 }
 
 /** "0:18" — a video's length on its tile. */

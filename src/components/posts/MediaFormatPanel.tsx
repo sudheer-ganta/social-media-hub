@@ -414,7 +414,7 @@ export function MediaFormatPanel({
                       This crop delivers about{" "}
                       {Math.round(item.width * (item.crop?.w ?? 1))} ×{" "}
                       {Math.round(item.height * (item.crop?.h ?? 1))}px, and
-                      feeds render around 1080px wide. FlowPost will not upscale
+                      feeds render around 1080px wide. Rally will not upscale
                       it — a larger original, or less zoom, is the only real fix.
                     </span>
                   </p>
