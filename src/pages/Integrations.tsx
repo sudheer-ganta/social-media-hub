@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Building2, RefreshCw, User } from "lucide-react";
+import { Building2, RefreshCw } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,8 +28,11 @@ export default function Integrations() {
    * server-side, so the two contexts never share a card.
    */
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
-  const selectedBrand = selectedBrandId
-    ? (brands.find((b) => b.id === selectedBrandId) ?? null)
+  
+  // Default to first brand once brands load if not explicitly set
+  const activeBrandId = selectedBrandId ?? brands[0]?.id ?? null;
+  const selectedBrand = activeBrandId
+    ? (brands.find((b) => b.id === activeBrandId) ?? null)
     : null;
   const context: AccountContext = selectedBrand
     ? brandContext(selectedBrand.id)
@@ -176,31 +179,24 @@ export default function Integrations() {
         </Button>
       }
     >
-      {/* Context switcher: Personal plus one pill per brand. Which context is
-          active decides which accounts are listed AND which context a new
-          connection joins. */}
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <ContextPill
-          active={!selectedBrand}
-          onClick={() => setSelectedBrandId(null)}
-        >
-          <User className="h-3.5 w-3.5" />
-          Personal
-        </ContextPill>
-        {brands.map((brand) => (
-          <ContextPill
-            key={brand.id}
-            active={selectedBrandId === brand.id}
-            onClick={() => setSelectedBrandId(brand.id)}
-          >
-            <Building2 className="h-3.5 w-3.5" />
-            {brand.name}
-          </ContextPill>
-        ))}
-        <span className="text-xs text-muted-foreground">
-          Manage brands in Settings.
-        </span>
-      </div>
+      {/* Context switcher: One pill per brand. */}
+      {brands.length > 0 && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {brands.map((brand) => (
+            <ContextPill
+              key={brand.id}
+              active={activeBrandId === brand.id}
+              onClick={() => setSelectedBrandId(brand.id)}
+            >
+              <Building2 className="h-3.5 w-3.5" />
+              {brand.name}
+            </ContextPill>
+          ))}
+          <span className="text-xs text-muted-foreground">
+            Manage brands in Settings.
+          </span>
+        </div>
+      )}
 
       {error && !loading && (
         <Card className="mb-4 border-red-500/25 bg-red-500/5 p-4">

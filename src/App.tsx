@@ -22,7 +22,6 @@ const AnalyticsPreview = lazy(() => import("@/pages/dev/AnalyticsPreview"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
-const Onboarding = lazy(() => import("@/pages/Onboarding"));
 const CreativeHistory = lazy(() => import("@/pages/CreativeHistory"));
 
 export default function App() {
@@ -43,7 +42,7 @@ export default function App() {
           <Route path="/privacy/data-deletion" element={<Navigate to="/data-deletion" replace />} />
 
           {/* Protected app routes */}
-          <Route path="onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+          <Route path="onboarding" element={<Navigate to="/settings?tab=brands" replace />} />
           <Route
             element={
               <ProtectedRoute>

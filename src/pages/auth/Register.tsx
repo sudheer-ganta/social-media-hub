@@ -39,7 +39,7 @@ export default function Register() {
       } else {
         sessionStorage.setItem("is_new_signup", "true");
         toast.success("Account created — welcome!");
-        navigate("/onboarding", { replace: true });
+        navigate("/", { replace: true });
       }
     } catch (error) {
       toast.error("Registration failed", {

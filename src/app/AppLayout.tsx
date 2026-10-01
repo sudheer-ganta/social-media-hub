@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { FlowRail } from "@/components/layout/FlowRail";
+import { BrandHeaderPrompt } from "@/components/layout/BrandHeaderPrompt";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { Footer } from "@/components/layout/Footer";
@@ -21,6 +22,9 @@ export function AppLayout() {
       <div className="flex h-screen flex-1 flex-col overflow-hidden" style={{ minWidth: 0 }}>
         {/* Mobile top header - only visible on small screens */}
         <MobileHeader />
+
+        {/* Global Brand Setup Header Notification for new users / missing brand profiles */}
+        <BrandHeaderPrompt />
 
         {/* Pipeline strip — sticky below mobile header or at top of screen on desktop */}
         <FlowRail />

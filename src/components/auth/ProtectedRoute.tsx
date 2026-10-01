@@ -1,8 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { useAuth } from "@/app/AuthProvider";
-import { creationProfileRepository } from "@/repositories/creation-profile.repository";
 
 function SplashScreen() {
   return (
@@ -18,50 +16,12 @@ function SplashScreen() {
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   const location = useLocation();
-  const userId = session?.user?.id;
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(() => {
-    if (!userId) return null;
-    const cached = sessionStorage.getItem(`onboarding_complete_${userId}`);
-    return cached !== null ? cached === "true" : null;
-  });
-
-  useEffect(() => {
-    if (!userId) {
-      setOnboardingComplete(null);
-      return;
-    }
-
-    let active = true;
-    const isNewSignup = sessionStorage.getItem("is_new_signup") === "true";
-
-    creationProfileRepository.get()
-      .then((profile) => {
-        if (!active) return;
-        // If profile explicitly has onboarding_complete, use it.
-        // Otherwise, only force onboarding if this is a fresh signup.
-        const complete = profile?.onboarding_complete ?? !isNewSignup;
-        setOnboardingComplete(complete);
-        sessionStorage.setItem(`onboarding_complete_${userId}`, String(complete));
-      })
-      .catch(() => {
-        if (!active) return;
-        setOnboardingComplete(!isNewSignup);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [userId]);
 
   if (loading) return <SplashScreen />;
 
   if (!session) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
-
-  if (onboardingComplete === null) return <SplashScreen />;
-  if (!onboardingComplete && location.pathname !== "/onboarding") return <Navigate to="/onboarding" replace />;
-  if (onboardingComplete && location.pathname === "/onboarding") return <Navigate to="/" replace />;
 
   return <>{children}</>;
 }

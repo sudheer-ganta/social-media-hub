@@ -1,7 +1,0 @@
-{
-  "status": 401,
-  "error": {
-    "error": "Unauthorized: No token provided"
-  },
-  "durationMs": 1
-}

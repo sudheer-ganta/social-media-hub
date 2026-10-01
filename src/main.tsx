@@ -2,33 +2,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { getSupabase } from "./lib/supabase";
-import { API_BASE_URL } from "./constants/api";
+
+// Handle chunk loading errors when new versions are deployed
+window.addEventListener("vite:preloadError", (event) => {
+  console.warn("New version detected or chunk load failure, reloading...", event);
+  window.location.reload();
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
   </StrictMode>,
 );
-
-(async () => {
-  try {
-    const supabase = getSupabase();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    
-    const token = session?.access_token;
-    
-    const res = await fetch(`${API_BASE_URL}/me`, {
-      headers: token ? {
-        Authorization: `Bearer ${token}`,
-      } : {},
-    });
-    
-    console.log(`Status: ${res.status}`);
-    console.log(await res.json());
-  } catch (err) {
-    console.error("CORS or fetch error:", err);
-  }
-})();

@@ -5,7 +5,7 @@ import React from "react";
 import CreatePost from "./CreatePost";
 import { usePost } from "@/hooks/usePosts";
 import { useBrands } from "@/hooks/useBrands";
-import { PERSONAL_CONTEXT, brandContext } from "@/constants/integrations";
+import { brandContext } from "@/constants/integrations";
 import { CreatePostForm } from "@/components/posts/CreatePostForm";
 
 afterEach(() => {
@@ -215,25 +215,18 @@ describe("CreatePost Page Context Switching", () => {
     });
   });
 
-  it("defaults to Personal context if URL and localStorage are empty", () => {
+  it("defaults to first Brand context if URL and localStorage are empty", () => {
     render(<CreatePost />);
     const contextEl = screen.getByTestId("form-context");
-    expect(JSON.parse(contextEl.textContent || "")).toEqual(PERSONAL_CONTEXT);
-  });
-
-  it("uses Personal context if explicitly set in URL context query param", () => {
-    mockSearchParams.set("context", "personal");
-    render(<CreatePost />);
-    const contextEl = screen.getByTestId("form-context");
-    expect(JSON.parse(contextEl.textContent || "")).toEqual(PERSONAL_CONTEXT);
+    expect(JSON.parse(contextEl.textContent || "")).toEqual(brandContext("brand-1"));
   });
 
   it("uses correct Brand context if explicitly set in URL brand query param", () => {
     mockSearchParams.set("context", "brand");
-    mockSearchParams.set("brand", "brand-1");
+    mockSearchParams.set("brand", "brand-2");
     render(<CreatePost />);
     const contextEl = screen.getByTestId("form-context");
-    expect(JSON.parse(contextEl.textContent || "")).toEqual(brandContext("brand-1"));
+    expect(JSON.parse(contextEl.textContent || "")).toEqual(brandContext("brand-2"));
   });
 
   it("restores the last-used Brand context from localStorage when no URL context is present", () => {
@@ -243,27 +236,27 @@ describe("CreatePost Page Context Switching", () => {
     expect(JSON.parse(contextEl.textContent || "")).toEqual(brandContext("brand-2"));
   });
 
-  it("falls back to Personal context if the stored brand ID no longer exists", () => {
+  it("falls back to first available Brand context if the stored brand ID no longer exists", () => {
     localStorage.setItem("flowpost_last_context", JSON.stringify(brandContext("non-existent-brand")));
     render(<CreatePost />);
     const contextEl = screen.getByTestId("form-context");
-    expect(JSON.parse(contextEl.textContent || "")).toEqual(PERSONAL_CONTEXT);
+    expect(JSON.parse(contextEl.textContent || "")).toEqual(brandContext("brand-1"));
   });
 
   it("switches context immediately if the form is clean", () => {
     render(<CreatePost />);
     
     // Open context switcher
-    const trigger = screen.getByRole("button", { name: /Personal/ });
+    const trigger = screen.getByRole("button", { name: /Brand One/ });
     fireEvent.click(trigger);
 
-    // Click Brand One item
-    const brandItem = screen.getByText("Brand One");
+    // Click Brand Two item
+    const brandItem = screen.getByText("Brand Two");
     fireEvent.click(brandItem);
 
     // Verify it called setSearchParams immediately
     expect(mockSetSearchParams).toHaveBeenCalledWith(
-      { context: "brand", brand: "brand-1" },
+      { context: "brand", brand: "brand-2" },
       { replace: true }
     );
   });
@@ -279,9 +272,9 @@ describe("CreatePost Page Context Switching", () => {
     mockSetSearchParams.mockClear();
 
     // Attempt switch context
-    const trigger = screen.getByRole("button", { name: /Personal/ });
+    const trigger = screen.getByRole("button", { name: /Brand One/ });
     fireEvent.click(trigger);
-    const brandItem = screen.getByText("Brand One");
+    const brandItem = screen.getByText("Brand Two");
     fireEvent.click(brandItem);
 
     // Dialog should open and not call setSearchParams yet
@@ -312,8 +305,8 @@ describe("CreatePost Page Context Switching", () => {
     fireEvent.click(screen.getByTestId("dirty-btn"));
 
     // Switch context
-    fireEvent.click(screen.getByRole("button", { name: /Personal/ }));
-    fireEvent.click(screen.getByText("Brand One"));
+    fireEvent.click(screen.getByRole("button", { name: /Brand One/ }));
+    fireEvent.click(screen.getByText("Brand Two"));
 
     // Click Save & Switch in confirmation dialog
     const saveAndSwitchBtn = screen.getByRole("button", { name: /Save & Switch/ });
@@ -325,7 +318,7 @@ describe("CreatePost Page Context Switching", () => {
     // Verify it switches context after saving
     await waitFor(() => {
       expect(mockSetSearchParams).toHaveBeenCalledWith(
-        { context: "brand", brand: "brand-1" },
+        { context: "brand", brand: "brand-2" },
         { replace: true }
       );
     });
@@ -345,7 +338,7 @@ describe("CreatePost Page Context Switching", () => {
     expect(trigger.hasAttribute("disabled")).toBe(true);
   });
 
-  it("still opens in Personal context if the user has no brands", () => {
+  it("renders Brand Profile setup prompt if user has 0 brands", () => {
     vi.mocked(useBrands).mockReturnValue({
       brands: [],
       isLoading: false,
@@ -354,7 +347,7 @@ describe("CreatePost Page Context Switching", () => {
     } as any);
 
     render(<CreatePost />);
-    const contextEl = screen.getByTestId("form-context");
-    expect(JSON.parse(contextEl.textContent || "")).toEqual(PERSONAL_CONTEXT);
+    expect(screen.getByText("Create your Brand Profile first")).toBeDefined();
+    expect(screen.getByRole("button", { name: /Set Up Brand Profile/ })).toBeDefined();
   });
 });

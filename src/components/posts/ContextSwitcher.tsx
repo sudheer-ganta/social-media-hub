@@ -1,5 +1,5 @@
 import * as React from "react";
-import { User, Building2, ChevronDown, Plus } from "lucide-react";
+import { Building2, ChevronDown, Plus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBrands } from "@/hooks/useBrands";
-import { PERSONAL_CONTEXT, brandContext, type AccountContext } from "@/constants/integrations";
+import { brandContext, type AccountContext } from "@/constants/integrations";
 import type { Brand } from "@/types";
 
 interface ContextSwitcherProps {
@@ -73,37 +73,25 @@ export function ContextSwitcher({
             disabled={disabled}
             className="flex items-center gap-2 px-3 py-1.5 h-9 font-medium border-border/80 hover:bg-accent text-foreground transition-all"
           >
-            {isBrand && activeBrand ? (
+            {activeBrand ? (
               <>
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="max-w-[120px] truncate">{activeBrand.name}</span>
+                <Building2 className="h-4 w-4 text-primary" />
+                <span className="max-w-[140px] truncate">{activeBrand.name}</span>
               </>
             ) : (
               <>
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span>Personal</span>
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <span>{brands.length > 0 ? brands[0].name : "Create Brand"}</span>
               </>
             )}
             {!disabled && <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/80" />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem
-            onClick={() => onSelect(PERSONAL_CONTEXT)}
-            className="flex items-center gap-2 cursor-pointer"
-          >
-            <User className="h-4 w-4 text-muted-foreground" />
-            <span className="flex-1 font-medium">Personal</span>
-            {!isBrand && (
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            )}
-          </DropdownMenuItem>
-
           {brands.length > 0 && (
             <>
-              <DropdownMenuSeparator />
               <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/85">
-                Brands
+                Your Brands
               </div>
               {brands.map((b) => {
                 const selected = isBrand && currentContext.brandId === b.id;
@@ -121,16 +109,16 @@ export function ContextSwitcher({
                   </DropdownMenuItem>
                 );
               })}
+              <DropdownMenuSeparator />
             </>
           )}
 
-          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => setIsDialogOpen(true)}
             className="flex items-center gap-2 cursor-pointer text-primary focus:text-primary"
           >
             <Plus className="h-4 w-4" />
-            <span>Create Brand</span>
+            <span>Create New Brand</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

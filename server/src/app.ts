@@ -19,22 +19,45 @@ const app = express();
  * provider redirects that land on `/callback` — is allowed through, because
  * there is no origin to police and no cookie for a browser to withhold.
  */
-const allowedOrigins = (
-  process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',')
-    : [env.FRONTEND_URL, 'http://localhost:5173']
-)
+const defaultAllowed = [
+  env.FRONTEND_URL,
+  'https://userally.in',
+  'https://www.userally.in',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5000',
+];
+
+const envAllowed = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean)
+  : [];
+
+const allowedOrigins = Array.from(new Set([...defaultAllowed, ...envAllowed]))
   .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+      // Allow requests with no origin (like mobile apps, curl, server-to-server)
+      if (!origin) {
         callback(null, true);
         return;
       }
-      callback(new Error(`Origin ${origin} is not allowed by CORS`));
+      
+      const normalized = origin.trim().replace(/\/$/, '');
+      const isAllowed =
+        allowedOrigins.includes(normalized) ||
+        /^https:\/\/([a-zA-Z0-9-]+\.)*userally\.in$/.test(normalized) ||
+        /^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(normalized) ||
+        /^http:\/\/localhost(:\d+)?$/.test(normalized);
+
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        // Return false without throwing error so CORS fails gracefully without 500
+        callback(null, false);
+      }
     },
     credentials: true,
   }),

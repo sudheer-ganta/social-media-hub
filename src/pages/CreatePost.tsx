@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { CreatePostForm } from "@/components/posts/CreatePostForm";
@@ -47,19 +47,17 @@ export default function CreatePost() {
       if (post) {
         return post.context_type === "brand" && post.brand_id
           ? brandContext(post.brand_id)
-          : PERSONAL_CONTEXT;
+          : brands.length > 0
+            ? brandContext(brands[0].id)
+            : PERSONAL_CONTEXT;
       }
-      return PERSONAL_CONTEXT;
+      return brands.length > 0 ? brandContext(brands[0].id) : PERSONAL_CONTEXT;
     }
 
     // 1. Explicit URL context
-    const urlContext = searchParams.get("context");
     const urlBrand = searchParams.get("brand");
 
-    if (urlContext === "personal") {
-      return PERSONAL_CONTEXT;
-    }
-    if (urlContext === "brand" && urlBrand) {
+    if (urlBrand) {
       const exists = brands.some((b) => b.id === urlBrand);
       if (exists) {
         return brandContext(urlBrand);
@@ -71,9 +69,6 @@ export default function CreatePost() {
       const raw = localStorage.getItem("flowpost_last_context");
       if (raw) {
         const last: AccountContext = JSON.parse(raw);
-        if (last.contextType === "personal") {
-          return PERSONAL_CONTEXT;
-        }
         if (last.contextType === "brand" && last.brandId) {
           const exists = brands.some((b) => b.id === last.brandId);
           if (exists) {
@@ -85,33 +80,34 @@ export default function CreatePost() {
       // ignore
     }
 
-    // 3. Final fallback to Personal
+    // 3. Fallback to first Brand
+    if (brands.length > 0) {
+      return brandContext(brands[0].id);
+    }
+
     return PERSONAL_CONTEXT;
   }, [editing, post, searchParams, brands]);
 
   // Keep URL parameters in sync with the resolved context for new posts
   useEffect(() => {
-    if (!editing && !brandsLoading) {
+    if (!editing && !brandsLoading && brands.length > 0) {
       const currentUrlContext = searchParams.get("context");
       const currentUrlBrand = searchParams.get("brand");
 
-      const expectedContextType = resolvedContext.contextType;
-      const expectedBrandId = resolvedContext.brandId;
+      const expectedBrandId = resolvedContext.brandId ?? brands[0]?.id;
 
-      if (currentUrlContext !== expectedContextType || currentUrlBrand !== expectedBrandId) {
+      if (currentUrlContext !== "brand" || currentUrlBrand !== expectedBrandId) {
         setSearchParams(
-          expectedContextType === "brand" && expectedBrandId
-            ? { context: "brand", brand: expectedBrandId }
-            : { context: "personal" },
+          { context: "brand", brand: expectedBrandId },
           { replace: true }
         );
       }
     }
-  }, [editing, brandsLoading, resolvedContext, searchParams, setSearchParams]);
+  }, [editing, brandsLoading, brands, resolvedContext, searchParams, setSearchParams]);
 
   // Save the resolved context to localStorage as the last-used context
   useEffect(() => {
-    if (!brandsLoading) {
+    if (!brandsLoading && resolvedContext.brandId) {
       localStorage.setItem("flowpost_last_context", JSON.stringify(resolvedContext));
     }
   }, [resolvedContext, brandsLoading]);
@@ -174,6 +170,46 @@ export default function CreatePost() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Skeleton className="h-96 w-full rounded-lg" />
           <Skeleton className="h-96 w-full rounded-lg" />
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (!editing && brands.length === 0) {
+    return (
+      <PageContainer
+        title={
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              onClick={() => navigate("/posts")}
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <span>New Post</span>
+          </div>
+        }
+        description="Set up your brand profile to start creating tailored content."
+      >
+        <div className="mx-auto mt-8 max-w-lg rounded-xl border border-primary/20 bg-gradient-to-b from-card via-card to-primary/[0.04] p-8 text-center shadow-soft">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+            <Building2 className="h-7 w-7" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-foreground">Create your Brand Profile first</h2>
+          <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+            Rally uses your brand identity, tone of voice, and guidelines to generate tailored, high-converting social media posts.
+          </p>
+          <Button
+            onClick={() => navigate("/settings?tab=brands")}
+            className="mt-6 gap-2 shadow-glow"
+          >
+            <Building2 className="h-4 w-4" />
+            <span>Set Up Brand Profile</span>
+          </Button>
         </div>
       </PageContainer>
     );

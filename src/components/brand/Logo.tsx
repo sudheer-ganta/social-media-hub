@@ -8,7 +8,7 @@ interface LogoProps {
   variant?: "default" | "white" | "dark";
 }
 
-export function FlowPostIcon({ className = "h-8 w-8" }: { className?: string }) {
+export function RallyIcon({ className = "h-8 w-8" }: { className?: string }) {
   const uid = useId().replace(/:/g, "");
   const g1 = `fpG1${uid}`;
   const g2 = `fpG2${uid}`;
@@ -56,7 +56,7 @@ export function FlowPostIcon({ className = "h-8 w-8" }: { className?: string }) 
   );
 }
 
-export const RallyIcon = FlowPostIcon;
+export const FlowPostIcon = RallyIcon;
 
 export function Logo({
   className,
@@ -79,7 +79,7 @@ export function Logo({
 
   return (
     <div className={cn("inline-flex items-center gap-2.5 font-bold tracking-tight select-none", className)}>
-      <FlowPostIcon className={sizeClasses.icon} />
+      <RallyIcon className={sizeClasses.icon} />
       {!iconOnly && (
         <span className={cn(sizeClasses.text, textColor, "font-extrabold tracking-tight")}>
           R<span className="text-[#2563EB]">ally</span>
