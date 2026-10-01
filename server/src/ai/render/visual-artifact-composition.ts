@@ -53,7 +53,7 @@ export function deriveMaterialProperties(
   node?: DesignNode
 ): VisualArtifactMaterial {
   const visualWorld = ((concept as ReferenceAwareConcept).visualWorld || '').toLowerCase();
-  const materialBehavior = (concept.materialBehavior || '').toLowerCase();
+  const materialBehavior = ((concept as any).materialBehavior || '').toLowerCase();
   const physicalMech = (realizationPlan?.physicalMechanism || concept.creativeMechanism || '').toLowerCase();
 
   switch (role) {
@@ -164,7 +164,7 @@ export function deriveEdgeCharacter(
   node?: DesignNode
 ): VisualArtifactEdgeCharacter {
   const visualWorld = ((concept as ReferenceAwareConcept).visualWorld || '').toLowerCase();
-  const materialBehavior = (concept.materialBehavior || '').toLowerCase();
+  const materialBehavior = ((concept as any).materialBehavior || '').toLowerCase();
 
   if (role === 'SUBSTRATE') {
     return visualWorld.includes('deckled') || materialBehavior.includes('deckled') ? 'deckled' : 'clean';
@@ -191,7 +191,7 @@ export function deriveEdgeCharacter(
  * Calculates optical visual mass (0.0 to 1.0) based on bounds, opacity, and role prominence.
  */
 export function calculateVisualMass(
-  bounds: { width: number; height: number },
+  bounds: { width: number; height: number; x?: number; y?: number },
   role: VisualArtifactSemanticRole,
   opacity = 1.0
 ): number {

@@ -214,9 +214,9 @@ export function evaluateTextImageRelationship(
 
   for (const elem of elements) {
     const reg = field.evaluateRegion(elem.rect);
-    const occupancy = field.occupancyAt ? field.occupancyAt(elem.rect) : (reg.subjectOcclusion || 0);
-    const busyness = field.busynessAt ? field.busynessAt(elem.rect) : (reg.detailEnergy || 0);
-    const tone = field.toneAt ? field.toneAt(elem.rect) : { meanLuminance: reg.meanLuminance || 0.5, stdDev: reg.localVariance || 0.05, verdict: 'light' as const };
+    const occupancy = typeof field.occupancyAt === 'function' ? field.occupancyAt(elem.rect) : (reg.subjectOcclusion || reg.occupancy || 0);
+    const busyness = (field as any).busynessAt ? (field as any).busynessAt(elem.rect) : (reg.detailEnergy || 0);
+    const tone = (field as any).toneAt ? (field as any).toneAt(elem.rect) : { meanLuminance: reg.meanLuminance || 0.5, stdDev: reg.luminanceStdDev || 0.05, verdict: reg.verdict || ('light' as const) };
 
     const dx = (elem.rect.x + elem.rect.width / 2) - focalCentroid.x;
     const dy = (elem.rect.y + elem.rect.height / 2) - focalCentroid.y;

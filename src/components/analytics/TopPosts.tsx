@@ -76,7 +76,7 @@ export function TopPosts({
         </ul>
       ) : rows.length === 0 ? (
         <p className="max-w-prose border-t border-border pt-4 text-sm text-muted-foreground">
-          Nothing published in this period yet. Publish a post and FlowPost will
+          Nothing published in this period yet. Publish a post and Rally will
           start tracking it automatically — you don't have to do anything.
         </p>
       ) : (

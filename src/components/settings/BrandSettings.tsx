@@ -148,7 +148,7 @@ export function BrandSettings() {
               <Label htmlFor="brand-name">Name</Label>
               <Input
                 id="brand-name"
-                placeholder="FlowPost"
+                placeholder="Rally"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
               />

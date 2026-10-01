@@ -156,7 +156,7 @@ export default function Integrations() {
             ? `${connectedCount} connected · ${needsAttention} need${needsAttention === 1 ? "s" : ""} attention`
             : connectedCount > 0
               ? `${connectedCount} account${connectedCount === 1 ? "" : "s"} connected and publishing`
-              : "Connect the networks FlowPost publishes to."
+              : "Connect the networks Rally publishes to."
       }
       actions={
         <Button

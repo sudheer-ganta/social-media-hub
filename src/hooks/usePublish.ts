@@ -118,7 +118,7 @@ export function usePublishPostToProvider() {
         toast.warning(`Published to ${network} — without your media`, {
           description:
             result.reason ??
-            `${network} couldn't attach the media, so FlowPost published the text only.`,
+            `${network} couldn't attach the media, so Rally published the text only.`,
           // Longer than a success toast: this one has to actually be read.
           duration: 10_000,
         });

@@ -99,7 +99,7 @@ export default function Scheduled() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Schedule</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            What FlowPost is going to publish for you, and what it already tried.
+            What Rally is going to publish for you, and what it already tried.
           </p>
         </div>
 
@@ -176,7 +176,7 @@ function EmptyStateFor({ tab }: { tab: TabId }) {
     upcoming: {
       title: "Your week is wide open.",
       description:
-        "Write a post, pick a time and a timezone, and FlowPost will send it without you being here.",
+        "Write a post, pick a time and a timezone, and Rally will send it without you being here.",
     },
     failed: {
       title: "Nothing needs you.",
@@ -434,7 +434,7 @@ function DestinationRow({
         <span className="w-full text-xs text-muted-foreground">
           {destination.errorMessage}
           {waiting && destination.attemptsRemaining > 0
-            ? ` FlowPost will try ${destination.attemptsRemaining} more time${
+            ? ` Rally will try ${destination.attemptsRemaining} more time${
                 destination.attemptsRemaining === 1 ? "" : "s"
               }.`
             : ""}

@@ -104,6 +104,7 @@ export interface AlignmentGraphEdge {
     targetMetric?: string;
     separationQuality?: number;
     isIntentionalAsymmetry?: boolean;
+    offsetDelta?: number;
   };
 }
 

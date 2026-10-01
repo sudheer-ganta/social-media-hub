@@ -69,8 +69,8 @@ export function DisconnectDialog({
             <div className="space-y-3 pt-1">
               <p>
                 {account?.displayName
-                  ? `${account.displayName} will be removed from FlowPost.`
-                  : `This ${integration.displayName} account will be removed from FlowPost.`}
+                  ? `${account.displayName} will be removed from Rally.`
+                  : `This ${integration.displayName} account will be removed from Rally.`}
               </p>
               <ul className="space-y-1.5 rounded-lg border bg-muted/40 p-3 text-sm">
                 <li className="flex gap-2">

@@ -37,13 +37,13 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
           ...init.headers,
         },
       },
-      "You need to be signed in to create with FlowPost.",
+      "You need to be signed in to create with Rally.",
     );
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") {
       throw new Error("This took too long. Please try again.");
     }
-    throw new Error("Could not reach FlowPost's creative engine. Check your connection and try again.");
+    throw new Error("Could not reach Rally's creative engine. Check your connection and try again.");
   } finally {
     clearTimeout(timeout);
   }

@@ -2174,6 +2174,7 @@ export interface VisualArtifactMaterial {
 export interface VisualArtifactRelationship {
   targetId: string;
   type: VisualArtifactRelationshipType;
+  relationshipType?: VisualArtifactRelationshipType;
   rationale?: string;
 }
 

@@ -141,6 +141,8 @@ export interface CompositionInteractions {
   logoType: number;
   /** Creative Mechanism Realization: Extent to which physical composition expresses the stated creative mechanism */
   conceptRealization?: number;
+  /** Text-Image Relationship Harmony Score */
+  textImageHarmony?: number;
 }
 
 export interface CreativeRealizationContext {
@@ -257,6 +259,8 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
   tradeoffProfile: CompositionTradeoffProfile;
   aggregateScore: number;
   reasons: string[];
+  alignmentEvaluation?: CompositionAlignmentEvaluation;
+  textImageRelationshipState?: TextImageRelationshipState;
 } {
   const { canvas, elements, field, brand, weights, realizationContext, concept } = input;
   const w = { ...DEFAULT_COMPOSITION_WEIGHTS, ...weights };

@@ -182,7 +182,7 @@ export function FacebookPageDialog({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          FlowPost connects one Page per context. Connecting another Page later
+          Rally connects one Page per context. Connecting another Page later
           replaces this one.
         </p>
 

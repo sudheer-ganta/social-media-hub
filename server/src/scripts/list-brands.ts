@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { prisma } from '../config/prisma';
 
 async function main() {
@@ -22,7 +23,7 @@ async function main() {
       console.log(`- Brand Name: "${b.name}" (ID: ${b.id})`);
       console.log(`  Description: ${b.description || 'None'}`);
       console.log(`  Website: ${b.website || 'None'}`);
-      console.log(`  Connected Accounts: ${b.social_accounts.map(a => `${a.provider}: @${a.account_handle || a.account_name}`).join(', ') || 'None'}`);
+      console.log(`  Connected Accounts: ${b.social_accounts.map(a => `${a.provider}: @${a.username || a.displayName}`).join(', ') || 'None'}`);
       console.log(`  Brand Voices count: ${b.brand_voices.length}`);
     }
 

@@ -1551,12 +1551,13 @@ export async function designCreative(input: DesignerInput) {
     }
     if (consistencyResult.repairedStyleId) {
       userStyleId = consistencyResult.repairedStyleId;
-      direction.selectedStyleId = consistencyResult.repairedStyleId;
+      (direction as any).selectedStyleId = consistencyResult.repairedStyleId;
+      (direction as any).selectedStyle = consistencyResult.repairedStyleId;
       const repairedDna = resolveStyleDNA({ styleId: consistencyResult.repairedStyleId, prompt: direction.subject || '' });
       if (repairedDna) {
         styleDna = repairedDna;
       } else if (styleDna?.style) {
-        styleDna.style.id = consistencyResult.repairedStyleId;
+        styleDna.style.id = consistencyResult.repairedStyleId as any;
       }
     }
   }
@@ -2418,12 +2419,13 @@ export async function designCreative(input: DesignerInput) {
         currentGraphicConcept = consistency.repairedConcept ? { ...candidate, ...consistency.repairedConcept } : candidate;
         if (consistency.repairedStyleId) {
           userStyleId = consistency.repairedStyleId;
-          direction.selectedStyleId = consistency.repairedStyleId;
+          (direction as any).selectedStyleId = consistency.repairedStyleId;
+          (direction as any).selectedStyle = consistency.repairedStyleId;
           const repairedDna = resolveStyleDNA({ styleId: consistency.repairedStyleId, prompt: direction.subject || '' });
           if (repairedDna) {
             styleDna = repairedDna;
           } else if (styleDna?.style) {
-            styleDna.style.id = consistency.repairedStyleId;
+            styleDna.style.id = consistency.repairedStyleId as any;
           }
         }
 

@@ -79,7 +79,7 @@ export function WhatsWorking({
         <Heading />
         <p className="max-w-prose border-t border-border pt-4 text-sm text-muted-foreground">
           Your first performance story is loading. Once a published post has been
-          measured, FlowPost will tell you here what's working and what isn't —
+          measured, Rally will tell you here what's working and what isn't —
           you won't have to look for it.
         </p>
       </section>

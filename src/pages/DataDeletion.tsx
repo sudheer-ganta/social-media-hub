@@ -14,10 +14,10 @@ export default function DataDeletion() {
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to FlowPost
+            Back to Rally
           </Link>
           <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            FlowPost Legal & Privacy
+            Rally Legal & Privacy
           </span>
         </div>
       </header>
@@ -34,7 +34,7 @@ export default function DataDeletion() {
             </h1>
           </div>
           <p className="text-muted-foreground text-base leading-relaxed">
-            FlowPost is committed to protecting your privacy and giving you complete control over your data.
+            Rally is committed to protecting your privacy and giving you complete control over your data.
             In compliance with Meta (Facebook/Instagram), TikTok, X (Twitter), and GDPR/CCPA regulations,
             you have full rights to request the permanent deletion of your data at any time.
           </p>
@@ -45,7 +45,7 @@ export default function DataDeletion() {
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 flex items-start gap-4">
             <ShieldCheck className="h-6 w-6 text-primary shrink-0 mt-0.5" />
             <div>
-              <h3 className="font-semibold text-foreground text-base">FlowPost Privacy Commitment</h3>
+              <h3 className="font-semibold text-foreground text-base">Rally Privacy Commitment</h3>
               <p className="text-muted-foreground text-sm mt-1">
                 We do not sell your personal data. When you delete your account or disconnect social channels, all associated access tokens, connected account details, media assets, and post history are permanently erased from our active databases.
               </p>
@@ -58,7 +58,7 @@ export default function DataDeletion() {
               1. Self-Service In-App Data Deletion
             </h2>
             <p className="text-muted-foreground">
-              You can instantly remove your data directly within the FlowPost application:
+              You can instantly remove your data directly within the Rally application:
             </p>
             <div className="grid gap-4 sm:grid-cols-2 mt-3">
               <div className="p-4 rounded-lg border border-border bg-card">
@@ -72,7 +72,7 @@ export default function DataDeletion() {
               </div>
 
               <div className="p-4 rounded-lg border border-border bg-card">
-                <h4 className="font-semibold mb-1 text-foreground">Delete Your FlowPost Account</h4>
+                <h4 className="font-semibold mb-1 text-foreground">Delete Your Rally Account</h4>
                 <p className="text-xs text-muted-foreground mb-3">
                   Go to <strong className="text-foreground">Settings</strong> &gt; <strong className="text-foreground">Account</strong> and select <strong className="text-foreground">Delete Account</strong>. This permanently purges your user profile, posts, drafts, and settings.
                 </p>
@@ -86,17 +86,17 @@ export default function DataDeletion() {
           {/* Section 2: Meta / Facebook / Instagram Revocation */}
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">
-              2. How to Remove FlowPost via Facebook / Meta Settings
+              2. How to Remove Rally via Facebook / Meta Settings
             </h2>
             <p className="text-muted-foreground">
-              If you connected your Facebook Page or Instagram Business account to FlowPost, you can revoke access at any time directly through Meta:
+              If you connected your Facebook Page or Instagram Business account to Rally, you can revoke access at any time directly through Meta:
             </p>
             <ol className="list-decimal list-inside space-y-2 pl-2 text-muted-foreground">
               <li>Log in to your Facebook account and go to <strong className="text-foreground">Settings & Privacy &gt; Settings</strong>.</li>
               <li>Navigate to <strong className="text-foreground">Apps and Websites</strong> in the left sidebar menu.</li>
-              <li>Search for <strong className="text-foreground">FlowPost</strong> in the app list.</li>
-              <li>Click <strong className="text-foreground">Remove</strong> next to FlowPost to revoke all permissions.</li>
-              <li>Optionally, check the box to request Facebook to delete all post data created via FlowPost.</li>
+              <li>Search for <strong className="text-foreground">Rally</strong> in the app list.</li>
+              <li>Click <strong className="text-foreground">Remove</strong> next to Rally to revoke all permissions.</li>
+              <li>Optionally, check the box to request Facebook to delete all post data created via Rally.</li>
             </ol>
             <div className="pt-2">
               <a
@@ -116,16 +116,16 @@ export default function DataDeletion() {
               3. Requesting Manual Data Deletion via Email
             </h2>
             <p className="text-muted-foreground">
-              If you no longer have access to your FlowPost account, or if you wish to request a formal manual deletion of all historical records, please send an email request to our privacy team:
+              If you no longer have access to your Rally account, or if you wish to request a formal manual deletion of all historical records, please send an email request to our privacy team:
             </p>
 
             <div className="p-4 rounded-lg border border-border bg-card space-y-2">
               <div className="flex items-center gap-2 text-foreground font-semibold">
                 <Mail className="h-4 w-4 text-primary" />
-                Contact Email: <a href="mailto:privacy@flowpost.app" className="text-primary hover:underline">privacy@flowpost.app</a>
+                Contact Email: <a href="mailto:privacy@userally.in" className="text-primary hover:underline">privacy@userally.in</a>
               </div>
               <p className="text-xs text-muted-foreground">
-                <strong>Subject Line:</strong> FlowPost User Data Deletion Request
+                <strong>Subject Line:</strong> Rally User Data Deletion Request
               </p>
               <p className="text-xs text-muted-foreground">
                 Please include your registered email address and any connected social handles so we can verify account ownership.

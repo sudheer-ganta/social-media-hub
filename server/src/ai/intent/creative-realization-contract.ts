@@ -398,8 +398,10 @@ export function buildCreativeRealizationContract(
   }
   const campaignIntent =
     (concept as any)?.campaignIntent ||
-    brief?.topic ||
-    brief?.businessType;
+    (brief as any)?.topic ||
+    (brief as any)?.businessType ||
+    brief?.subject ||
+    brief?.goal;
   const communicationIdea =
     (concept as any)?.communicationIdea ||
     (concept as any)?.bigIdea ||
