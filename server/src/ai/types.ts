@@ -1409,6 +1409,8 @@ export interface GraphicDesignConcept {
   surfaceDepth?: string;
   tensionAnchor?: string;
   brandIntegration?: string;
+  conceptIntent?: ConceptIntent;
+  visualRealizationIntent?: VisualRealizationIntent;
 }
 
 export interface CompositionIntent {
@@ -1545,6 +1547,24 @@ export interface CreativeConcept {
   conceptName: string;
   bigIdea: string;
   visualMechanism: string;
+  communicationIdea?: string;
+  creativePremise?: string;
+  creativeMechanism?: string;
+  mechanismOwner?: 'IMAGE' | 'DDE' | 'COPY' | 'HYBRID';
+  dominantVisualObject?: string;
+  visualWorld?: string;
+  physicalArtifacts?: string[];
+  compositionMechanism?: string;
+  copyAngle?: string;
+  textImageRelationship?: string;
+  referenceInsight?: string;
+  requiredVisualElements?: string[];
+  requiredVisualProof?: string[];
+  prohibitedVisualInterpretations?: string[];
+  styleDirection?: string;
+  conceptSpecificity?: number;
+  occasionSpecificity?: number;
+  realizability?: number;
   humanInsight?: string;
   visualMetaphor?: string;
   interaction?: string;
@@ -1593,6 +1613,62 @@ export interface CreativeConceptScores {
   mechanismNovelty: number;
   /** Self-reported closeness to the OTHER concepts in the same set. Lower is better; high values fail the diversity gate. */
   similarityToOtherConcepts: number;
+  conceptSpecificity?: number;
+  occasionSpecificity?: number;
+  realizability?: number;
+}
+
+export interface ConceptIntent {
+  occasion?: string;
+  communicationIdea: string;
+  creativePremise: string;
+  creativeMechanism: string;
+  visualMechanism: string;
+  copyAngle?: string;
+  referenceInsight?: string;
+  conceptSpecificity?: number;
+}
+
+export interface VisualRealizationIntent {
+  dominantVisualObject: string;
+  hero: 'image' | 'typography' | 'product' | 'graphic-element' | 'whitespace' | 'texture';
+  imageRole: 'full-bleed' | 'small-tactile-object' | 'omitted' | 'no-image' | 'hero' | 'offset-crop' | 'floating-fragment' | 'subordinate-texture';
+  visualWorld: string;
+  requiredVisualElements: string[];
+  requiredVisualProof: string[];
+  prohibitedInterpretations: string[];
+  lighting?: string;
+  materials?: string[];
+  physicalArtifacts: string[];
+  compositionMechanism?: string;
+}
+
+export interface StructuredCreativeConcept extends ScoredCreativeConcept {
+  conceptName: string;
+  communicationIdea: string;
+  creativePremise: string;
+  creativeMechanism: string;
+  visualMechanism: string;
+  mechanismOwner: 'IMAGE' | 'DDE' | 'COPY' | 'HYBRID';
+  dominantVisualObject: string;
+  hero: 'image' | 'typography' | 'product';
+  imageRole: 'full-bleed' | 'small-tactile-object' | 'omitted' | 'no-image';
+  visualWorld: string;
+  physicalArtifacts: string[];
+  compositionMechanism: string;
+  copyAngle: string;
+  textImageRelationship: string;
+  referenceInsight?: string;
+  requiredVisualElements: string[];
+  requiredVisualProof: string[];
+  prohibitedVisualInterpretations: string[];
+  styleDirection?: string;
+  conceptSpecificity: number;
+  brandSpecificity: number;
+  occasionSpecificity: number;
+  realizability: number;
+  conceptIntent?: ConceptIntent;
+  visualRealizationIntent?: VisualRealizationIntent;
 }
 
 export interface ScoredCreativeConcept extends CreativeConcept {
@@ -1629,6 +1705,22 @@ export interface ScoredCreativeConcept extends CreativeConcept {
   dominantVisualObject?: string;
   firstRead?: string;
   visualIdea?: string;
+  visualWorld?: string;
+  copyAngle?: string;
+  requiredVisualProof?: string[];
+  prohibitedInterpretations?: string[];
+  prohibitedVisualInterpretations?: string[];
+  requiredVisualElements?: string[];
+  physicalArtifacts?: string[];
+  compositionMechanism?: string;
+  referenceInsight?: string;
+  referenceInsights?: any;
+  personality?: any;
+  conceptSpecificity?: number;
+  occasionSpecificity?: number;
+  realizability?: number;
+  conceptIntent?: ConceptIntent;
+  visualRealizationIntent?: VisualRealizationIntent;
 }
 
 export interface RawCreativeConceptPayload {
@@ -2022,3 +2114,191 @@ export interface RawCreativeResearchPayload {
   ideasToAvoid?: unknown;
   originalityDirection?: unknown;
 }
+
+// ─── Human-Designed Visual Artifacts ──────────────────────────────────────────
+
+export type VisualArtifactSemanticRole =
+  | 'SUBSTRATE'
+  | 'SUBJECT'
+  | 'CUTOUT_OBJECT'
+  | 'IMAGE_FRAGMENT'
+  | 'TEXTURE'
+  | 'ANNOTATION'
+  | 'HANDMARK'
+  | 'GRAPHIC_SHAPE'
+  | 'FRAME'
+  | 'TYPOGRAPHY'
+  | 'LOGO'
+  | 'DECORATIVE_ELEMENT';
+
+export type VisualArtifactRelationshipType =
+  | 'behind'
+  | 'inFront'
+  | 'intersects'
+  | 'crosses'
+  | 'contains'
+  | 'frames'
+  | 'anchors'
+  | 'repeats'
+  | 'balances'
+  | 'groupsWith'
+  | 'contrastsWith';
+
+export type VisualArtifactEdgeCharacter =
+  | 'clean'
+  | 'torn'
+  | 'deckled'
+  | 'rough'
+  | 'feathered'
+  | 'geometric'
+  | 'tape-bound'
+  | 'natural';
+
+export type VisualArtifactInteractionMode =
+  | 'physical-mount'
+  | 'overlay'
+  | 'diegetic-label'
+  | 'underlay'
+  | 'intersecting'
+  | 'floating'
+  | 'anchored';
+
+export interface VisualArtifactMaterial {
+  type: 'paper' | 'cardstock' | 'linen' | 'film' | 'pressed-specimen' | 'glass' | 'metal' | 'fabric' | 'ink' | 'tape' | 'natural-fiber' | 'ceramic' | string;
+  texture?: string;
+  finish?: 'matte' | 'gloss' | 'raw' | 'deckled' | 'aged' | 'translucent' | 'textured' | string;
+  color?: string;
+  opacity?: number;
+}
+
+export interface VisualArtifactRelationship {
+  targetId: string;
+  type: VisualArtifactRelationshipType;
+  rationale?: string;
+}
+
+export interface VisualArtifactElement {
+  id: string;
+  semanticRole: VisualArtifactSemanticRole;
+  intrinsicBounds: { x: number; y: number; width: number; height: number };
+  visualMass: number;
+  material?: VisualArtifactMaterial;
+  depth: number;
+  rotation: number;
+  scale: number;
+  opacity: number;
+  edgeCharacter: VisualArtifactEdgeCharacter;
+  texture?: string;
+  visualWeight: number;
+  relationships: VisualArtifactRelationship[];
+  parentElementId?: string;
+  interactionMode?: VisualArtifactInteractionMode;
+}
+
+export interface VisualArtifactComposition {
+  elements: VisualArtifactElement[];
+  materialHierarchy: string[];
+  layerHierarchy: string[];
+  depthPlanes: any;
+  opticalBalanceScore: number;
+  discoveredRelationshipsCount: number;
+  canvasBounds?: { width: number; height: number };
+  relationships?: VisualArtifactRelationship[];
+  depthPlaneMap?: { background: VisualArtifactElement[]; midground: VisualArtifactElement[]; foreground: VisualArtifactElement[] };
+  opticalBalance?: { centerOfMass: { x: number; y: number }; editorialTension: number };
+}
+
+// ─── Reference-Aware Concept Abstraction ──────────────────────────────────────
+
+export type ReferenceSourceType =
+  | 'film-cinematic'
+  | 'tv-editorial'
+  | 'internet-culture'
+  | 'viral-format'
+  | 'meme-structure'
+  | 'documentary-format'
+  | 'print-heritage'
+  | 'advertising-canon'
+  | 'cultural-moment'
+  | 'observational-comedy'
+  | string;
+
+export interface ReferenceDeviceAbstraction {
+  sourceType: ReferenceSourceType;
+  creativeDevice: string;
+  narrativeDevice: string;
+  visualMechanism: string;
+  compositionMechanism: string;
+  copyMechanism: string;
+  emotionalEffect: string;
+  culturalSignal: string;
+  freshness: number;
+  brandApplicability: string;
+}
+
+export type CreativePersonality =
+  | 'editorial'
+  | 'emotional'
+  | 'playful'
+  | 'clever'
+  | 'deadpan'
+  | 'witty'
+  | 'unexpected'
+  | 'nostalgic'
+  | 'cinematic'
+  | 'experimental'
+  | 'internet-native'
+  | string;
+
+export interface ReferenceAwareConcept extends ScoredCreativeConcept {
+  visualWorld: string;
+  copyAngle: string;
+  referenceInsights?: ReferenceDeviceAbstraction;
+  textImageRelationship: string;
+  requiredVisualProof: string[];
+  prohibitedInterpretations: string[];
+  styleDirection: string;
+  creativePersonality?: CreativePersonality;
+}
+
+export interface CreativeRealizationPlan {
+  concept: string;
+  visualWorld: string;
+  hero: string;
+  materials: string[];
+  objects: string[];
+  environment: string;
+  cameraIntent: string;
+  lightingIntent: string;
+  physicalMechanism: string;
+  imageRole: string;
+  compositionAffordance: string;
+  naturalnessRequirements: string[];
+  referenceInsights: string[];
+  prohibitedInterpretations: string[];
+  requiredVisualProof: string[];
+}
+
+export interface HumanNaturalnessSignalEvaluation {
+  positiveSignals: string[];
+  negativeSignals: string[];
+  naturalnessScore: number;
+  passed: boolean;
+  physicalMaterialContinuity: boolean;
+  credibleGeometry: boolean;
+  credibleShadows: boolean;
+  naturalOcclusion: boolean;
+  controlledAsymmetry: boolean;
+  nonUniformScale: boolean;
+  materialTextureAuthenticity: boolean;
+  realisticEdgeBehavior: boolean;
+  layeredDepth: boolean;
+  purposefulIrregularity: boolean;
+  editorialTension: boolean;
+  opticalHierarchy: boolean;
+  credibleCropping: boolean;
+  visualSpecificity: boolean;
+  nonGenericComposition: boolean;
+  syntheticAIFlaws: string[];
+}
+

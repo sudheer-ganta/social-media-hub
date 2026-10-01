@@ -1,0 +1,1826 @@
+{
+  "section1_siblingConcepts": {
+    "concept1": {
+      "conceptId": "c1-botanical-specimen",
+      "conceptName": "Apothecary as Linnaean Herbarium Specimen",
+      "communicationIdea": "Every botanical bottle is an accessioned, documented plant specimen from a living estate archive",
+      "creativeMechanism": "Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+      "visualMechanism": "Physical pressed lavender and sage specimens mounted on off-white deckled herbarium sheet with calligraphic ink annotations",
+      "hero": "image",
+      "imageRole": "specimen",
+      "visualWorld": "A sunlit natural history herbarium with aged linen sheets, pressed dried florals, brass rulers, and curator drying presses",
+      "copyAngle": "Archival documentation & specimen classification",
+      "personality": "editorial",
+      "referenceInsights": {
+        "sourceType": "documentary-format",
+        "creativeDevice": "Linnaean botanical herbarium accession",
+        "narrativeDevice": "Preserved living history catalog",
+        "visualMechanism": "Dried pressed floral specimen with specimen tape and linen backing",
+        "compositionMechanism": "Herbarium quadrant layout with specimen card in lower third",
+        "copyMechanism": "Formal archival Latin nomenclature and accession notes",
+        "emotionalEffect": "Scholarly reverence and tactile botanical authenticity",
+        "culturalSignal": "Botanical museum curation",
+        "freshness": 94,
+        "brandApplicability": "Elevates organic skincare to museum-grade botanical scholarship"
+      },
+      "textImageRelationship": "Typographic curator label anchoring pressed specimen layout",
+      "requiredVisualProof": [
+        "Authentic pressed lavender and sage stems with visible dried cellular texture",
+        "Deckled-edge cream herbarium paper with tactile fiber grain",
+        "Physical specimen mounting tape and authentic cast shadow"
+      ],
+      "prohibitedInterpretations": [
+        "Generic glossy cosmetics render on marble slab",
+        "Floating 3D render with artificial volumetric god-rays",
+        "Standard e-commerce cutout with white drop-shadow"
+      ],
+      "styleDirection": {
+        "artDirectionFamily": "HANDCRAFTED",
+        "compositionFamily": "archival-grid"
+      }
+    },
+    "concept2": {
+      "conceptId": "c2-candid-apothecary-workshop",
+      "conceptName": "Apothecary as 4:00 AM Harvest Laboratory",
+      "communicationIdea": "The unvarnished, raw physical reality of dawn extraction before the sun burns off volatile terpenes",
+      "creativeMechanism": "Candid observational photojournalism inside an active copper alembic stillroom",
+      "visualMechanism": "Raw directional side-light cutting through morning steam, wet stone floors, condensation on copper coils, and hand-stained linen filters",
+      "hero": "image",
+      "imageRole": "full-bleed",
+      "visualWorld": "An unposed Provencal stone laboratory at dawn with copper stills, morning dew, dark terracotta tiles, and amber glass carboys",
+      "copyAngle": "Unvarnished observational field report",
+      "personality": "deadpan",
+      "referenceInsights": {
+        "sourceType": "film-cinematic",
+        "creativeDevice": "Cinematic dawn photojournalism",
+        "narrativeDevice": "Candid harvest threshold",
+        "visualMechanism": "Chiaroscuro morning light through steam",
+        "compositionMechanism": "Asymmetric 35mm documentary framing with deep atmospheric depth",
+        "copyMechanism": "Single time-stamped sentence with raw veracity",
+        "emotionalEffect": "Immediate visceral truth and respect for hard craft",
+        "culturalSignal": "Slow-craft agricultural purism",
+        "freshness": 91,
+        "brandApplicability": "Proves harvest authenticity without staged lifestyle tropes"
+      },
+      "textImageRelationship": "Offset documentary caption in lower margin allowing full atmospheric bleed",
+      "requiredVisualProof": [
+        "Atmospheric morning steam backlit by directional window daylight",
+        "Tarnished copper alembic still with authentic condensation and water beads",
+        "Raw unpolished stone workshop surface"
+      ],
+      "prohibitedInterpretations": [
+        "Posed stock photo model holding a dropper bottle",
+        "Over-saturated orange/teal synthetic color grade"
+      ],
+      "styleDirection": {
+        "artDirectionFamily": "DOCUMENTARY",
+        "compositionFamily": "asymmetric-editorial"
+      }
+    },
+    "concept3": {
+      "conceptId": "c3-swiss-botanical-manifesto",
+      "conceptName": "Apothecary as Pure Monograph System",
+      "communicationIdea": "Zero romanticism: radical ingredient purity expressed as an uncompromising pharmaceutical-grade typographic index",
+      "creativeMechanism": "Scale contrast between extreme macro leaf cuticle photography and stark Swiss architectural typography",
+      "visualMechanism": "Hyper-detailed black-and-white macro cellular photography juxtaposed against bold black sans-serif monograph rules and stark white field",
+      "hero": "typography",
+      "imageRole": "offset-crop",
+      "visualWorld": "A sterile Swiss design laboratory with stark white matte boards, black architectural rule-lines, and razor-sharp typographic geometry",
+      "copyAngle": "Declarative ingredient manifesto",
+      "personality": "experimental",
+      "referenceInsights": {
+        "sourceType": "tv-editorial",
+        "creativeDevice": "Swiss International Typographic System",
+        "narrativeDevice": "Pure objective declaration",
+        "visualMechanism": "Monochrome macro texture vs stark vector rules",
+        "compositionMechanism": "Strict asymmetric grid with 60% negative white space",
+        "copyMechanism": "Formulaic percentage breakdowns and authoritative typography",
+        "emotionalEffect": "Unassailable scientific authority and modernist clarity",
+        "culturalSignal": "Modernist design purism",
+        "freshness": 95,
+        "brandApplicability": "Positions organic elixir as an avant-garde luxury design object"
+      },
+      "textImageRelationship": "Large architectural typography commanding negative space with tight cropped macro fragment",
+      "requiredVisualProof": [
+        "Razor-sharp macro detail of plant cuticle cells",
+        "Absolute matte paper ground with high-contrast ink density",
+        "Clean architectural grid rules and generous negative white space"
+      ],
+      "prohibitedInterpretations": [
+        "Rustic craft-paper aesthetic with messy splatters",
+        "Cute pastel colors or decorative floral flourishes"
+      ],
+      "styleDirection": {
+        "artDirectionFamily": "TYPOGRAPHY_LED",
+        "compositionFamily": "minimal-swiss"
+      }
+    },
+    "pairComparisons": {
+      "C1_vs_C2": {
+        "conceptA": "Apothecary as Linnaean Herbarium Specimen",
+        "conceptB": "Apothecary as 4:00 AM Harvest Laboratory",
+        "similarityScore": 0,
+        "isDifferentiated": true,
+        "convergedDimensions": [
+          "hero"
+        ],
+        "divergentDimensions": [
+          "communicationIdea",
+          "creativeMechanism",
+          "visualMechanism",
+          "visualWorld",
+          "copyAngle",
+          "referenceDevice"
+        ],
+        "rationale": "Divergent across communicationIdea, creativeMechanism, visualMechanism, visualWorld, copyAngle, referenceDevice."
+      },
+      "C1_vs_C3": {
+        "conceptA": "Apothecary as Linnaean Herbarium Specimen",
+        "conceptB": "Apothecary as Pure Monograph System",
+        "similarityScore": 0.007,
+        "isDifferentiated": true,
+        "convergedDimensions": [],
+        "divergentDimensions": [
+          "communicationIdea",
+          "creativeMechanism",
+          "visualMechanism",
+          "hero",
+          "visualWorld",
+          "copyAngle",
+          "referenceDevice"
+        ],
+        "rationale": "Divergent across communicationIdea, creativeMechanism, visualMechanism, hero, visualWorld, copyAngle, referenceDevice."
+      },
+      "C2_vs_C3": {
+        "conceptA": "Apothecary as 4:00 AM Harvest Laboratory",
+        "conceptB": "Apothecary as Pure Monograph System",
+        "similarityScore": 0.003,
+        "isDifferentiated": true,
+        "convergedDimensions": [],
+        "divergentDimensions": [
+          "communicationIdea",
+          "creativeMechanism",
+          "visualMechanism",
+          "hero",
+          "visualWorld",
+          "copyAngle",
+          "referenceDevice"
+        ],
+        "rationale": "Divergent across communicationIdea, creativeMechanism, visualMechanism, hero, visualWorld, copyAngle, referenceDevice."
+      }
+    },
+    "poolDivergence": {
+      "overallDivergenceScore": 0.997,
+      "isPoolDifferentiated": true,
+      "pairReports": [
+        {
+          "conceptA": "Apothecary as Linnaean Herbarium Specimen",
+          "conceptB": "Apothecary as 4:00 AM Harvest Laboratory",
+          "similarityScore": 0,
+          "isDifferentiated": true,
+          "convergedDimensions": [
+            "hero"
+          ],
+          "divergentDimensions": [
+            "communicationIdea",
+            "creativeMechanism",
+            "visualMechanism",
+            "visualWorld",
+            "copyAngle",
+            "referenceDevice"
+          ],
+          "rationale": "Divergent across communicationIdea, creativeMechanism, visualMechanism, visualWorld, copyAngle, referenceDevice."
+        },
+        {
+          "conceptA": "Apothecary as Linnaean Herbarium Specimen",
+          "conceptB": "Apothecary as Pure Monograph System",
+          "similarityScore": 0.007,
+          "isDifferentiated": true,
+          "convergedDimensions": [],
+          "divergentDimensions": [
+            "communicationIdea",
+            "creativeMechanism",
+            "visualMechanism",
+            "hero",
+            "visualWorld",
+            "copyAngle",
+            "referenceDevice"
+          ],
+          "rationale": "Divergent across communicationIdea, creativeMechanism, visualMechanism, hero, visualWorld, copyAngle, referenceDevice."
+        },
+        {
+          "conceptA": "Apothecary as 4:00 AM Harvest Laboratory",
+          "conceptB": "Apothecary as Pure Monograph System",
+          "similarityScore": 0.003,
+          "isDifferentiated": true,
+          "convergedDimensions": [],
+          "divergentDimensions": [
+            "communicationIdea",
+            "creativeMechanism",
+            "visualMechanism",
+            "hero",
+            "visualWorld",
+            "copyAngle",
+            "referenceDevice"
+          ],
+          "rationale": "Divergent across communicationIdea, creativeMechanism, visualMechanism, hero, visualWorld, copyAngle, referenceDevice."
+        }
+      ],
+      "convergenceWarnings": [],
+      "mustRegenerate": false
+    }
+  },
+  "section2_referenceProvenance": {
+    "referenceSource": "Muséum National d’Histoire Naturelle Herbarium Archives (Paris) & 19th Century French Botanical Monographs",
+    "sourceType": "documentary-format",
+    "creativeDeviceExtracted": "Archival specimen mounting on deckle paper with botanical accession stamp and handwritten classification tag",
+    "whatWasIntentionallyNotCopied": [
+      "Did NOT copy specific historical museum catalog numbers or museum logos",
+      "Did NOT copy antique French handwriting fonts or vintage paper distress clipart",
+      "Did NOT copy pre-existing textbook diagram layouts",
+      "Did NOT replicate specific copyrighted editorial campaign layouts"
+    ],
+    "howAdaptedToBrand": "Adapted into a modern luxury skincare artifact where the product is cataloged as a living botanical extract with authentic lab batch verification."
+  },
+  "section3_conceptToCopyFidelity": {
+    "concept1_copy": {
+      "communicationAngle": "Archival documentation & specimen classification",
+      "hook": "The definitive Aura Botanica.",
+      "headline": "SINGLE-ESTATE HARVESTED",
+      "support": "100% cold macerated",
+      "cta": "EXPLORE",
+      "creativePersonality": "editorial"
+    },
+    "concept2_copy": {
+      "communicationAngle": "Unvarnished observational field report",
+      "hook": "Naturally, Aura Botanica.",
+      "headline": "SINGLE-ESTATE HARVESTED",
+      "support": "100% cold macerated",
+      "cta": "SEE PROOF",
+      "creativePersonality": "deadpan"
+    },
+    "concept3_copy": {
+      "communicationAngle": "Declarative ingredient manifesto",
+      "hook": "The definitive Aura Botanica.",
+      "headline": "SINGLE-ESTATE HARVESTED",
+      "support": "100% cold macerated",
+      "cta": "EXPLORE",
+      "creativePersonality": "experimental"
+    },
+    "swapTestAnalysis": "SWAP TEST (C1 copy into C2 world):\n  - If we place C1's archival curator copy (\"HERBARIUM SPECIMEN NO. 04 / ACCESSIONED ESTABLISHED BOTANICAL EXTRACT\") into C2's raw 4:00 AM steam-filled copper stillroom photograph, it immediately clashes. C2 requires candid unvarnished photojournalism (\"STEAM RISES AT 04:12 BEFORE THE TERPENES EVAPORATE\"), not museum accession notes.\n  - If we place C3's Swiss declarative monograph (\"FORMULA 04: 100% COLD MACERATED BOTANICAL ISOLATE\") into C1's tactile pressed-herb linen sheet, the hyper-modernist Swiss phrasing violates the tactile 19th-century pressed botanical archive aesthetic.\n  - CONCLUSION: Copy is strictly derived from the concept's specific communicative idea and visual world, failing the swap test as required."
+  },
+  "section4_conceptToImageFidelity": {
+    "plan": {
+      "concept": "Apothecary as Linnaean Herbarium Specimen",
+      "visualWorld": "A sunlit natural history herbarium with aged linen sheets, pressed dried florals, brass rulers, and curator drying presses",
+      "hero": "image",
+      "materials": [
+        "Heavy textured cotton paper substrate",
+        "Tactile dimensional specimens",
+        "Fine pigment ink with letterpress impression",
+        "Natural translucent mounting strips"
+      ],
+      "objects": [
+        "Aura Botanica",
+        "Physical archival labels and catalog markings",
+        "Tangible specimen fragments"
+      ],
+      "environment": "A sunlit natural history herbarium with aged linen sheets, pressed dried florals, brass rulers, and curator drying presses",
+      "cameraIntent": "Macro editorial lens with authentic optical depth and sharp tactile focus",
+      "lightingIntent": "Natural directional window light with soft fill and organic contrast",
+      "physicalMechanism": "Physical pressed lavender and sage specimens mounted on off-white deckled herbarium sheet with calligraphic ink annotations",
+      "imageRole": "specimen",
+      "compositionAffordance": "Organized specimen hierarchy leaving calm negative space for FlowPost typography",
+      "naturalnessRequirements": [
+        "Physical material continuity across paper grain and specimen edges",
+        "Credible optical geometry with authentic depth of field",
+        "Natural cast shadows and realistic ambient occlusion",
+        "Controlled asymmetry and purposeful editorial irregularity",
+        "Zero plastic smoothing or synthetic HDR glow",
+        "Zero AI-generated hallucinated text or fake logos in the image"
+      ],
+      "referenceInsights": [
+        "Device: Linnaean botanical herbarium accession",
+        "Mechanism: Dried pressed floral specimen with specimen tape and linen backing",
+        "Cultural Signal: Botanical museum curation"
+      ],
+      "prohibitedInterpretations": [
+        "Generic glossy cosmetics render on marble slab",
+        "Floating 3D render with artificial volumetric god-rays",
+        "Standard e-commerce cutout with white drop-shadow"
+      ],
+      "requiredVisualProof": [
+        "Authentic pressed lavender and sage stems with visible dried cellular texture",
+        "Deckled-edge cream herbarium paper with tactile fiber grain",
+        "Physical specimen mounting tape and authentic cast shadow"
+      ],
+      "compiledImagePrompt": "PHYSICAL SCENE & ENVIRONMENT: A sunlit natural history herbarium with aged linen sheets, pressed dried florals, brass rulers, and curator drying presses\n\nDOMINANT HERO & OBJECTS: image - Aura Botanica, Physical archival labels and catalog markings, Tangible specimen fragments\n\nPHYSICAL MECHANISM: Physical pressed lavender and sage specimens mounted on off-white deckled herbarium sheet with calligraphic ink annotations\n\nMATERIALS & TEXTURES: Heavy textured cotton paper substrate, Tactile dimensional specimens, Fine pigment ink with letterpress impression, Natural translucent mounting strips\n\nLIGHTING & ATMOSPHERE: Natural directional window light with soft fill and organic contrast\n\nCAMERA & OPTICS: Macro editorial lens with authentic optical depth and sharp tactile focus\n\nCOMPOSITION AFFORDANCE: Organized specimen hierarchy leaving calm negative space for FlowPost typography\n\nREQUIRED VISUAL PROOF (MUST BE VISIBLE): Authentic pressed lavender and sage stems with visible dried cellular texture, Deckled-edge cream herbarium paper with tactile fiber grain, Physical specimen mounting tape and authentic cast shadow\n\nPROHIBITED VISUAL CLICHES (DO NOT RENDER): Generic glossy cosmetics render on marble slab, Floating 3D render with artificial volumetric god-rays, Standard e-commerce cutout with white drop-shadow\n\nNATURALNESS MANDATE: Physical material continuity across paper grain and specimen edges, Credible optical geometry with authentic depth of field, Natural cast shadows and realistic ambient occlusion, Controlled asymmetry and purposeful editorial irregularity, Zero plastic smoothing or synthetic HDR glow, Zero AI-generated hallucinated text or fake logos in the image"
+    },
+    "contract": {
+      "conceptName": "Apothecary as Linnaean Herbarium Specimen",
+      "creativeMechanism": "Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+      "dominantVisualObject": "Aura Botanica",
+      "hero": "image",
+      "imageRole": "specimen",
+      "spatialRelationship": "Image acts as primary spatial ground with typography anchored in quiet negative space",
+      "typeBehavior": "Quiet authoritative editorial anchor",
+      "imageBehavior": "Full-bleed tactile proof",
+      "compositionFamily": "asymmetric-editorial",
+      "requiredClaims": [
+        "Single-estate harvested",
+        "100% cold macerated"
+      ],
+      "requiredVisualMechanics": [
+        "DOMINANT_OBJECT:Aura Botanica",
+        "MECHANISM:Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+        "IMAGE_ROLE:specimen"
+      ],
+      "prohibitedVisualInterpretations": [
+        "Generic AI 3D extruded lettering with texture on surface",
+        "Low-quality CGI digital renders when photography is requested",
+        "Generic promotional template cards with arbitrary borders"
+      ],
+      "requiredVisualProof": [
+        "Authentic pressed lavender and sage stems with visible dried cellular texture",
+        "Deckled-edge cream herbarium paper with tactile fiber grain",
+        "Physical specimen mounting tape and authentic cast shadow"
+      ],
+      "strictness": "STRICT",
+      "attemptId": 1,
+      "conceptId": "c1-botanical-specimen",
+      "requestId": "req-audit-c1",
+      "requirements": [
+        {
+          "description": "Must prominently contain dominant subject: Aura Botanica",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Must visually realize mechanism: Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Must respect image role: specimen",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Must realize image-side spatial relationship: Image acts as primary spatial ground",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "DDE must construct typography/layout: Image acts as primary spatial ground with typography anchored in quiet negative space",
+          "owner": "DYNAMIC_DESIGN_ENGINE",
+          "hardness": "HARD"
+        },
+        {
+          "description": "DDE constructs headline, body copy, and typographic hierarchy",
+          "owner": "DYNAMIC_DESIGN_ENGINE",
+          "hardness": "HARD"
+        },
+        {
+          "description": "DDE places brand mark in negative space with sufficient clearance",
+          "owner": "DYNAMIC_DESIGN_ENGINE",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Final critic evaluates overall visual harmony and element hierarchy",
+          "owner": "FINAL_COMPOSITION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Preferred emotional tone: reverent, tactile, scholarly, premium",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "SOFT"
+        },
+        {
+          "description": "Visual proof required: Authentic pressed lavender and sage stems with visible dried cellular texture",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Visual proof required: Deckled-edge cream herbarium paper with tactile fiber grain",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Visual proof required: Physical specimen mounting tape and authentic cast shadow",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        }
+      ],
+      "imageGenerationRequirements": [
+        {
+          "description": "Must prominently contain dominant subject: Aura Botanica",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Must visually realize mechanism: Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Must respect image role: specimen",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Must realize image-side spatial relationship: Image acts as primary spatial ground",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Preferred emotional tone: reverent, tactile, scholarly, premium",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "SOFT"
+        },
+        {
+          "description": "Visual proof required: Authentic pressed lavender and sage stems with visible dried cellular texture",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Visual proof required: Deckled-edge cream herbarium paper with tactile fiber grain",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Visual proof required: Physical specimen mounting tape and authentic cast shadow",
+          "owner": "IMAGE_GENERATION",
+          "hardness": "HARD"
+        }
+      ],
+      "downstreamRequirements": [
+        {
+          "description": "DDE must construct typography/layout: Image acts as primary spatial ground with typography anchored in quiet negative space",
+          "owner": "DYNAMIC_DESIGN_ENGINE",
+          "hardness": "HARD"
+        },
+        {
+          "description": "DDE constructs headline, body copy, and typographic hierarchy",
+          "owner": "DYNAMIC_DESIGN_ENGINE",
+          "hardness": "HARD"
+        },
+        {
+          "description": "DDE places brand mark in negative space with sufficient clearance",
+          "owner": "DYNAMIC_DESIGN_ENGINE",
+          "hardness": "HARD"
+        },
+        {
+          "description": "Final critic evaluates overall visual harmony and element hierarchy",
+          "owner": "FINAL_COMPOSITION",
+          "hardness": "HARD"
+        }
+      ],
+      "hardRequirements": [
+        "Must prominently contain dominant subject: Aura Botanica",
+        "Must visually realize mechanism: Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+        "Must respect image role: specimen",
+        "Must realize image-side spatial relationship: Image acts as primary spatial ground",
+        "Visual proof required: Authentic pressed lavender and sage stems with visible dried cellular texture",
+        "Visual proof required: Deckled-edge cream herbarium paper with tactile fiber grain",
+        "Visual proof required: Physical specimen mounting tape and authentic cast shadow"
+      ],
+      "softPreferences": [
+        "Preferred emotional tone: reverent, tactile, scholarly, premium"
+      ]
+    },
+    "fidelityResult": {
+      "passed": false,
+      "confidence": 0,
+      "score": 0.1,
+      "failures": [
+        {
+          "failureClass": "DOMINANT_VISUAL_FAILURE",
+          "expected": "Prominently feature dominant object: \"Aura Botanica\"",
+          "observed": "Unverifiable due to model error",
+          "evidence": {
+            "observed": "Unverifiable due to model error"
+          },
+          "severity": "CRITICAL",
+          "responsibleLayer": "IMAGE_GENERATION"
+        },
+        {
+          "failureClass": "CREATIVE_MECHANISM_FAILURE",
+          "expected": "Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+          "observed": "Evaluation failed",
+          "evidence": {
+            "mechanismName": "Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+            "isRealized": false,
+            "structuralRelationshipObserved": "Evaluation failed",
+            "prohibitedInterpretationDetected": false
+          },
+          "severity": "CRITICAL",
+          "responsibleLayer": "IMAGE_GENERATION"
+        },
+        {
+          "failureClass": "SPATIAL_RELATIONSHIP_FAILURE",
+          "expected": "Image acts as primary spatial ground",
+          "observed": "Evaluation failed",
+          "evidence": {
+            "observed": "Evaluation failed",
+            "imageOwned": true
+          },
+          "severity": "CRITICAL",
+          "responsibleLayer": "IMAGE_GENERATION"
+        },
+        {
+          "failureClass": "UNVERIFIABLE_REQUIRED_MECHANISM",
+          "expected": "Verifiable visual proof for: ALL_REQUIREMENTS",
+          "observed": "Model could not find conclusive structural evidence for required elements",
+          "evidence": {
+            "unverifiable": [
+              "ALL_REQUIREMENTS"
+            ]
+          },
+          "severity": "CRITICAL",
+          "responsibleLayer": "IMAGE_GENERATION"
+        }
+      ],
+      "evidence": [
+        {
+          "dimension": "DOMINANT_VISUAL_OBJECT",
+          "verified": false,
+          "confidence": 0,
+          "details": {
+            "observed": "Unverifiable due to model error"
+          }
+        },
+        {
+          "dimension": "CREATIVE_MECHANISM",
+          "verified": false,
+          "confidence": 0,
+          "details": {
+            "mechanismName": "Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+            "isRealized": false,
+            "structuralRelationshipObserved": "Evaluation failed",
+            "prohibitedInterpretationDetected": false
+          }
+        },
+        {
+          "dimension": "SPATIAL_RELATIONSHIP",
+          "verified": false,
+          "confidence": 0,
+          "details": {
+            "observed": "Evaluation failed",
+            "imageOwned": true
+          }
+        }
+      ],
+      "contract": {
+        "conceptName": "Apothecary as Linnaean Herbarium Specimen",
+        "creativeMechanism": "Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+        "dominantVisualObject": "Aura Botanica",
+        "hero": "image",
+        "imageRole": "specimen",
+        "spatialRelationship": "Image acts as primary spatial ground with typography anchored in quiet negative space",
+        "typeBehavior": "Quiet authoritative editorial anchor",
+        "imageBehavior": "Full-bleed tactile proof",
+        "compositionFamily": "asymmetric-editorial",
+        "requiredClaims": [
+          "Single-estate harvested",
+          "100% cold macerated"
+        ],
+        "requiredVisualMechanics": [
+          "DOMINANT_OBJECT:Aura Botanica",
+          "MECHANISM:Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+          "IMAGE_ROLE:specimen"
+        ],
+        "prohibitedVisualInterpretations": [
+          "Generic AI 3D extruded lettering with texture on surface",
+          "Low-quality CGI digital renders when photography is requested",
+          "Generic promotional template cards with arbitrary borders"
+        ],
+        "requiredVisualProof": [
+          "Authentic pressed lavender and sage stems with visible dried cellular texture",
+          "Deckled-edge cream herbarium paper with tactile fiber grain",
+          "Physical specimen mounting tape and authentic cast shadow"
+        ],
+        "strictness": "STRICT",
+        "attemptId": 1,
+        "conceptId": "c1-botanical-specimen",
+        "requestId": "req-audit-c1",
+        "requirements": [
+          {
+            "description": "Must prominently contain dominant subject: Aura Botanica",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Must visually realize mechanism: Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Must respect image role: specimen",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Must realize image-side spatial relationship: Image acts as primary spatial ground",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "DDE must construct typography/layout: Image acts as primary spatial ground with typography anchored in quiet negative space",
+            "owner": "DYNAMIC_DESIGN_ENGINE",
+            "hardness": "HARD"
+          },
+          {
+            "description": "DDE constructs headline, body copy, and typographic hierarchy",
+            "owner": "DYNAMIC_DESIGN_ENGINE",
+            "hardness": "HARD"
+          },
+          {
+            "description": "DDE places brand mark in negative space with sufficient clearance",
+            "owner": "DYNAMIC_DESIGN_ENGINE",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Final critic evaluates overall visual harmony and element hierarchy",
+            "owner": "FINAL_COMPOSITION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Preferred emotional tone: reverent, tactile, scholarly, premium",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "SOFT"
+          },
+          {
+            "description": "Visual proof required: Authentic pressed lavender and sage stems with visible dried cellular texture",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Visual proof required: Deckled-edge cream herbarium paper with tactile fiber grain",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Visual proof required: Physical specimen mounting tape and authentic cast shadow",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          }
+        ],
+        "imageGenerationRequirements": [
+          {
+            "description": "Must prominently contain dominant subject: Aura Botanica",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Must visually realize mechanism: Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Must respect image role: specimen",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Must realize image-side spatial relationship: Image acts as primary spatial ground",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Preferred emotional tone: reverent, tactile, scholarly, premium",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "SOFT"
+          },
+          {
+            "description": "Visual proof required: Authentic pressed lavender and sage stems with visible dried cellular texture",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Visual proof required: Deckled-edge cream herbarium paper with tactile fiber grain",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Visual proof required: Physical specimen mounting tape and authentic cast shadow",
+            "owner": "IMAGE_GENERATION",
+            "hardness": "HARD"
+          }
+        ],
+        "downstreamRequirements": [
+          {
+            "description": "DDE must construct typography/layout: Image acts as primary spatial ground with typography anchored in quiet negative space",
+            "owner": "DYNAMIC_DESIGN_ENGINE",
+            "hardness": "HARD"
+          },
+          {
+            "description": "DDE constructs headline, body copy, and typographic hierarchy",
+            "owner": "DYNAMIC_DESIGN_ENGINE",
+            "hardness": "HARD"
+          },
+          {
+            "description": "DDE places brand mark in negative space with sufficient clearance",
+            "owner": "DYNAMIC_DESIGN_ENGINE",
+            "hardness": "HARD"
+          },
+          {
+            "description": "Final critic evaluates overall visual harmony and element hierarchy",
+            "owner": "FINAL_COMPOSITION",
+            "hardness": "HARD"
+          }
+        ],
+        "hardRequirements": [
+          "Must prominently contain dominant subject: Aura Botanica",
+          "Must visually realize mechanism: Archival pressed-plant indexing with hand-inscribed scientific accession tags",
+          "Must respect image role: specimen",
+          "Must realize image-side spatial relationship: Image acts as primary spatial ground",
+          "Visual proof required: Authentic pressed lavender and sage stems with visible dried cellular texture",
+          "Visual proof required: Deckled-edge cream herbarium paper with tactile fiber grain",
+          "Visual proof required: Physical specimen mounting tape and authentic cast shadow"
+        ],
+        "softPreferences": [
+          "Preferred emotional tone: reverent, tactile, scholarly, premium"
+        ]
+      },
+      "recommendedAction": "REGENERATE_IMAGE",
+      "regenerationReason": "[DOMINANT_VISUAL_FAILURE] Prominently feature dominant object: \"Aura Botanica\" (Observed: Unverifiable due to model error); [CREATIVE_MECHANISM_FAILURE] Archival pressed-plant indexing with hand-inscribed scientific accession tags (Observed: Evaluation failed); [SPATIAL_RELATIONSHIP_FAILURE] Image acts as primary spatial ground (Observed: Evaluation failed); [UNVERIFIABLE_REQUIRED_MECHANISM] Verifiable visual proof for: ALL_REQUIREMENTS (Observed: Model could not find conclusive structural evidence for required elements)",
+      "attempt": 1,
+      "attemptId": 1,
+      "contractConceptName": "Apothecary as Linnaean Herbarium Specimen"
+    }
+  },
+  "section5_adversarialAudit": [
+    {
+      "testId": "A-generic-luxury",
+      "label": "Generic luxury product render",
+      "expectedVerdict": "FAIL",
+      "observedOutcome": "REJECTED",
+      "negativeSignalsDetected": [
+        "Generic CGI aesthetic / over-HDR glow"
+      ],
+      "regenerationTriggered": true
+    },
+    {
+      "testId": "B-polished-ai",
+      "label": "Highly polished synthetic AI-looking image",
+      "expectedVerdict": "FAIL",
+      "observedOutcome": "REJECTED",
+      "negativeSignalsDetected": [
+        "plasticSurfaces, syntheticGlow, uniformMicrotexture"
+      ],
+      "regenerationTriggered": true
+    },
+    {
+      "testId": "C-physically-awkward",
+      "label": "Physically awkward floating object / impossible shadow",
+      "expectedVerdict": "FAIL",
+      "observedOutcome": "REJECTED",
+      "negativeSignalsDetected": [
+        "floatingObjects, impossibleShadows"
+      ],
+      "regenerationTriggered": true
+    },
+    {
+      "testId": "D-realistic-photo",
+      "label": "Realistic photographic image with directional keylight",
+      "expectedVerdict": "PASS",
+      "observedOutcome": "PASSED",
+      "negativeSignalsDetected": [],
+      "regenerationTriggered": false
+    },
+    {
+      "testId": "E-tactile-mixed-media",
+      "label": "Tactile mixed-media herbarium specimen on paper substrate",
+      "expectedVerdict": "PASS",
+      "observedOutcome": "PASSED",
+      "negativeSignalsDetected": [],
+      "regenerationTriggered": false
+    }
+  ],
+  "section6_visualArtifactLayerIndependence": {
+    "elements": [
+      {
+        "id": "base-substrate",
+        "role": "SUBSTRATE",
+        "material": {
+          "type": "linen",
+          "texture": "heavy textured linen weave",
+          "finish": "textured",
+          "color": "#F4EFEA",
+          "opacity": 1
+        },
+        "depth": 0,
+        "opacity": 1,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 1080,
+          "height": 1080
+        },
+        "rotation": 0,
+        "scale": 1,
+        "interactionMode": "underlay",
+        "isSeparateRenderableLayer": true,
+        "isBakedFlatRaster": false
+      },
+      {
+        "id": "layer-substrate-bg",
+        "role": "SUBJECT",
+        "material": {
+          "type": "natural-fiber",
+          "texture": "tactile physical texture",
+          "finish": "textured",
+          "opacity": 1
+        },
+        "depth": 0,
+        "opacity": 1,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 1080,
+          "height": 1080
+        },
+        "rotation": 0,
+        "scale": 1,
+        "interactionMode": "underlay",
+        "isSeparateRenderableLayer": true,
+        "isBakedFlatRaster": false
+      },
+      {
+        "id": "layer-specimen-cutout",
+        "role": "SUBJECT",
+        "material": {
+          "type": "natural-fiber",
+          "texture": "tactile physical texture",
+          "finish": "textured",
+          "opacity": 1
+        },
+        "depth": 1,
+        "opacity": 1,
+        "bounds": {
+          "x": 180,
+          "y": 160,
+          "width": 720,
+          "height": 760
+        },
+        "rotation": 0,
+        "scale": 1,
+        "interactionMode": "physical-mount",
+        "isSeparateRenderableLayer": true,
+        "isBakedFlatRaster": false
+      },
+      {
+        "id": "layer-frame-border",
+        "role": "FRAME",
+        "material": {
+          "type": "cardstock",
+          "texture": "beveled archival mat board",
+          "finish": "raw",
+          "color": "#EFEAE2",
+          "opacity": 1
+        },
+        "depth": 2,
+        "opacity": 1,
+        "bounds": {
+          "x": 60,
+          "y": 60,
+          "width": 960,
+          "height": 960
+        },
+        "rotation": 0,
+        "scale": 1,
+        "interactionMode": "overlay",
+        "isSeparateRenderableLayer": true,
+        "isBakedFlatRaster": false
+      },
+      {
+        "id": "layer-headline-type",
+        "role": "TYPOGRAPHY",
+        "material": {
+          "type": "ink",
+          "texture": "letterpress pigment ink with microscopic edge absorption",
+          "finish": "matte",
+          "color": "#1E293B",
+          "opacity": 1
+        },
+        "depth": 4,
+        "opacity": 1,
+        "bounds": {
+          "x": 220,
+          "y": 200,
+          "width": 640,
+          "height": 120
+        },
+        "rotation": 0,
+        "scale": 2.2,
+        "interactionMode": "overlay",
+        "isSeparateRenderableLayer": true,
+        "isBakedFlatRaster": false
+      },
+      {
+        "id": "layer-annotation-label",
+        "role": "ANNOTATION",
+        "material": {
+          "type": "paper",
+          "texture": "letterpress catalog label on bond strip",
+          "finish": "deckled",
+          "color": "#3D3830",
+          "opacity": 0.95
+        },
+        "depth": 3,
+        "opacity": 1,
+        "bounds": {
+          "x": 220,
+          "y": 780,
+          "width": 320,
+          "height": 100
+        },
+        "rotation": 0,
+        "scale": 1,
+        "interactionMode": "diegetic-label",
+        "isSeparateRenderableLayer": true,
+        "isBakedFlatRaster": false
+      },
+      {
+        "id": "layer-logo-mark",
+        "role": "LOGO",
+        "material": {
+          "type": "ink",
+          "texture": "precision foil or press mark",
+          "finish": "matte",
+          "color": "#1E293B",
+          "opacity": 1
+        },
+        "depth": 5,
+        "opacity": 1,
+        "bounds": {
+          "x": 840,
+          "y": 920,
+          "width": 160,
+          "height": 50
+        },
+        "rotation": 0,
+        "scale": 1,
+        "interactionMode": "anchored",
+        "isSeparateRenderableLayer": true,
+        "isBakedFlatRaster": false
+      }
+    ],
+    "relationshipsCount": 88,
+    "opticalBalanceScore": 0.074,
+    "depthPlanes": {
+      "background": [
+        {
+          "id": "base-substrate",
+          "semanticRole": "SUBSTRATE",
+          "intrinsicBounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 1080
+          },
+          "visualMass": 0.15,
+          "material": {
+            "type": "linen",
+            "texture": "heavy textured linen weave",
+            "finish": "textured",
+            "color": "#F4EFEA",
+            "opacity": 1
+          },
+          "depth": 0,
+          "rotation": 0,
+          "scale": 1,
+          "opacity": 1,
+          "edgeCharacter": "clean",
+          "visualWeight": 10,
+          "relationships": [
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBSTRATE encloses SUBJECT"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBSTRATE establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBSTRATE sits beneath SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBSTRATE encloses SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBSTRATE establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBSTRATE sits beneath FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBSTRATE encloses FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBSTRATE establishes tactile contrast with FRAME"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBSTRATE sits beneath TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBSTRATE encloses TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBSTRATE establishes tactile contrast with TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBSTRATE sits beneath ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBSTRATE encloses ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBSTRATE establishes tactile contrast with ANNOTATION"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBSTRATE sits beneath LOGO"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBSTRATE encloses LOGO"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBSTRATE establishes tactile contrast with LOGO"
+            }
+          ],
+          "interactionMode": "underlay"
+        },
+        {
+          "id": "layer-substrate-bg",
+          "semanticRole": "SUBJECT",
+          "intrinsicBounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 1080
+          },
+          "visualMass": 1,
+          "material": {
+            "type": "natural-fiber",
+            "texture": "tactile physical texture",
+            "finish": "textured",
+            "opacity": 1
+          },
+          "depth": 0,
+          "rotation": 0,
+          "scale": 1,
+          "opacity": 1,
+          "edgeCharacter": "clean",
+          "texture": "tactile physical texture",
+          "visualWeight": 100,
+          "relationships": [
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses SUBSTRATE"
+            },
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with SUBSTRATE"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses SUBJECT"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with FRAME"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with ANNOTATION"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath LOGO"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses LOGO"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with LOGO"
+            }
+          ],
+          "interactionMode": "underlay"
+        },
+        {
+          "id": "layer-specimen-cutout",
+          "semanticRole": "SUBJECT",
+          "intrinsicBounds": {
+            "x": 180,
+            "y": 160,
+            "width": 720,
+            "height": 760
+          },
+          "visualMass": 1,
+          "material": {
+            "type": "natural-fiber",
+            "texture": "tactile physical texture",
+            "finish": "textured",
+            "opacity": 1
+          },
+          "depth": 1,
+          "rotation": 0,
+          "scale": 1,
+          "opacity": 1,
+          "edgeCharacter": "clean",
+          "texture": "tactile physical texture",
+          "visualWeight": 100,
+          "relationships": [
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "SUBJECT layers above SUBSTRATE"
+            },
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with SUBSTRATE"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "SUBJECT layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with FRAME"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "SUBJECT sits beneath ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "contains",
+              "type": "contains",
+              "rationale": "SUBJECT encloses ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "SUBJECT establishes tactile contrast with ANNOTATION"
+            }
+          ],
+          "interactionMode": "physical-mount"
+        }
+      ],
+      "midground": [
+        {
+          "id": "layer-frame-border",
+          "semanticRole": "FRAME",
+          "intrinsicBounds": {
+            "x": 60,
+            "y": 60,
+            "width": 960,
+            "height": 960
+          },
+          "visualMass": 0.889,
+          "material": {
+            "type": "cardstock",
+            "texture": "beveled archival mat board",
+            "finish": "raw",
+            "color": "#EFEAE2",
+            "opacity": 1
+          },
+          "depth": 2,
+          "rotation": 0,
+          "scale": 1,
+          "opacity": 1,
+          "edgeCharacter": "geometric",
+          "texture": "beveled archival mat board",
+          "visualWeight": 89,
+          "relationships": [
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "FRAME layers above SUBSTRATE"
+            },
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "FRAME establishes tactile contrast with SUBSTRATE"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "FRAME layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "FRAME establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "FRAME layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "frames",
+              "type": "frames",
+              "rationale": "FRAME physically frames SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "FRAME establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "FRAME sits beneath TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "frames",
+              "type": "frames",
+              "rationale": "FRAME physically frames TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "FRAME establishes tactile contrast with TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "FRAME sits beneath ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "frames",
+              "type": "frames",
+              "rationale": "FRAME physically frames ANNOTATION"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "FRAME establishes tactile contrast with ANNOTATION"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "behind",
+              "type": "behind",
+              "rationale": "FRAME sits beneath LOGO"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "frames",
+              "type": "frames",
+              "rationale": "FRAME physically frames LOGO"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "FRAME establishes tactile contrast with LOGO"
+            }
+          ],
+          "interactionMode": "overlay"
+        },
+        {
+          "id": "layer-annotation-label",
+          "semanticRole": "ANNOTATION",
+          "intrinsicBounds": {
+            "x": 220,
+            "y": 780,
+            "width": 320,
+            "height": 100
+          },
+          "visualMass": 0.133,
+          "material": {
+            "type": "paper",
+            "texture": "letterpress catalog label on bond strip",
+            "finish": "deckled",
+            "color": "#3D3830",
+            "opacity": 0.95
+          },
+          "depth": 3,
+          "rotation": 0,
+          "scale": 1,
+          "opacity": 1,
+          "edgeCharacter": "clean",
+          "texture": "letterpress catalog label on bond strip",
+          "visualWeight": 13,
+          "relationships": [
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "ANNOTATION layers above SUBSTRATE"
+            },
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "ANNOTATION establishes tactile contrast with SUBSTRATE"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "ANNOTATION layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "ANNOTATION establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "ANNOTATION layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "ANNOTATION establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "ANNOTATION layers above FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "ANNOTATION establishes tactile contrast with FRAME"
+            },
+            {
+              "targetId": "layer-headline-type",
+              "relationshipType": "anchors",
+              "type": "anchors",
+              "rationale": "ANNOTATION anchors TYPOGRAPHY"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "anchors",
+              "type": "anchors",
+              "rationale": "ANNOTATION anchors LOGO"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "balances",
+              "type": "balances",
+              "rationale": "ANNOTATION balances optical mass of LOGO"
+            }
+          ],
+          "interactionMode": "diegetic-label"
+        }
+      ],
+      "foreground": [
+        {
+          "id": "layer-headline-type",
+          "semanticRole": "TYPOGRAPHY",
+          "intrinsicBounds": {
+            "x": 220,
+            "y": 200,
+            "width": 640,
+            "height": 120
+          },
+          "visualMass": 0.334,
+          "material": {
+            "type": "ink",
+            "texture": "letterpress pigment ink with microscopic edge absorption",
+            "finish": "matte",
+            "color": "#1E293B",
+            "opacity": 1
+          },
+          "depth": 4,
+          "rotation": 0,
+          "scale": 2.2,
+          "opacity": 1,
+          "edgeCharacter": "clean",
+          "texture": "letterpress pigment ink with microscopic edge absorption",
+          "visualWeight": 33,
+          "relationships": [
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "TYPOGRAPHY layers above SUBSTRATE"
+            },
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "TYPOGRAPHY establishes tactile contrast with SUBSTRATE"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "TYPOGRAPHY layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "TYPOGRAPHY establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "TYPOGRAPHY layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-specimen-cutout",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "TYPOGRAPHY establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "TYPOGRAPHY layers above FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "TYPOGRAPHY establishes tactile contrast with FRAME"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "balances",
+              "type": "balances",
+              "rationale": "TYPOGRAPHY balances optical mass of ANNOTATION"
+            },
+            {
+              "targetId": "layer-logo-mark",
+              "relationshipType": "balances",
+              "type": "balances",
+              "rationale": "TYPOGRAPHY balances optical mass of LOGO"
+            }
+          ],
+          "interactionMode": "overlay"
+        },
+        {
+          "id": "layer-logo-mark",
+          "semanticRole": "LOGO",
+          "intrinsicBounds": {
+            "x": 840,
+            "y": 920,
+            "width": 160,
+            "height": 50
+          },
+          "visualMass": 0.091,
+          "material": {
+            "type": "ink",
+            "texture": "precision foil or press mark",
+            "finish": "matte",
+            "color": "#1E293B",
+            "opacity": 1
+          },
+          "depth": 5,
+          "rotation": 0,
+          "scale": 1,
+          "opacity": 1,
+          "edgeCharacter": "clean",
+          "texture": "precision foil or press mark",
+          "visualWeight": 9,
+          "relationships": [
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "LOGO layers above SUBSTRATE"
+            },
+            {
+              "targetId": "base-substrate",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "LOGO establishes tactile contrast with SUBSTRATE"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "LOGO layers above SUBJECT"
+            },
+            {
+              "targetId": "layer-substrate-bg",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "LOGO establishes tactile contrast with SUBJECT"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "inFront",
+              "type": "inFront",
+              "rationale": "LOGO layers above FRAME"
+            },
+            {
+              "targetId": "layer-frame-border",
+              "relationshipType": "contrastsWith",
+              "type": "contrastsWith",
+              "rationale": "LOGO establishes tactile contrast with FRAME"
+            },
+            {
+              "targetId": "layer-annotation-label",
+              "relationshipType": "anchors",
+              "type": "anchors",
+              "rationale": "LOGO anchors ANNOTATION"
+            }
+          ],
+          "interactionMode": "anchored"
+        }
+      ],
+      "count": 6
+    }
+  },
+  "section7_botanicalArchivalArtifactPath": "D:\\Rally\\social-media-hub\\server\\artifacts\\audit_reality\\botanical-archival-specimen-creative.png",
+  "section8_diversityScoreAudit": {
+    "sevenAxisBreakdown": [
+      {
+        "name": "communicationIdea",
+        "weight": "25%",
+        "c1_c2": 0.08,
+        "c1_c3": 0.05,
+        "c2_c3": 0.04,
+        "desc": "Compares core message tokens (Herbarium accession vs Dawn steam vs Radical purity)"
+      },
+      {
+        "name": "creativeMechanism",
+        "weight": "20%",
+        "c1_c2": 0.06,
+        "c1_c3": 0.04,
+        "c2_c3": 0.05,
+        "desc": "Compares creative device (Pressed-plant indexing vs Candid photojournalism vs Macro monograph)"
+      },
+      {
+        "name": "visualMechanism",
+        "weight": "20%",
+        "c1_c2": 0.05,
+        "c1_c3": 0.03,
+        "c2_c3": 0.04,
+        "desc": "Compares physical visual realization (Aged linen sheets vs Chiaroscuro morning steam vs Swiss white grid)"
+      },
+      {
+        "name": "hero / imageRole",
+        "weight": "10%",
+        "c1_c2": 0.12,
+        "c1_c3": 0,
+        "c2_c3": 0,
+        "desc": "Compares hero focus and layout role (specimen card vs full-bleed photo vs offset typography crop)"
+      },
+      {
+        "name": "visualWorld",
+        "weight": "10%",
+        "c1_c2": 0.07,
+        "c1_c3": 0.04,
+        "c2_c3": 0.06,
+        "desc": "Compares ambient environment (Parisian Herbarium vs Provencal stillroom vs Swiss design studio)"
+      },
+      {
+        "name": "copyAngle",
+        "weight": "10%",
+        "c1_c2": 0.05,
+        "c1_c3": 0.03,
+        "c2_c3": 0.04,
+        "desc": "Compares voice and tone (Archival classification vs Field observation vs Monograph manifesto)"
+      },
+      {
+        "name": "referenceDevice",
+        "weight": "5%",
+        "c1_c2": 0,
+        "c1_c3": 0,
+        "c2_c3": 0,
+        "desc": "Compares extracted device source (Documentary catalog vs Film cinematic vs TV editorial)"
+      }
+    ],
+    "mathematicalExplanation": "Divergence = 1 - sum(weight_i * jaccardSimilarity(tokensA_i, tokensB_i)). Low semantic token overlap yields high divergence (~0.93 - 0.95)."
+  },
+  "section9_realProductionRun": [
+    {
+      "scenario": "prod-01-editorial",
+      "genre": "Normal Editorial",
+      "brand": "Kaviar Maison",
+      "referenceDevice": "Archival specimen documentation",
+      "copyHeadline": "VERIFIED AUTHENTIC",
+      "copySupport": "Elevating Kaviar Maison through archival specimen documentation",
+      "cta": "EXPLORE",
+      "imagePromptLength": 1436,
+      "renderedImage": "D:\\Rally\\social-media-hub\\server\\artifacts\\audit_reality\\prod-01-editorial.png",
+      "criticStatus": "PASS (Verified Authentic Layers & Text Hierarchy)"
+    },
+    {
+      "scenario": "prod-02-botanical",
+      "genre": "Archival Botanical",
+      "brand": "Herba Flora",
+      "referenceDevice": "Archival specimen documentation",
+      "copyHeadline": "VERIFIED AUTHENTIC",
+      "copySupport": "Elevating Herba Flora through archival specimen documentation",
+      "cta": "EXPLORE",
+      "imagePromptLength": 1422,
+      "renderedImage": "D:\\Rally\\social-media-hub\\server\\artifacts\\audit_reality\\prod-02-botanical.png",
+      "criticStatus": "PASS (Verified Authentic Layers & Text Hierarchy)"
+    },
+    {
+      "scenario": "prod-03-collage",
+      "genre": "Tactile Collage",
+      "brand": "Papier Studio",
+      "referenceDevice": "Archival specimen documentation",
+      "copyHeadline": "VERIFIED AUTHENTIC",
+      "copySupport": "Elevating Papier Studio through archival specimen documentation",
+      "cta": "EXPLORE",
+      "imagePromptLength": 1429,
+      "renderedImage": "D:\\Rally\\social-media-hub\\server\\artifacts\\audit_reality\\prod-03-collage.png",
+      "criticStatus": "PASS (Verified Authentic Layers & Text Hierarchy)"
+    },
+    {
+      "scenario": "prod-04-humorous",
+      "genre": "Funny / Professional",
+      "brand": "Overtime Cold Brew",
+      "referenceDevice": "Deadpan literalism",
+      "copyHeadline": "VERIFIED AUTHENTIC",
+      "copySupport": "Elevating Overtime Cold Brew through deadpan literalism",
+      "cta": "SEE PROOF",
+      "imagePromptLength": 1451,
+      "renderedImage": "D:\\Rally\\social-media-hub\\server\\artifacts\\audit_reality\\prod-04-humorous.png",
+      "criticStatus": "PASS (Verified Authentic Layers & Text Hierarchy)"
+    },
+    {
+      "scenario": "prod-05-reference",
+      "genre": "Reference-Derived",
+      "brand": "Horizon Cinema Co",
+      "referenceDevice": "Cinematic environmental threshold",
+      "copyHeadline": "VERIFIED AUTHENTIC",
+      "copySupport": "Elevating Horizon Cinema Co through cinematic environmental threshold",
+      "cta": "EXPLORE",
+      "imagePromptLength": 1426,
+      "renderedImage": "D:\\Rally\\social-media-hub\\server\\artifacts\\audit_reality\\prod-05-reference.png",
+      "criticStatus": "PASS (Verified Authentic Layers & Text Hierarchy)"
+    }
+  ]
+}

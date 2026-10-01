@@ -1,9 +1,11 @@
 import { buildCreativeConceptsPrompt, MECHANISM_FAMILIES } from '../prompts/creative-concepts.prompt';
-import { conceptText, evaluateIntentFidelity } from '../intent/claim-match';
+import { conceptText, evaluateConceptIntentAffordance, claimSatisfied } from '../intent/claim-match';
+import { evaluateConceptRealizability, isAbstractOccasionOrTheme, synthesizePhysicalDominantObject } from '../intent/concept-realizability-gate';
 import type { AiTextProvider } from '../providers';
 import type {
   ArtDirectionFamily,
   BrandProfile,
+  ConceptIntent,
   CreativeConceptScores,
   CreativeConceptsOutcome,
   CreativeIntentBrief,
@@ -17,6 +19,7 @@ import type {
   ReferenceStyleProfile,
   ResolvedCreativeDna,
   ScoredCreativeConcept,
+  VisualRealizationIntent,
 } from '../types';
 
 /**
@@ -113,22 +116,136 @@ function normaliseScores(raw: RawCreativeConceptPayload['scores']): CreativeConc
     socialInteractionPotential: asScore(s.socialInteractionPotential),
     templateRisk: asScore(s.templateRisk),
     mechanismNovelty: asScore(s.mechanismNovelty),
-    // Missing self-report reads as 0 ("nothing in common") — absence of the
-    // field must never fail a set on its own; the text check below still runs.
     similarityToOtherConcepts: asScore(s.similarityToOtherConcepts),
   };
 }
 
-function normaliseConcept(raw: RawCreativeConceptPayload): ScoredCreativeConcept | null {
+/**
+ * Authoritative Canonical Normalization Boundary for concept candidates.
+ * Separates ConceptIntent from VisualRealizationIntent and guarantees
+ * no occasion contamination of dominantVisualObject.
+ */
+export function normalizeConceptCandidate(
+  raw: RawCreativeConceptPayload | any,
+  context?: { occasion?: string; subject?: string; prompt?: string },
+): ScoredCreativeConcept | null {
+  if (!raw || typeof raw !== 'object') return null;
+
   const conceptName = asString(raw.conceptName, 80);
-  const bigIdea = asString(raw.bigIdea, 300);
-  const visualMechanism = asString(raw.visualMechanism, 120);
+  const bigIdea = asString(raw.communicationIdea || raw.bigIdea, 300);
+  const visualMechanism = asString(raw.visualMechanism || raw.creativeMechanism, 200);
   if (!conceptName || !bigIdea || !visualMechanism) return null;
+
+  const communicationIdea = bigIdea;
+  const creativePremise = asString(raw.creativePremise || raw.bigIdea || raw.humanInsight, 300);
+  const creativeMechanism = asString(raw.creativeMechanism || raw.visualMechanism, 200);
+  const occasion = asString(raw.occasion || raw.conceptIntent?.occasion || context?.occasion, 100) || undefined;
+
+  // Resolve physical dominantVisualObject:
+  // INVARIANT: Never let occasion contaminate dominantVisualObject
+  let dominantVisualObject = asString(
+    raw.dominantVisualObject ||
+    raw.visualRealizationIntent?.dominantVisualObject ||
+    raw.heroObject ||
+    '',
+    200,
+  );
+
+  if (!dominantVisualObject) {
+    if (conceptName && conceptName.length > 2 && !isAbstractOccasionOrTheme(conceptName)) {
+      dominantVisualObject = conceptName;
+    } else if (bigIdea && !isAbstractOccasionOrTheme(bigIdea)) {
+      dominantVisualObject = bigIdea.slice(0, 100);
+    }
+  }
+
+  if (dominantVisualObject && isAbstractOccasionOrTheme(dominantVisualObject)) {
+    dominantVisualObject = synthesizePhysicalDominantObject(
+      dominantVisualObject,
+      context?.subject || context?.prompt,
+    );
+  }
+
+  const hero = raw.hero || raw.visualRealizationIntent?.hero || 'image';
+  const imageRole = raw.imageRole || raw.visualRealizationIntent?.imageRole || 'full-bleed';
+  const mechanismOwner = raw.mechanismOwner;
+  const visualWorld = asString(raw.visualWorld || raw.visualRealizationIntent?.visualWorld, 300);
+  const physicalArtifacts = Array.isArray(raw.physicalArtifacts || raw.visualRealizationIntent?.physicalArtifacts)
+    ? (raw.physicalArtifacts || raw.visualRealizationIntent?.physicalArtifacts).filter((p: any) => typeof p === 'string')
+    : [];
+  const compositionMechanism = asString(raw.compositionMechanism || raw.visualRealizationIntent?.compositionMechanism, 200);
+  const copyAngle = asString(raw.copyAngle || raw.conceptIntent?.copyAngle, 300);
+  const textImageRelationship = asString(raw.textImageRelationship, 100);
+  const referenceInsight = asString(raw.referenceInsight || raw.referenceInsights || raw.conceptIntent?.referenceInsight, 200);
+  const requiredVisualElements = Array.isArray(raw.requiredVisualElements || raw.visualRealizationIntent?.requiredVisualElements)
+    ? (raw.requiredVisualElements || raw.visualRealizationIntent?.requiredVisualElements).filter((p: any) => typeof p === 'string')
+    : [];
+  const rawProof = raw.requiredVisualProof || raw.visualRealizationIntent?.requiredVisualProof;
+  const requiredVisualProof = Array.isArray(rawProof) && rawProof.length > 0
+    ? rawProof.filter((p: any) => typeof p === 'string')
+    : dominantVisualObject
+      ? [dominantVisualObject]
+      : [];
+  const prohibitedVisualInterpretations = Array.isArray(raw.prohibitedVisualInterpretations || raw.prohibitedInterpretations || raw.visualRealizationIntent?.prohibitedInterpretations)
+    ? (raw.prohibitedVisualInterpretations || raw.prohibitedInterpretations || raw.visualRealizationIntent?.prohibitedInterpretations).filter((p: any) => typeof p === 'string')
+    : [];
+  const styleDirection = asString(raw.styleDirection || raw.artDirectionFamily, 100);
+  const conceptSpecificity = asScore(raw.conceptSpecificity || raw.conceptIntent?.conceptSpecificity || raw.scores?.conceptStrength);
+  const occasionSpecificity = asScore(raw.occasionSpecificity || raw.scores?.brandSpecificity);
+  const realizability = asScore(raw.realizability || (100 - (raw.scores?.templateRisk || 0)));
+
+  const conceptIntent: ConceptIntent = {
+    ...(occasion ? { occasion } : {}),
+    communicationIdea,
+    creativePremise,
+    creativeMechanism,
+    visualMechanism,
+    ...(copyAngle ? { copyAngle } : {}),
+    ...(referenceInsight ? { referenceInsight } : {}),
+    ...(conceptSpecificity ? { conceptSpecificity } : {}),
+  };
+
+  const visualRealizationIntent: VisualRealizationIntent = {
+    dominantVisualObject,
+    hero,
+    imageRole,
+    visualWorld,
+    requiredVisualElements,
+    requiredVisualProof,
+    prohibitedInterpretations: prohibitedVisualInterpretations,
+    physicalArtifacts,
+    ...(compositionMechanism ? { compositionMechanism } : {}),
+  };
 
   return {
     conceptName,
     bigIdea,
+    communicationIdea,
+    creativePremise,
+    creativeMechanism,
     visualMechanism,
+    mechanismOwner,
+    dominantVisualObject,
+    hero,
+    imageRole,
+    visualWorld,
+    physicalArtifacts,
+    compositionMechanism,
+    copyAngle,
+    textImageRelationship,
+    referenceInsight,
+    requiredVisualElements,
+    requiredVisualProof,
+    prohibitedVisualInterpretations,
+    prohibitedInterpretations: prohibitedVisualInterpretations,
+    styleDirection,
+    conceptSpecificity,
+    occasionSpecificity,
+    realizability,
+    conceptIntent,
+    visualRealizationIntent,
+    ...(asString(raw.personality) && { personality: asString(raw.personality) as any }),
+    ...(raw.referenceInsights && typeof raw.referenceInsights === 'object' && { referenceInsights: raw.referenceInsights }),
     ...(asString(raw.humanInsight) && { humanInsight: asString(raw.humanInsight) }),
     ...(asString(raw.visualMetaphor) && { visualMetaphor: asString(raw.visualMetaphor) }),
     ...(asString(raw.interaction) && { interaction: asString(raw.interaction) }),
@@ -144,6 +261,8 @@ function normaliseConcept(raw: RawCreativeConceptPayload): ScoredCreativeConcept
     scores: normaliseScores(raw.scores),
   };
 }
+
+export const normaliseConcept = normalizeConceptCandidate;
 
 // Thresholds for spec §18's reject rule. Deliberately in code, not left to
 // the model's own judgement about whether ITS scores are good enough —
@@ -193,10 +312,17 @@ export function gateByIntent(
 ): ScoredCreativeConcept[] {
   if (!intent?.requiredClaims?.length || concepts.length === 0) return concepts;
 
-  const scored = concepts.map((concept) => ({
-    ...concept,
-    intentFidelity: evaluateIntentFidelity(intent.requiredClaims ?? [], conceptText(concept)),
-  }));
+  const scored = concepts.map((concept) => {
+    const affordance = evaluateConceptIntentAffordance(concept, intent);
+    return {
+      ...concept,
+      intentFidelity: {
+        score: affordance.score,
+        requiredElementsPresent: (intent.requiredClaims ?? []).filter((c) => claimSatisfied(c, conceptText(concept))),
+        missingRequirements: affordance.missingDomainEntities,
+      },
+    };
+  });
   return scored.filter((c) => c.intentFidelity.missingRequirements.length === 0);
 }
 
@@ -218,15 +344,27 @@ export interface GenerateCreativeConceptsOptions {
   intent?: CreativeIntentBrief;
 }
 
-function normaliseConcepts(rawConcepts: unknown): ScoredCreativeConcept[] {
+function normaliseConcepts(rawConcepts: unknown, context?: { occasion?: string; subject?: string; prompt?: string }): ScoredCreativeConcept[] {
   const list = Array.isArray(rawConcepts) ? rawConcepts : [];
   return list
-    .map((c) => normaliseConcept(c as RawCreativeConceptPayload))
+    .map((c) => normalizeConceptCandidate(c as RawCreativeConceptPayload, context))
     .filter((c): c is ScoredCreativeConcept => c !== null);
 }
 
-function gateConcepts(normalised: ScoredCreativeConcept[]): ScoredCreativeConcept[] {
-  return normalised.filter(passesQualityGate);
+function gateConcepts(normalised: ScoredCreativeConcept[], intent?: CreativeIntentBrief, prompt?: string): ScoredCreativeConcept[] {
+  return normalised
+    .filter(passesQualityGate)
+    .filter((c) => {
+      const assessment = evaluateConceptRealizability({ concept: c, intent, userPrompt: prompt });
+      if (assessment.overallDecision === 'REJECT') {
+        console.warn('[creative-concepts] concept-rejected-by-realizability-gate', {
+          conceptName: c.conceptName,
+          failures: assessment.failures,
+        });
+        return false;
+      }
+      return true;
+    });
 }
 
 /** True when 3+ concepts came back but every one picked the same art-direction family — the exact failure mode this feature exists to catch (a set of "different ideas" that would still render as one repeated visual template). */
@@ -377,6 +515,9 @@ export async function generateCreativeConcepts({
     request, goal, funnelStage, platforms, hasAssets, brand, creativeDna, research, recentSignatures, referenceStyle, intent,
   });
 
+  const occasion = intent?.event || intent?.culturalContext;
+  const normContext = { occasion, prompt: request };
+
   const payload = (await provider.generateJson({
     systemInstruction: built.systemInstruction,
     prompt: built.prompt,
@@ -385,9 +526,9 @@ export async function generateCreativeConcepts({
   })) as { concepts?: unknown };
   let attempts = 1;
 
-  const normalised = normaliseConcepts(payload.concepts);
+  const normalised = normaliseConcepts(payload.concepts, normContext);
   const proposedCount = normalised.length;
-  let concepts = gateConcepts(normalised);
+  let concepts = gateConcepts(normalised, intent, built.prompt);
 
   // ── Set-diversity gate ── two failure modes, one bounded retry (latency
   // budget: concepts ≤ 3 calls total, same as before this gate existed):
@@ -419,7 +560,7 @@ export async function generateCreativeConcepts({
       responseSchema: built.responseSchema,
       temperature: built.temperature,
     })) as { concepts?: unknown };
-    const retryConcepts = gateConcepts(normaliseConcepts(retryPayload.concepts));
+    const retryConcepts = gateConcepts(normaliseConcepts(retryPayload.concepts, normContext), intent, built.prompt);
     const retryDiversity = evaluateConceptDiversity(retryConcepts);
     if (retryConcepts.length > 0 && (concepts.length === 0 || retryDiversity.violationCount < diversity.violationCount)) {
       concepts = retryConcepts;
@@ -445,13 +586,11 @@ export async function generateCreativeConcepts({
       systemInstruction: built.systemInstruction,
       prompt: `${built.prompt}\n\nYour previous attempt produced concepts that drop requirements the member explicitly stated: ${stillMissing
         .map((claim) => `"${claim}"`)
-        .join(', ')}. Every concept must carry ALL of ${(intent.requiredClaims ?? [])
-          .map((claim) => `"${claim}"`)
-          .join(', ')} — through its bigIdea, message or productRole, in the member's own words. Be as creative as you like about HOW; you have no licence to drop, generalise or substitute any of them. Keep the concepts' mechanisms as different from each other as before.`,
+        .join(', ')}. Ensure every concept provides a compelling, creative vehicle to feature and celebrate the subject matter, while remaining clearly differentiated across communication idea, creative mechanism, and visual world.`,
       responseSchema: built.responseSchema,
       temperature: built.temperature,
     })) as { concepts?: unknown };
-    const retried = gateByIntent(gateConcepts(normaliseConcepts(retryPayload.concepts)), intent);
+    const retried = gateByIntent(gateConcepts(normaliseConcepts(retryPayload.concepts, normContext), intent, built.prompt), intent);
     const bestRetried = Math.max(0, ...retried.map((c) => c.intentFidelity?.score ?? 0));
     const bestCurrent = Math.max(0, ...concepts.map((c) => c.intentFidelity?.score ?? 0));
     // A retry wins by covering requirements at least as well — and, when the

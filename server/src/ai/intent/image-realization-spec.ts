@@ -3,6 +3,12 @@ import type { CreativeBrief } from '../brand/creative-brief';
 import type { CreativeDirection, ArtDirectionFamily } from '../types';
 import type { ResolvedStyleDNA } from '../style-dna/style-dna';
 import { renderStyleDnaInstructions } from '../style-dna/style-dna';
+import {
+  classifyMechanismOwner,
+  isAbstractOccasionOrTheme,
+  synthesizePhysicalDominantObject,
+  type MechanismLayerOwner,
+} from './concept-realizability-gate';
 
 // ---------------------------------------------------------------------------
 // 1. Types & Enums
@@ -52,6 +58,7 @@ export interface ImageRealizationSpec {
   conceptId?: string;
   conceptName: string;
   creativeMechanism: string;
+  mechanismOwner: MechanismLayerOwner;
   dominantVisualObject: string;
   hero: 'typography' | 'image' | 'graphic-element' | 'whitespace' | 'texture';
   imageRole:
@@ -261,7 +268,25 @@ export function buildImageRealizationSpec(options: BuildImageRealizationSpecOpti
 
   const conceptName = concept?.conceptName || brief?.chosenConcept?.conceptName || direction?.concept || 'Creative Scene';
   const creativeMechanism = concept?.creativeMechanism || brief?.chosenConcept?.visualMechanism || direction?.visualStory || 'Tactile photographic proof';
-  const dominantVisualObject = concept?.dominantVisualObject || brief?.subject || direction?.subject || 'Focal Subject';
+  
+  // Mechanism Layer Owner
+  const mechanismOwner = classifyMechanismOwner(
+    creativeMechanism,
+    concept?.hero,
+    concept?.typeBehavior,
+  );
+
+  // Dominant Visual Object (Invariant: Never treat an occasion as a physical object)
+  let rawDominant = concept?.dominantVisualObject || brief?.subject || direction?.subject || 'Focal Subject';
+  if (isAbstractOccasionOrTheme(rawDominant)) {
+    rawDominant = synthesizePhysicalDominantObject(
+      rawDominant,
+      brief?.subject || direction?.subject,
+      brief?.brandVoice?.tone
+    );
+  }
+  const dominantVisualObject = rawDominant;
+
   const hero = concept?.hero || 'image';
   const imageRole = concept?.imageRole || 'full-bleed';
   const imageBehavior = concept?.imageBehavior || (imageRole === 'small-tactile-object' ? 'Isolated tactile asset' : 'Full-bleed atmospheric ground');
@@ -336,6 +361,7 @@ export function buildImageRealizationSpec(options: BuildImageRealizationSpecOpti
     conceptId: (concept as any)?.id || (concept as any)?.conceptId,
     conceptName,
     creativeMechanism,
+    mechanismOwner,
     dominantVisualObject,
     hero,
     imageRole,
@@ -372,7 +398,9 @@ export function compileImagePromptFromSpec(
   // 1. WHAT & WHY (Core Visual Scene & Mechanism)
   const coreParts: string[] = [
     `DOMINANT SUBJECT: ${spec.dominantVisualObject}`,
-    `CREATIVE MECHANISM: ${spec.creativeMechanism}`,
+    spec.mechanismOwner === 'DDE'
+      ? `VISUAL GROUNDING: Create an evocative, high-craft physical visual scene that serves as the rich photographic world for the campaign idea ("${spec.conceptName}").`
+      : `CREATIVE MECHANISM: ${spec.creativeMechanism}`,
     `PHYSICAL REALIZATION: ${spec.physicalMechanism}`,
     `IMAGE ROLE: ${spec.imageRole} (${spec.imageBehavior})`,
   ];

@@ -203,4 +203,14 @@ export const env = {
   // triples latency for no gain. -1 lets the model decide. Ignored by models
   // that don't support it.
   GEMINI_THINKING_BUDGET: process.env.GEMINI_THINKING_BUDGET || '0',
+
+  // ── SMTP / Email Transport ────────────────────────────────────────────────
+  SMTP_HOST: process.env.SMTP_HOST || '',
+  SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
+  SMTP_SECURE: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+  SMTP_USER: process.env.SMTP_USER || '',
+  SMTP_PASS: process.env.SMTP_PASS || '',
+  SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'Rally',
+  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'info@userally.in',
 };
+

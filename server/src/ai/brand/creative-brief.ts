@@ -17,6 +17,7 @@ import type {
   SemanticNodeRole,
 } from '../types';
 import type { ResolvedStyleDNA } from '../style-dna/style-dna';
+import { isAbstractOccasionOrTheme } from '../intent/concept-realizability-gate';
 
 export type {
   GraphicDesignConcept,
@@ -64,6 +65,15 @@ export interface CreativeBrief {
     visualMechanism: string;
     message?: string;
     visualMetaphor?: string;
+    dominantVisualObject?: string;
+    creativePremise?: string;
+    communicationIdea?: string;
+    visualWorld?: string;
+    requiredVisualProof?: string[];
+    physicalArtifacts?: string[];
+    compositionMechanism?: string;
+    conceptIntent?: import('../types').ConceptIntent;
+    visualRealizationIntent?: import('../types').VisualRealizationIntent;
   };
   primaryMessage: string;
   secondaryMessages: string[];
@@ -178,7 +188,15 @@ export function buildCanonicalCreativeBrief(
   // mis-handled every other one. Extraction is generic; a keyword list is a
   // template with a regex in front of it.
   const event = intent?.event || undefined;
-  const subject = event || concept?.conceptName || intent?.productCategory || brand?.name || 'Campaign promotion';
+  const rawDominant = (concept as any)?.dominantVisualObject || (concept as any)?.visualRealizationIntent?.dominantVisualObject;
+  const isPhysicalDominant = rawDominant && !isAbstractOccasionOrTheme(rawDominant);
+  const subject =
+    (isPhysicalDominant ? rawDominant : undefined) ||
+    (concept?.conceptName && !isAbstractOccasionOrTheme(concept.conceptName) ? concept.conceptName : undefined) ||
+    event ||
+    intent?.productCategory ||
+    brand?.name ||
+    'Campaign promotion';
 
   // Primary and secondary messages — anchored to event or chosen concept
   const primaryMessage = event
@@ -319,6 +337,29 @@ export function buildCanonicalCreativeBrief(
         visualMechanism: concept.visualMechanism,
         ...(concept.message && { message: concept.message }),
         ...(concept.visualMetaphor && { visualMetaphor: concept.visualMetaphor }),
+        ...(((concept as any).dominantVisualObject || (concept as any).visualRealizationIntent?.dominantVisualObject) && {
+          dominantVisualObject: (concept as any).dominantVisualObject || (concept as any).visualRealizationIntent?.dominantVisualObject,
+        }),
+        ...(((concept as any).creativePremise || (concept as any).conceptIntent?.creativePremise) && {
+          creativePremise: (concept as any).creativePremise || (concept as any).conceptIntent?.creativePremise,
+        }),
+        ...(((concept as any).communicationIdea || (concept as any).conceptIntent?.communicationIdea) && {
+          communicationIdea: (concept as any).communicationIdea || (concept as any).conceptIntent?.communicationIdea,
+        }),
+        ...(((concept as any).visualWorld || (concept as any).visualRealizationIntent?.visualWorld) && {
+          visualWorld: (concept as any).visualWorld || (concept as any).visualRealizationIntent?.visualWorld,
+        }),
+        ...(((concept as any).requiredVisualProof || (concept as any).visualRealizationIntent?.requiredVisualProof) && {
+          requiredVisualProof: (concept as any).requiredVisualProof || (concept as any).visualRealizationIntent?.requiredVisualProof,
+        }),
+        ...(((concept as any).physicalArtifacts || (concept as any).visualRealizationIntent?.physicalArtifacts) && {
+          physicalArtifacts: (concept as any).physicalArtifacts || (concept as any).visualRealizationIntent?.physicalArtifacts,
+        }),
+        ...(((concept as any).compositionMechanism || (concept as any).visualRealizationIntent?.compositionMechanism) && {
+          compositionMechanism: (concept as any).compositionMechanism || (concept as any).visualRealizationIntent?.compositionMechanism,
+        }),
+        ...((concept as any).conceptIntent && { conceptIntent: (concept as any).conceptIntent }),
+        ...((concept as any).visualRealizationIntent && { visualRealizationIntent: (concept as any).visualRealizationIntent }),
       },
     }),
     primaryMessage,

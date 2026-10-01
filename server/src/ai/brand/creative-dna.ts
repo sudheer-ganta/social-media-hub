@@ -147,6 +147,7 @@ export function resolveCreativeDna({
 
 /** True when there is nothing worth putting in front of the image model. */
 export function isCreativeDnaEmpty(dna: ResolvedCreativeDna): boolean {
+  if (!dna || !dna.provenance) return true;
   return Object.keys(dna.provenance).length === 0;
 }
 

@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import {
   claimSatisfied,
   claimTokens,
+  evaluateConceptIntentAffordance,
   evaluateIntentFidelity,
   missingFromCreative,
   renderedCopyText,
@@ -171,3 +172,66 @@ describe('missingFromCreative', () => {
     expect(missingFromCreative(direction({ headline: 'Anything' }), undefined)).toEqual([]);
   });
 });
+
+describe('canonical claim normalization and shorthand matching', () => {
+  it('correctly matches shorthand variants: chefs spcl <-> Chef\'s Special', () => {
+    expect(claimSatisfied('chefs spcl', 'Try our Chef\'s Special')).toBe(true);
+    expect(claimSatisfied('chef special', 'Chefs Spcl Hand-Pulled Noodles')).toBe(true);
+    expect(claimSatisfied('chefs spcl', 'Chef Special Noodle Bowl')).toBe(true);
+  });
+
+  it('correctly matches common culinary and marketing abbreviations', () => {
+    expect(claimSatisfied('noodles', 'Hand-pulled noodle bowl')).toBe(true);
+    expect(claimSatisfied('new dish', 'Our newest dish on the menu')).toBe(true);
+    expect(claimSatisfied('bogo', 'BOGO all weekend')).toBe(true);
+    expect(claimSatisfied('veg only', 'Vegetarian only options')).toBe(true);
+    expect(claimSatisfied('50% disc', '50% discount today')).toBe(true);
+  });
+
+  it('evaluates concept intent affordance for rich creative concepts without requiring literal claim stuffing', () => {
+    const concept: ScoredCreativeConcept = {
+      conceptId: 'c1-noodle-crucible',
+      conceptName: 'The Steam & Broth Crucible',
+      bigIdea: 'Focusing on the 18-hour broth reduction and master artisan noodle pull',
+      visualMechanism: 'Macro directional lighting capturing rising steam over the broth cauldron',
+      hero: 'image',
+      imageRole: 'full-bleed',
+      visualWorld: 'An authentic late-night Tokyo ramen bar with steaming broth vats',
+      copyAngle: 'Artisanal culinary dedication',
+      productRole: 'hero noodle bowl',
+      brandConnection: 'authentic noodle craft',
+      visualMetaphor: 'steam as time and craft',
+      interaction: 'scroll-stopping steam',
+      humanInsight: 'true food lovers value long simmer time',
+      whyItWouldStopTheScroll: 'visceral steam texture',
+      mode: 'EDITORIAL',
+      artDirectionFamily: 'EDITORIAL_PHOTOGRAPHY',
+      mechanismFamily: 'VISUAL_METAPHOR',
+      message: 'Pure craft in every bowl',
+      scores: {
+        conceptStrength: 90,
+        brandSpecificity: 85,
+        productRelevance: 85,
+        visualOriginality: 90,
+        scrollStoppingPotential: 90,
+        messageClarity: 85,
+        socialInteractionPotential: 80,
+        templateRisk: 10,
+        mechanismNovelty: 90,
+        similarityToOtherConcepts: 10,
+      },
+    };
+
+    const campaignIntent: CreativeIntentBrief = {
+      extracted: true,
+      productCategory: 'Asian Cuisine',
+      requiredClaims: ['noodles', 'new dish', 'chefs spcl'],
+    };
+
+    const affordance = evaluateConceptIntentAffordance(concept, campaignIntent);
+    expect(affordance.affords).toBe(true);
+    expect(affordance.score).toBeGreaterThanOrEqual(70);
+    expect(affordance.missingDomainEntities).toEqual([]);
+  });
+});
+

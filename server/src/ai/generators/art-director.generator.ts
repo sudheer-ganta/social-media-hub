@@ -1,5 +1,6 @@
 import { buildArtDirectorPrompt } from '../prompts/art-director.prompt';
 import { redesignDivergenceInstruction } from '../strategy/concept-similarity';
+import { isAbstractOccasionOrTheme, synthesizePhysicalDominantObject } from '../intent/concept-realizability-gate';
 import type { AiTextProvider } from '../providers';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
 import type { CopyPlan, CopyRole, CreativeStrategy } from '../types';
@@ -174,7 +175,20 @@ export async function generateGraphicDesignConcept(
     ...(optional(raw.spatialRelationship, 300) && { spatialRelationship: optional(raw.spatialRelationship, 300) }),
     ...(optional(raw.materialBehavior, 300) && { materialBehavior: optional(raw.materialBehavior, 300) }),
     ...(optional(raw.hierarchyStrategy, 300) && { hierarchyStrategy: optional(raw.hierarchyStrategy, 300) }),
-    ...(optional(raw.dominantVisualObject, 200) && { dominantVisualObject: optional(raw.dominantVisualObject, 200) }),
+    dominantVisualObject: (() => {
+      const rawObj = optional(raw.dominantVisualObject, 200);
+      if (rawObj && !isAbstractOccasionOrTheme(rawObj)) return rawObj;
+      const chosenConceptObj = (brief.chosenConcept as any)?.dominantVisualObject || (brief.chosenConcept as any)?.visualRealizationIntent?.dominantVisualObject;
+      if (chosenConceptObj && !isAbstractOccasionOrTheme(chosenConceptObj)) return chosenConceptObj;
+      const stratObj = (strategy as any)?.dominantVisualObject;
+      if (stratObj && !isAbstractOccasionOrTheme(stratObj)) return stratObj;
+      if (rawObj && isAbstractOccasionOrTheme(rawObj)) {
+        return synthesizePhysicalDominantObject(rawObj, brief.subject, brief.brandVoice?.tone);
+      }
+      return brief.subject ? (isAbstractOccasionOrTheme(brief.subject) ? synthesizePhysicalDominantObject(brief.subject, undefined, brief.brandVoice?.tone) : brief.subject) : undefined;
+    })(),
+    ...(brief.chosenConcept?.conceptIntent && { conceptIntent: brief.chosenConcept.conceptIntent }),
+    ...(brief.chosenConcept?.visualRealizationIntent && { visualRealizationIntent: brief.chosenConcept.visualRealizationIntent }),
     ...(readCopyPlan(raw.copyPlan) && { copyPlan: readCopyPlan(raw.copyPlan) }),
     ...(strategy && { strategy }),
 

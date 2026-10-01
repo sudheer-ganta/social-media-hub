@@ -24,6 +24,7 @@
     "verify:platform-media": "ts-node-dev --transpile-only --quiet src/scripts/verify-platform-media.ts",
     "verify:analytics": "ts-node --transpileOnly src/scripts/verify-analytics-live.ts",
     "fetch:fonts": "ts-node --transpile-only src/scripts/fetch-fonts.ts",
+    "verify:smtp": "ts-node --transpile-only src/scripts/verify-smtp.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -39,6 +40,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^10.0.13",
     "pg": "^8.22.0",
     "sharp": "^0.35.3"
   },
@@ -47,6 +49,7 @@
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^22.13.4",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.20.4",
     "prisma": "^7.9.1",
     "ts-node-dev": "^2.0.0",

@@ -2,6 +2,14 @@ import type { GraphicDesignConcept } from '../types';
 import type { CreativeBrief } from '../brand/creative-brief';
 import type { CreativeDirection } from '../types';
 import type { ResolvedStyleDNA } from '../style-dna/style-dna';
+import {
+  classifyMechanismOwner,
+  evaluateConceptRealizability,
+  isAbstractOccasionOrTheme,
+  synthesizePhysicalDominantObject,
+  normalizeVisualProofStatement,
+  type MechanismLayerOwner,
+} from './concept-realizability-gate';
 
 // ---------------------------------------------------------------------------
 // Requirement Ownership Model
@@ -10,16 +18,16 @@ import type { ResolvedStyleDNA } from '../style-dna/style-dna';
 /**
  * Every requirement in a CreativeRealizationContract has an explicit owner.
  *
- * IMAGE_GENERATION � Must be realised in the generated image before DDE runs.
+ * IMAGE_GENERATION — Must be realised in the generated image before DDE runs.
  *   The Fidelity Gate evaluates ONLY these requirements.
  *
- * DYNAMIC_DESIGN_ENGINE � Constructed by the DDE (typography, headline, layout,
+ * DYNAMIC_DESIGN_ENGINE — Constructed by the DDE (typography, headline, layout,
  *   negative-space placement, logo, etc.). Must NOT cause Fidelity Gate failure.
  *
- * RENDERER � Guaranteed by the rendering subsystem (SVG geometry, rasterization,
+ * RENDERER — Guaranteed by the rendering subsystem (SVG geometry, rasterization,
  *   canvas containment). Must NOT cause Fidelity Gate failure.
  *
- * FINAL_COMPOSITION � Evaluated by the final critic after the complete creative
+ * FINAL_COMPOSITION — Evaluated by the final critic after the complete creative
  *   is assembled (harmony, contrast, hierarchy). Must NOT cause Fidelity Gate failure.
  */
 export type RequirementOwner =
@@ -43,6 +51,7 @@ export interface ContractRequirement {
 export interface CreativeRealizationContract {
   conceptName: string;
   creativeMechanism: string;
+  mechanismOwner: MechanismLayerOwner;
   dominantVisualObject: string;
   hero: 'typography' | 'image' | 'graphic-element' | 'whitespace' | 'texture';
   imageRole:
@@ -63,13 +72,26 @@ export interface CreativeRealizationContract {
   compositionFamily: string;
   artDirectionFamily?: string;
   selectedStyleId?: string;
+  occasion?: string;
+  campaignIntent?: string;
+  communicationIdea?: string;
+  visualMechanism?: string;
+  visualWorld?: string;
+  textImageRelationship?: string;
+  copyLoadProfile?: string;
+  readingSpaceRequirement?: string;
+  styleDirection?: string;
   requiredClaims: string[];
   requiredVisualMechanics: string[];
   prohibitedVisualInterpretations: string[];
+  requiredVisualProof?: string[];
+  naturalnessRequirements?: string[];
   strictness: 'STRICT' | 'STANDARD';
   attemptId?: number;
   conceptId?: string;
   requestId?: string;
+  conceptIntent?: import('../types').ConceptIntent;
+  visualRealizationIntent?: import('../types').VisualRealizationIntent;
 
   /**
    * All structured requirements with explicit ownership.
@@ -110,12 +132,6 @@ export interface CreativeRealizationContract {
 /**
  * Determines whether a spatial relationship description is owned by IMAGE_GENERATION
  * or by the DYNAMIC_DESIGN_ENGINE.
- *
- * IMAGE_GENERATION owns spatial relationships that must physically exist in the
- * generated image before DDE runs.
- *
- * DYNAMIC_DESIGN_ENGINE owns anything involving typography placement, headline
- * positioning, negative space utilisation by typography, or editorial text anchoring.
  */
 function classifySpatialRelationshipOwner(
   spatialRelationship: string,
@@ -123,7 +139,6 @@ function classifySpatialRelationshipOwner(
 ): { imageOwned: string | null; ddeOwned: string | null } {
   const s = spatialRelationship.toLowerCase();
 
-  // Patterns that indicate DDE-owned typography/layout concerns
   const ddePatterns = [
     'typography',
     'headline',
@@ -141,7 +156,6 @@ function classifySpatialRelationshipOwner(
     'minimal editorial',
   ];
 
-  // Patterns that indicate IMAGE_GENERATION-owned physical relationships
   const imagePatterns = [
     'overlap',
     'cross',
@@ -178,7 +192,6 @@ function classifySpatialRelationshipOwner(
   }
 
   if (hasDdeConcern && hasImageConcern) {
-    // Mixed relationship: strip DDE concerns to extract the image-owned physical part.
     const imageOwned = spatialRelationship
       .replace(/(?:with\s+)?(?:minimal\s+)?(?:editorial\s+)?typography[^,;.]*[,;.]?/gi, '')
       .replace(/(?:and\s+)?(?:quiet\s+)?(?:negative\s+space\s+)?(?:for\s+)?(?:headline|text|copy|brand\s+mark|logo)[^,;.]*[,;.]?/gi, '')
@@ -193,9 +206,7 @@ function classifySpatialRelationshipOwner(
     };
   }
 
-  // Fallback: classify by hero element
   if (hero === 'typography') {
-    // Typography-hero mechanics: spatial construction is DDE's responsibility.
     return { imageOwned: null, ddeOwned: spatialRelationship };
   }
 
@@ -343,11 +354,74 @@ export function buildCreativeRealizationContract(
     brief?.chosenConcept?.visualMechanism ||
     concept?.visualIdea ||
     'Full-bleed tactile visual hero';
-  const dominantVisualObject =
+
+  // Mechanism Layer Owner
+  const mechanismOwner =
+    (concept as any)?.mechanismOwner ||
+    classifyMechanismOwner(
+      creativeMechanism,
+      concept?.hero,
+      concept?.typeBehavior,
+    );
+
+  // Dominant Visual Object: Invariant — Never treat an occasion as a physical object
+  let dominantVisualObject =
     concept?.dominantVisualObject ||
-    brief?.subject ||
-    direction?.subject ||
+    (concept as any)?.visualRealizationIntent?.dominantVisualObject ||
+    (brief?.chosenConcept as any)?.dominantVisualObject ||
+    (brief?.chosenConcept as any)?.visualRealizationIntent?.dominantVisualObject ||
+    (brief?.subject && !isAbstractOccasionOrTheme(brief.subject) ? brief.subject : undefined) ||
+    (direction?.subject && !isAbstractOccasionOrTheme(direction.subject) ? direction.subject : undefined) ||
     'Hero Visual Subject';
+
+  if (isAbstractOccasionOrTheme(dominantVisualObject)) {
+    dominantVisualObject = synthesizePhysicalDominantObject(
+      dominantVisualObject,
+      brief?.subject || direction?.subject,
+      brief?.brandVoice?.tone
+    );
+  }
+
+  let occasion =
+    (concept as any)?.occasion ||
+    brief?.event ||
+    (brief as any)?.occasion ||
+    (brief as any)?.culturalContext;
+
+  if (!occasion && (brief?.requiredClaims?.length || brief?.userPrompt)) {
+    for (const claim of brief?.requiredClaims || []) {
+      if (isAbstractOccasionOrTheme(claim)) {
+        occasion = claim;
+        break;
+      }
+    }
+  }
+  const campaignIntent =
+    (concept as any)?.campaignIntent ||
+    brief?.topic ||
+    brief?.businessType;
+  const communicationIdea =
+    (concept as any)?.communicationIdea ||
+    (concept as any)?.bigIdea ||
+    concept?.conceptName;
+  const visualMechanism =
+    (concept as any)?.visualMechanism ||
+    creativeMechanism;
+  const visualWorld =
+    (concept as any)?.visualWorld ||
+    direction?.artDirectionFamily;
+  const textImageRelationship =
+    (concept as any)?.textImageRelationship ||
+    'OVERLAY_INTENTIONAL';
+  const copyLoadProfile =
+    (concept as any)?.copyLoadProfile ||
+    'HEADLINE_ONLY';
+  const readingSpaceRequirement =
+    (concept as any)?.readingSpaceRequirement ||
+    'HIGH';
+  const styleDirection =
+    (concept as any)?.styleDirection ||
+    direction?.artDirectionFamily;
 
   const hero = concept?.hero || 'image';
   const imageRole = concept?.imageRole || 'full-bleed';
@@ -375,28 +449,42 @@ export function buildCreativeRealizationContract(
   // ---------------------------------------------------------------------------
   const requirements: ContractRequirement[] = [];
 
-  // 1. Dominant visual object � always IMAGE_GENERATION owned (HARD)
+  // 1. Dominant visual object — always IMAGE_GENERATION owned (HARD)
   requirements.push({
     description: `Must prominently contain dominant subject: ${dominantVisualObject}`,
     owner: 'IMAGE_GENERATION',
     hardness: 'HARD',
   });
 
-  // 2. Creative mechanism � IMAGE_GENERATION owned (HARD)
-  requirements.push({
-    description: `Must visually realize mechanism: ${creativeMechanism}`,
-    owner: 'IMAGE_GENERATION',
-    hardness: 'HARD',
-  });
+  // 2. Creative mechanism — layer owner determines requirement destination
+  if (mechanismOwner === 'IMAGE' || mechanismOwner === 'HYBRID') {
+    requirements.push({
+      description: `Must visually realize mechanism: ${creativeMechanism}`,
+      owner: 'IMAGE_GENERATION',
+      hardness: 'HARD',
+    });
+  } else if (mechanismOwner === 'DDE') {
+    requirements.push({
+      description: `DDE discovers and places typographic mechanism: ${creativeMechanism}`,
+      owner: 'DYNAMIC_DESIGN_ENGINE',
+      hardness: 'HARD',
+    });
+  } else if (mechanismOwner === 'COPY') {
+    requirements.push({
+      description: `Copy layer expresses conceptual mechanism: ${creativeMechanism}`,
+      owner: 'DYNAMIC_DESIGN_ENGINE',
+      hardness: 'HARD',
+    });
+  }
 
-  // 3. Image role � IMAGE_GENERATION owned (HARD)
+  // 3. Image role — IMAGE_GENERATION owned (HARD)
   requirements.push({
     description: `Must respect image role: ${imageRole}`,
     owner: 'IMAGE_GENERATION',
     hardness: 'HARD',
   });
 
-  // 4. Spatial relationship � classify ownership based on content
+  // 4. Spatial relationship — classify ownership based on content
   const { imageOwned: spatialImageOwned, ddeOwned: spatialDdeOwned } =
     classifySpatialRelationshipOwner(spatialRelationship, hero);
 
@@ -416,7 +504,7 @@ export function buildCreativeRealizationContract(
     });
   }
 
-  // 5. Art direction authenticity � IMAGE_GENERATION owned (HARD)
+  // 5. Art direction authenticity — IMAGE_GENERATION owned (HARD)
   if (artDirectionFamily === 'EDITORIAL_PHOTOGRAPHY' || artDirectionFamily === 'DOCUMENTARY') {
     requirements.push({
       description: `Must maintain authentic photographic realism matching ${artDirectionFamily}`,
@@ -425,28 +513,28 @@ export function buildCreativeRealizationContract(
     });
   }
 
-  // 6. Typography construction � DDE owned
+  // 6. Typography construction — DDE owned
   requirements.push({
     description: `DDE constructs headline, body copy, and typographic hierarchy`,
     owner: 'DYNAMIC_DESIGN_ENGINE',
     hardness: 'HARD',
   });
 
-  // 7. Logo placement � DDE owned
+  // 7. Logo placement — DDE owned
   requirements.push({
     description: `DDE places brand mark in negative space with sufficient clearance`,
     owner: 'DYNAMIC_DESIGN_ENGINE',
     hardness: 'HARD',
   });
 
-  // 8. Final visual harmony � FINAL_COMPOSITION owned
+  // 8. Final visual harmony — FINAL_COMPOSITION owned
   requirements.push({
     description: `Final critic evaluates overall visual harmony and element hierarchy`,
     owner: 'FINAL_COMPOSITION',
     hardness: 'HARD',
   });
 
-  // 9. Soft preferences � IMAGE_GENERATION soft
+  // 9. Soft preferences — IMAGE_GENERATION soft
   const emotionalTone = concept?.emotionalTone || brief?.emotionalTone;
   const pointOfView = concept?.pointOfView;
   if (emotionalTone) {
@@ -464,11 +552,48 @@ export function buildCreativeRealizationContract(
     });
   }
 
+  // 10. Required visual proof — Normalized observable physical requirements
+  const rawVisualProof: string[] = Array.isArray((concept as any)?.requiredVisualProof)
+    ? (concept as any).requiredVisualProof
+    : [];
+  const requiredVisualProof: string[] = [];
+
+  for (const proofItem of rawVisualProof) {
+    if (proofItem && typeof proofItem === 'string') {
+      const normalized = normalizeVisualProofStatement(
+        proofItem,
+        brief?.event || direction?.marketingCreative?.eventBadge,
+        brief?.subject || direction?.subject
+      );
+      if (normalized.valid && normalized.normalized) {
+        requiredVisualProof.push(normalized.normalized);
+        requirements.push({
+          description: `Visual proof required: ${normalized.normalized}`,
+          owner: 'IMAGE_GENERATION',
+          hardness: 'HARD',
+        });
+      }
+    }
+  }
+
+  // 11. Observable naturalness requirements — IMAGE_GENERATION hard requirements
+  const naturalnessRequirements: string[] = Array.isArray((concept as any)?.naturalnessRequirements)
+    ? (concept as any).naturalnessRequirements
+    : [];
+  for (const req of naturalnessRequirements) {
+    if (req && typeof req === 'string') {
+      requirements.push({
+        description: `Naturalness requirement: ${req.trim()}`,
+        owner: 'IMAGE_GENERATION',
+        hardness: 'HARD',
+      });
+    }
+  }
+
   // Derive convenience views
   const imageGenerationRequirements = requirements.filter((r) => r.owner === 'IMAGE_GENERATION');
   const downstreamRequirements = requirements.filter((r) => r.owner !== 'IMAGE_GENERATION');
 
-  // Legacy flat arrays (backward compat)
   const hardRequirements = imageGenerationRequirements
     .filter((r) => r.hardness === 'HARD')
     .map((r) => r.description);
@@ -479,11 +604,18 @@ export function buildCreativeRealizationContract(
 
   return {
     conceptName,
+    occasion,
+    campaignIntent,
+    communicationIdea,
     creativeMechanism,
+    visualMechanism,
+    mechanismOwner,
     dominantVisualObject,
     hero,
     imageRole,
+    visualWorld,
     spatialRelationship,
+    textImageRelationship,
     typeBehavior,
     imageBehavior,
     compositionFamily,
@@ -492,10 +624,17 @@ export function buildCreativeRealizationContract(
     requiredClaims,
     requiredVisualMechanics,
     prohibitedVisualInterpretations,
+    requiredVisualProof: requiredVisualProof.length > 0 ? requiredVisualProof : undefined,
+    naturalnessRequirements: naturalnessRequirements.length > 0 ? naturalnessRequirements : undefined,
+    copyLoadProfile,
+    readingSpaceRequirement,
+    styleDirection,
     strictness,
     attemptId,
     conceptId,
     requestId,
+    conceptIntent: (concept as any)?.conceptIntent || brief?.chosenConcept?.conceptIntent,
+    visualRealizationIntent: (concept as any)?.visualRealizationIntent || brief?.chosenConcept?.visualRealizationIntent,
     requirements,
     imageGenerationRequirements,
     downstreamRequirements,
@@ -503,3 +642,36 @@ export function buildCreativeRealizationContract(
     softPreferences,
   };
 }
+
+/**
+ * Asserts that the contract is internally consistent and physically realizable.
+ * Fails closed before image prompt creation.
+ */
+export function assertCreativeRealizationContractConsistent(
+  contract: CreativeRealizationContract,
+): void {
+  if (isAbstractOccasionOrTheme(contract.dominantVisualObject)) {
+    throw new Error(
+      `CONTRACT_CONSISTENCY_ERROR: Dominant visual object "${contract.dominantVisualObject}" is an abstract occasion/event, not a physical object.`
+    );
+  }
+
+  if (
+    contract.mechanismOwner === 'IMAGE' &&
+    (contract.creativeMechanism.toLowerCase().includes('typeset') ||
+      contract.creativeMechanism.toLowerCase().includes('typographic scale'))
+  ) {
+    throw new Error(
+      `CONTRACT_CONSISTENCY_ERROR: Typographic mechanism "${contract.creativeMechanism}" cannot be owned solely by IMAGE_GENERATION.`
+    );
+  }
+
+  const imageGenHardReqs = contract.imageGenerationRequirements.filter((r) => r.hardness === 'HARD');
+  if (imageGenHardReqs.length === 0 && contract.imageRole !== 'omitted') {
+    throw new Error(
+      `CONTRACT_CONSISTENCY_ERROR: Contract has no hard IMAGE_GENERATION requirements for active imageRole "${contract.imageRole}".`
+    );
+  }
+}
+
+export const createCreativeRealizationContract = buildCreativeRealizationContract;

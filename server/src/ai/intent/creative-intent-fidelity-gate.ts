@@ -1,4 +1,4 @@
-import type { AiTextProvider, InlineImagePart } from '../types';
+import type { AiTextProvider, InlineImagePart, HumanNaturalnessSignalEvaluation } from '../types';
 import type { CreativeRealizationContract } from './creative-realization-contract';
 
 export type FidelityFailureClass =
@@ -41,6 +41,8 @@ export interface CreativeIntentFidelityResult {
   attemptId?: number;
   contractConceptName?: string;
   imageIdentifier?: string;
+  humanNaturalness?: HumanNaturalnessSignalEvaluation;
+  visualProofFailures?: string[];
 }
 
 export class CreativeRealizationAssertionError extends Error {
@@ -72,6 +74,17 @@ interface RawVisionFidelityResponse {
   unverifiableRequiredElements: string[];
   summaryCritique: string;
   confidence: number;
+  naturalnessSignals?: {
+    positiveSignalsObserved?: string[];
+    negativeSignalsObserved?: string[];
+    isPhysicallyCredible?: boolean;
+    materialContinuity?: boolean;
+  };
+  visualProofResults?: Array<{
+    proofItem: string;
+    verified: boolean;
+    evidence?: string;
+  }>;
 }
 
 const VISION_FIDELITY_SCHEMA = {
@@ -110,6 +123,27 @@ const VISION_FIDELITY_SCHEMA = {
     unverifiableRequiredElements: {
       type: 'ARRAY' as const,
       items: { type: 'STRING' as const },
+    },
+    naturalnessSignals: {
+      type: 'OBJECT' as const,
+      properties: {
+        positiveSignalsObserved: { type: 'ARRAY' as const, items: { type: 'STRING' as const } },
+        negativeSignalsObserved: { type: 'ARRAY' as const, items: { type: 'STRING' as const } },
+        isPhysicallyCredible: { type: 'BOOLEAN' as const },
+        materialContinuity: { type: 'BOOLEAN' as const },
+      },
+    },
+    visualProofResults: {
+      type: 'ARRAY' as const,
+      items: {
+        type: 'OBJECT' as const,
+        properties: {
+          proofItem: { type: 'STRING' as const },
+          verified: { type: 'BOOLEAN' as const },
+          evidence: { type: 'STRING' as const },
+        },
+        required: ['proofItem', 'verified'],
+      },
     },
     summaryCritique: { type: 'STRING' as const },
     confidence: { type: 'NUMBER' as const },
@@ -214,16 +248,27 @@ export async function evaluateCreativeIntentFidelity(
     .map((r, i) => `${i + 1}. [IMAGE_GENERATION/HARD] ${r.description}`)
     .join('\n');
 
+  const requiredProofList = (contract.requiredVisualProof || [])
+    .map((p, i) => `${i + 1}. [VISUAL_PROOF_REQUIRED] ${p}`)
+    .join('\n');
+
   const systemPrompt = `You are the FlowPost Creative Intent Fidelity Gate.
 Your role is to verify whether an AI-generated image actually realizes the Art Director's intended physical/structural mechanism and creative contract.
 
-DO NOT simply check keywords or object presence. You must evaluate structural and spatial RELATIONSHIPS.
+DO NOT simply check keywords or object presence. You must evaluate structural and spatial RELATIONSHIPS, physical credibility, and natural human craft.
 
 IMPORTANT: You evaluate ONLY image-generation requirements. Typography placement, headline layout, negative space
 utilisation by text, logo placement, and editorial copy anchoring are the responsibility of the
 Dynamic Design Engine — NOT yours. Do NOT flag the image for lacking baked-in typography unless
 the creative mechanism explicitly requires typography to be physically present in the generated image
 (e.g. IMAGE_INSIDE_TYPE where the image must be masked INSIDE letterforms).
+
+REQUIRED VISUAL PROOF (What MUST unmistakably exist for this concept to be valid):
+${requiredProofList || 'None explicitly specified.'}
+
+HUMAN-NATURAL QUALITY SIGNALS TO OBSERVE:
+- Positive signals: physical material continuity, credible object geometry, credible shadows, natural occlusion, controlled asymmetry, non-uniform scale, material-specific texture, realistic edge behavior, layered depth, purposeful irregularity, visual specificity.
+- Negative signals: plastic surfaces, impossible shadows, repeated objects, floating objects, generic premium-ad aesthetic, over-HDR, synthetic glow, uniform microtexture, fake handwritten text, fake logos, fake UI, physically impossible overlaps, generic AI composition.
 
 PROHIBITED INTERPRETATIONS TO CATCH:
 ${(contract.prohibitedVisualInterpretations || []).map((p, i) => `${i + 1}. ${p}`).join('\n')}
@@ -251,7 +296,7 @@ EVALUATION RULES:
 7. Provide exact structural observations in the structured output.
 8. Set spatialRelationshipCompliant = true if the IMAGE-OWNED spatial requirement is met OR if there is no image-owned spatial requirement (DDE-only spatial contracts always pass image evaluation).`;
 
-  const userPrompt = `Inspect this generated image and verify whether it realizes the specified creative contract.`;
+  const userPrompt = `Inspect this generated image and verify whether it realizes the specified creative contract, required visual proofs, and human-natural visual quality.`;
 
   let visionResult: RawVisionFidelityResponse;
   try {
@@ -310,6 +355,8 @@ EVALUATION RULES:
       unverifiableRequiredElements: Array.isArray(raw?.unverifiableRequiredElements) ? raw.unverifiableRequiredElements : [],
       summaryCritique: raw?.summaryCritique || '',
       confidence: typeof raw?.confidence === 'number' ? raw.confidence : (isLegacyCriticMock ? 0.9 : 0.5),
+      naturalnessSignals: raw?.naturalnessSignals,
+      visualProofResults: Array.isArray(raw?.visualProofResults) ? raw.visualProofResults : undefined,
     };
   } catch (err: any) {
     console.warn('[creative-fidelity] vision evaluation failed; classifying as unverifiable', {
@@ -464,17 +511,80 @@ EVALUATION RULES:
     });
   }
 
-  // Record Physical Plausibility Evidence (Evaluation-Only)
-  if ((visionResult as any).physicalPlausibility) {
+  // Record Physical Plausibility & Naturalness Evidence
+  let humanNaturalness: HumanNaturalnessSignalEvaluation | undefined;
+  const nat = visionResult.naturalnessSignals;
+  if (nat || (visionResult as any).physicalPlausibility) {
+    const positiveObserved = nat?.positiveSignalsObserved || [];
+    const negativeObserved = nat?.negativeSignalsObserved || [];
+    const isCredible = nat?.isPhysicallyCredible ?? ((visionResult as any).physicalPlausibility?.plausibleLightingAndShadows !== false);
+    const matCont = nat?.materialContinuity ?? true;
+
+    // Calculate naturalness score: positive signals boost, negative signals penalize
+    let natScore = 0.85;
+    if (positiveObserved.length > 0) natScore = Math.min(1.0, natScore + positiveObserved.length * 0.05);
+    if (negativeObserved.length > 0) natScore = Math.max(0.1, natScore - negativeObserved.length * 0.25);
+    if (!isCredible) natScore = Math.min(natScore, 0.4);
+
+    humanNaturalness = {
+      isPhysicallyCredible: isCredible,
+      positiveSignalsObserved: positiveObserved,
+      negativeSignalsObserved: negativeObserved,
+      materialContinuity: matCont,
+      edgeBehaviorCredible: !negativeObserved.some((n) => n.includes('plastic') || n.includes('synthetic')),
+      depthPlanesCredible: !negativeObserved.some((n) => n.includes('floating') || n.includes('impossible overlaps')),
+      score: Math.round(natScore * 100) / 100,
+      critiqueSummary: visionResult.summaryCritique || (negativeObserved.length ? `Negative signals: ${negativeObserved.join(', ')}` : 'Natural craft verified'),
+    };
+
     evidenceList.push({
-      dimension: 'PHYSICAL_PLAUSIBILITY',
-      verified: Boolean(
-        (visionResult as any).physicalPlausibility?.plausibleLightingAndShadows !== false &&
-        (visionResult as any).physicalPlausibility?.anatomicalAndStructuralIntegrity !== false
-      ),
+      dimension: 'HUMAN_NATURALNESS_SIGNALS',
+      verified: humanNaturalness.score >= 0.6 && isCredible,
       confidence: visionResult.confidence,
-      details: (visionResult as any).physicalPlausibility,
+      details: {
+        score: humanNaturalness.score,
+        positiveSignals: positiveObserved,
+        negativeSignals: negativeObserved,
+        isPhysicallyCredible: isCredible,
+      },
     });
+
+    if (negativeObserved.some((n) => n.includes('plastic') || n.includes('floating') || n.includes('fake UI') || n.includes('fake logo'))) {
+      failures.push({
+        failureClass: 'ART_DIRECTION_FIDELITY_FAILURE',
+        expected: 'Human-natural physical material continuity and credible geometry',
+        observed: `Severe negative visual artifacts detected: ${negativeObserved.join(', ')}`,
+        evidence: { negativeSignals: negativeObserved },
+        severity: 'CRITICAL',
+        responsibleLayer: 'IMAGE_GENERATION',
+      });
+    }
+  }
+
+  // F. Required Visual Proof Evaluation
+  const visualProofFailures: string[] = [];
+  if (Array.isArray(visionResult.visualProofResults) && visionResult.visualProofResults.length > 0) {
+    for (const vProof of visionResult.visualProofResults) {
+      evidenceList.push({
+        dimension: `VISUAL_PROOF:${vProof.proofItem}`,
+        verified: vProof.verified,
+        confidence: visionResult.confidence,
+        details: { proofItem: vProof.proofItem, evidence: vProof.evidence },
+      });
+      if (!vProof.verified) {
+        visualProofFailures.push(vProof.proofItem);
+      }
+    }
+    if (visualProofFailures.length > 0) {
+      failures.push({
+        failureClass: 'REQUIRED_VISUAL_ELEMENT_FAILURE',
+        expected: `Required visual proof: ${visualProofFailures.join(', ')}`,
+        observed: `Image does not contain verifiable visual proof for required concept elements`,
+        evidence: { unverifiedProof: visualProofFailures },
+        severity: 'CRITICAL',
+        responsibleLayer: 'IMAGE_GENERATION',
+      });
+    }
   }
 
   // Calculate Fidelity Status
@@ -506,6 +616,8 @@ EVALUATION RULES:
     attempt,
     attemptId: contract.attemptId,
     contractConceptName: contract.conceptName,
+    humanNaturalness,
+    visualProofFailures: visualProofFailures.length > 0 ? visualProofFailures : undefined,
   };
 
   if (passed) {

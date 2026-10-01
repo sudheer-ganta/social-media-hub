@@ -23,6 +23,7 @@ import { detectMarketingStrategy } from '../ai/strategy/marketing-strategy-detec
 import { analyzeConceptPoolDivergence, buildConceptIdentity } from '../ai/strategy/creative-differentiation';
 import { normaliseDesignRecipe } from '../ai/render/design-recipe';
 import { designCreative } from '../ai/render/designer-composition';
+import { assertConceptRealizable, isEligibleFallback } from '../ai/intent/concept-realizability-gate';
 import {
   getStyleDNA,
   resolveStyleDNA,
@@ -1283,26 +1284,31 @@ async function resolveConceptAndResearch(
   referenceStyle: ReferenceStyleProfile | undefined,
   metrics?: CreativeMetrics,
 ): Promise<{ concept: ScoredCreativeConcept; research: CreativeResearch | undefined; fallbackConcepts?: GraphicDesignConcept[] }> {
+  const mapToGraphicConcept = (s: ScoredCreativeConcept): GraphicDesignConcept => ({
+    id: s.conceptId,
+    conceptName: s.conceptName,
+    visualIdea: s.bigIdea,
+    creativeMechanism: s.visualMechanism,
+    dominantVisualObject: s.dominantVisualObject || s.visualRealizationIntent?.dominantVisualObject,
+    hero: s.hero || 'image',
+    imageRole: s.imageRole || 'full-bleed',
+    spatialRelationship: s.spatialRelationship || '',
+    typeBehavior: s.typeBehavior || '',
+    imageBehavior: s.imageBehavior || '',
+    compositionFamily: s.compositionFamily || 'asymmetric-editorial',
+    artDirectionFamily: s.artDirectionFamily,
+    selectedStyleId: s.styleId,
+    firstRead: s.firstRead || s.bigIdea,
+    conceptIntent: s.conceptIntent,
+    visualRealizationIntent: s.visualRealizationIntent,
+  } as GraphicDesignConcept);
+
   if (request.selectedConcept) {
     const scope = conceptScope(request);
     const siblings = await creativeConceptRepository.listDiscovered(scope).catch(() => []);
     const fallbackConcepts = siblings
       .filter((s) => s.conceptId !== request.selectedConcept?.conceptId)
-      .map((s) => ({
-        id: s.conceptId,
-        conceptName: s.conceptName,
-        visualIdea: s.bigIdea,
-        creativeMechanism: s.visualMechanism,
-        hero: (s as any).hero || 'image',
-        imageRole: (s as any).imageRole || 'full-bleed',
-        spatialRelationship: (s as any).spatialRelationship || '',
-        typeBehavior: (s as any).typeBehavior || '',
-        imageBehavior: (s as any).imageBehavior || '',
-        compositionFamily: (s as any).compositionFamily || 'asymmetric-editorial',
-        artDirectionFamily: s.artDirectionFamily,
-        selectedStyleId: s.styleId,
-        firstRead: (s as any).firstRead || s.bigIdea,
-      })) as GraphicDesignConcept[];
+      .map(mapToGraphicConcept);
     return { concept: request.selectedConcept, research: undefined, fallbackConcepts };
   }
 
@@ -1334,21 +1340,8 @@ async function resolveConceptAndResearch(
   const topConcept = pickTopConcept(concepts);
   const fallbackConcepts = concepts
     .filter((c) => c !== topConcept)
-    .map((c) => ({
-      id: c.conceptId,
-      conceptName: c.conceptName,
-      visualIdea: c.bigIdea,
-      creativeMechanism: c.visualMechanism,
-      hero: c.hero || 'image',
-      imageRole: c.imageRole || 'full-bleed',
-      spatialRelationship: c.spatialRelationship || '',
-      typeBehavior: c.typeBehavior || '',
-      imageBehavior: c.imageBehavior || '',
-      compositionFamily: c.compositionFamily || 'asymmetric-editorial',
-      artDirectionFamily: c.artDirectionFamily,
-      selectedStyleId: c.styleId,
-      firstRead: c.firstRead || c.bigIdea,
-    })) as GraphicDesignConcept[];
+    .filter((c) => isEligibleFallback(c, undefined, intent, request.prompt).eligible)
+    .map(mapToGraphicConcept);
 
   return { concept: topConcept, research, fallbackConcepts };
 }

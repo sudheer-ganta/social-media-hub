@@ -111,4 +111,10 @@ import analyticsRoutes from './routes/analytics.routes';
 
 app.use('/api/analytics', analyticsRoutes);
 
+// SMTP / Email service routes (test connection, notifications, digests, verification)
+import emailRoutes from './routes/email.routes';
+
+app.use('/api/email', emailRoutes);
+
 export default app;
+

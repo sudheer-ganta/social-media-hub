@@ -22,7 +22,8 @@ import { evaluateRenderedDesign, type DesignCriticEvaluation } from '../generato
 import { generateGraphicDesignConcept } from '../generators/art-director.generator';
 import { compareGraphicConcepts, redesignDivergenceInstruction } from '../strategy/concept-similarity';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
-import { buildCreativeRealizationContract } from '../intent/creative-realization-contract';
+import { buildCreativeRealizationContract, assertCreativeRealizationContractConsistent } from '../intent/creative-realization-contract';
+import { assertConceptRealizable, isEligibleFallback } from '../intent/concept-realizability-gate';
 import {
   evaluateCreativeIntentFidelity,
   buildTargetedRegenerationPrompt,
@@ -49,6 +50,7 @@ import {
   evaluateImageAffordance,
   type ImageAffordanceEvaluation,
 } from '../intent/image-affordance-evaluation';
+import { buildVisualArtifactComposition } from './visual-artifact-composition';
 
 export class InvalidRenderableCopyError extends Error {
   constructor(message: string, readonly invalidContent: string) {
@@ -1559,6 +1561,14 @@ export async function designCreative(input: DesignerInput) {
     }
   }
 
+  // ── CONCEPT REALIZABILITY ASSERTION (Fail-Closed) ──
+  assertConceptRealizable({
+    concept: currentGraphicConcept,
+    brief: canonicalBrief,
+    intent: context.intent,
+    userPrompt: direction?.subject || direction?.concept,
+  });
+
   // ── BUILD CREATIVE REALIZATION CONTRACT ──
   let creativeRealizationContract = buildCreativeRealizationContract({
     concept: currentGraphicConcept,
@@ -1576,10 +1586,14 @@ export async function designCreative(input: DesignerInput) {
     currentGraphicConcept.artDirectionFamily = 'DOCUMENTARY';
   }
 
+  // ── PRE-IMAGE CONTRACT CONSISTENCY ASSERTION (Fail-Closed) ──
+  assertCreativeRealizationContractConsistent(creativeRealizationContract);
+
   console.info('[creative-fidelity] contract-created', {
     attemptId: 0,
     conceptName: creativeRealizationContract.conceptName,
     creativeMechanism: creativeRealizationContract.creativeMechanism,
+    mechanismOwner: creativeRealizationContract.mechanismOwner,
     dominantVisualObject: creativeRealizationContract.dominantVisualObject,
     hero: creativeRealizationContract.hero,
     imageRole: creativeRealizationContract.imageRole,
@@ -2150,6 +2164,22 @@ export async function designCreative(input: DesignerInput) {
       }
     }
 
+    let visualArtifactComposition;
+    try {
+      visualArtifactComposition = buildVisualArtifactComposition({
+        canvas,
+        nodes: plan.nodes,
+        concept: currentGraphicConcept,
+        contract: creativeRealizationContract,
+        styleDna,
+        field: textIntelligenceEnabled() ? designField : undefined,
+      });
+    } catch (artifactErr) {
+      console.warn('[creative] visual artifact composition build fallback', {
+        error: artifactErr instanceof Error ? artifactErr.message : String(artifactErr),
+      });
+    }
+
     const currentResult = {
       data: rendered,
       mimeType: 'image/png' as const,
@@ -2160,6 +2190,7 @@ export async function designCreative(input: DesignerInput) {
       structure: 'designer-composition' as const,
       assetIds: plan.nodes.filter(n => n.kind === 'product').map(n => n.id),
       critic,
+      visualArtifactComposition,
     };
 
     if (critic.passed) {
@@ -2343,70 +2374,101 @@ export async function designCreative(input: DesignerInput) {
       if (critic.passed) {
         return currentResult;
       }
-      if (availableFallbacks.length > 0) {
-        const nextConcept = availableFallbacks.shift();
-        if (nextConcept) {
-          console.info('[creative-fallback] attempting fallback to unused valid concept from brief', {
+      let fallbackAccepted = false;
+      while (availableFallbacks.length > 0) {
+        const candidate = availableFallbacks.shift()!;
+        const candidateName = candidate.conceptName || (candidate as any).name || 'Fallback Concept';
+        const eligibility = isEligibleFallback(
+          candidate,
+          canonicalBrief,
+          context.intent,
+          direction.subject,
+        );
+
+        console.info('[creative-fallback] candidate-evaluated', {
+          failedConcept: activeConceptName,
+          candidateConcept: candidateName,
+          eligible: eligibility.eligible,
+          rejectionReasons: eligibility.rejectionReason,
+        });
+
+        if (!eligibility.eligible) {
+          console.warn('[creative-fallback] candidate-rejected: does not satisfy current brief constraints', {
             failedConcept: activeConceptName,
-            fallbackConcept: nextConcept.conceptName || (nextConcept as any).name,
-            attemptId: attempt + 1,
+            candidateConcept: candidateName,
+            reason: eligibility.rejectionReason,
           });
-
-          // Style / Brief consistency check on fallback concept
-          const consistency = validateStyleBriefConsistency({
-            brief: canonicalBrief,
-            direction,
-            concept: nextConcept,
-            styleDna,
-            selectedStyleId: userStyleId,
-          });
-          currentGraphicConcept = consistency.repairedConcept ? { ...nextConcept, ...consistency.repairedConcept } : nextConcept;
-          if (consistency.repairedStyleId) {
-            userStyleId = consistency.repairedStyleId;
-            direction.selectedStyleId = consistency.repairedStyleId;
-            const repairedDna = resolveStyleDNA({ styleId: consistency.repairedStyleId, prompt: direction.subject || '' });
-            if (repairedDna) {
-              styleDna = repairedDna;
-            } else if (styleDna?.style) {
-              styleDna.style.id = consistency.repairedStyleId;
-            }
-          }
-
-          // Build fresh contract with new attemptId
-          creativeRealizationContract = buildCreativeRealizationContract({
-            concept: currentGraphicConcept,
-            brief: canonicalBrief,
-            direction,
-            styleDna: (styleDna as any)?.style || styleDna,
-            attemptId: attempt + 1,
-            conceptId: currentGraphicConcept.id,
-            requestId: (input as any)?.requestId || (context as any)?.requestId,
-          });
-
-          // Rebuild concept-aware copy with canonical required claims preserved
-          const fallbackCopyPlan = currentGraphicConcept.copyPlan ?? effectiveCopyPlan;
-          const rawFallbackCopy = collectCampaignCopy(
-            direction, currentGraphicConcept.elementsToOmit, fallbackCopyPlan, requiredClaims,
-          );
-          renderableCopy = validateAndBuildRenderableCopy(
-            rawFallbackCopy,
-            requiredClaims,
-            fallbackCopyPlan.maxTextElements || 3,
-          );
-          copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
-          semanticCopy = renderableCopy.map((r) => ({
-            id: r.id,
-            role: r.role,
-            semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
-            text: r.text,
-          }));
-          typeSystem = buildTypeSystem({ typography, concept: currentGraphicConcept, copy });
-
-          visual = undefined;
-          activeRecoveryContext = undefined;
           continue;
         }
+
+        console.info('[creative-fallback] verified candidate accepted as fallback', {
+          failedConcept: activeConceptName,
+          acceptedFallback: candidateName,
+          attemptId: attempt + 1,
+        });
+
+        // Style / Brief consistency check on fallback concept
+        const consistency = validateStyleBriefConsistency({
+          brief: canonicalBrief,
+          direction,
+          concept: candidate,
+          styleDna,
+          selectedStyleId: userStyleId,
+        });
+        currentGraphicConcept = consistency.repairedConcept ? { ...candidate, ...consistency.repairedConcept } : candidate;
+        if (consistency.repairedStyleId) {
+          userStyleId = consistency.repairedStyleId;
+          direction.selectedStyleId = consistency.repairedStyleId;
+          const repairedDna = resolveStyleDNA({ styleId: consistency.repairedStyleId, prompt: direction.subject || '' });
+          if (repairedDna) {
+            styleDna = repairedDna;
+          } else if (styleDna?.style) {
+            styleDna.style.id = consistency.repairedStyleId;
+          }
+        }
+
+        // Build fresh contract with new attemptId
+        creativeRealizationContract = buildCreativeRealizationContract({
+          concept: currentGraphicConcept,
+          brief: canonicalBrief,
+          direction,
+          styleDna: (styleDna as any)?.style || styleDna,
+          attemptId: attempt + 1,
+          conceptId: currentGraphicConcept.id,
+          requestId: (input as any)?.requestId || (context as any)?.requestId,
+        });
+
+        assertCreativeRealizationContractConsistent(creativeRealizationContract);
+
+        // Rebuild concept-aware copy with canonical required claims preserved
+        const fallbackCopyPlan = currentGraphicConcept.copyPlan ?? effectiveCopyPlan;
+        const rawFallbackCopy = collectCampaignCopy(
+          direction, currentGraphicConcept.elementsToOmit, fallbackCopyPlan, requiredClaims,
+        );
+        renderableCopy = validateAndBuildRenderableCopy(
+          rawFallbackCopy,
+          requiredClaims,
+          fallbackCopyPlan.maxTextElements || 3,
+        );
+        copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
+        semanticCopy = renderableCopy.map((r) => ({
+          id: r.id,
+          role: r.role,
+          semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
+          text: r.text,
+        }));
+        typeSystem = buildTypeSystem({ typography, concept: currentGraphicConcept, copy });
+
+        visual = undefined;
+        activeRecoveryContext = undefined;
+        fallbackAccepted = true;
+        break;
       }
+
+      if (fallbackAccepted) {
+        continue;
+      }
+
       const rejectionReason = critic.redesignFeedback || (critic.problems || []).join('; ');
       const msg = input.fallbackConcepts?.length
         ? `FlowPost could not verify this design after concept fallback. ${rejectionReason}`
