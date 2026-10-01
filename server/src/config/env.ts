@@ -210,7 +210,7 @@ export const env = {
   SMTP_SECURE: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
-  SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'Rally',
-  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'info@userally.in',
+  SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'Rally Support',
+  SMTP_FROM_EMAIL: process.env.SMTP_FROM_EMAIL || 'support@userally.in',
 };
 

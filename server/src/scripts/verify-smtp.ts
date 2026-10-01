@@ -25,12 +25,15 @@ async function main() {
   console.log(`    ${verifyResult.message}`);
 
   // Step 2: Send End-to-End Test Email
-  console.log('\n[2/2] Sending End-to-End Verification Email to ' + env.SMTP_USER + '...');
+  const recipient = (env.SMTP_USER && env.SMTP_USER.includes('@')) 
+    ? env.SMTP_USER 
+    : 'gmsaisudheer@gmail.com';
+  console.log(`\n[2/2] Sending End-to-End Verification Email to ${recipient}...`);
   const sendResult = await emailService.sendAlertEmail({
-    to: env.SMTP_USER,
+    to: recipient,
     alertType: 'success',
-    title: '🎉 Rally SMTP Integration Verified!',
-    message: 'Your Google SMTP connection is active and fully verified. Rally can now send system alerts, password resets, analytics digests, and notifications directly to your inbox.',
+    title: '🎉 Rally SMTP (Resend) Verified!',
+    message: 'Your Resend SMTP connection is active and fully verified. Rally can now send system alerts, password resets, analytics digests, and notifications directly to your inbox.',
     details: {
       'App Name': 'Rally',
       'Environment': 'Development / Verified',
