@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream';
+import { env } from '../../config/env';
 import { providerForRole } from '../../ai/providers';
 import { generateAltText } from '../../ai/generators/alt-text.generator';
 import { fetchImageBytes, ImageFetchError } from '../../ai/vision/image-source';
@@ -255,10 +256,29 @@ async function openMediaStream(url: string): Promise<NodeJS.ReadableStream> {
   return Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]);
 }
 
-/** True for a URL served by the Cloudinary account this app uploads to. */
+/**
+ * True for a URL served by the Cloudinary account this app uploads to.
+ *
+ * Being on `cloudinary.com` is not enough: anyone can open a free Cloudinary
+ * account and host a file under `res.cloudinary.com/<their-cloud>/…`, which
+ * would turn "only our storage" into "any Cloudinary customer's storage". A
+ * delivery URL starts `/<cloud-name>/`, so when the server knows its own
+ * cloud name that segment must match it.
+ *
+ * Without `CLOUDINARY_CLOUD_NAME` configured the account cannot be named, so
+ * this falls back to the host check alone rather than breaking every publish.
+ * Set it in production.
+ */
 function isCloudinaryDeliveryUrl(url: string): boolean {
   try {
-    return /(^|\.)cloudinary\.com$/i.test(new URL(url).hostname);
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    if (!/(^|\.)cloudinary\.com$/i.test(parsed.hostname)) return false;
+
+    const cloud = env.CLOUDINARY_CLOUD_NAME;
+    if (!cloud) return true;
+    const first = parsed.pathname.split('/').filter(Boolean)[0] ?? '';
+    return first.toLowerCase() === cloud.toLowerCase();
   } catch {
     return false;
   }

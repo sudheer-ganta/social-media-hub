@@ -1,4 +1,3 @@
-import sharp from 'sharp';
 import type { AiTextProvider } from '../providers';
 import type { InlineImagePart } from '../providers/provider.interface';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';

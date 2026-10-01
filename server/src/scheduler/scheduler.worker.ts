@@ -74,6 +74,8 @@ const BATCH = Number(process.env.SCHEDULER_BATCH ?? 25);
  * of itself started on top of it.
  */
 let ticking = false;
+/** Resolves when the tick that is running now finishes; null between ticks. */
+let inFlight: Promise<void> | null = null;
 let timer: NodeJS.Timeout | null = null;
 
 /**
@@ -220,6 +222,10 @@ export async function tick(now: Date = new Date()): Promise<number> {
 async function safeTick(): Promise<void> {
   if (ticking) return;
   ticking = true;
+  let finish!: () => void;
+  inFlight = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
   try {
     await tick();
   } catch (error) {
@@ -245,6 +251,8 @@ async function safeTick(): Promise<void> {
     });
   } finally {
     ticking = false;
+    inFlight = null;
+    finish();
   }
 }
 
@@ -283,4 +291,32 @@ export function stopScheduler(): void {
   timer = null;
 }
 
-export const scheduler = { startScheduler, stopScheduler, tick };
+/**
+ * Waits for the tick that is running right now, if any, to finish.
+ *
+ * Shutdown calls this after {@link stopScheduler}. Exiting mid-publish is the
+ * one way to get a *duplicate* post: the network accepted it, the process died
+ * before recording that, and the stale-claim reaper later sees an unfinished
+ * attempt and tries again. Resolves when the tick ends or after `timeoutMs`,
+ * whichever is first — a host gives a terminating process a fixed grace period,
+ * and a hung provider must not outlast it.
+ */
+export async function drainScheduler(timeoutMs: number): Promise<boolean> {
+  const pending = inFlight;
+  if (!pending) return true;
+
+  let timedOut = false;
+  await Promise.race([
+    pending,
+    new Promise<void>((resolve) => {
+      const t = setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, timeoutMs);
+      t.unref();
+    }),
+  ]);
+  return !timedOut;
+}
+
+export const scheduler = { startScheduler, stopScheduler, drainScheduler, tick };

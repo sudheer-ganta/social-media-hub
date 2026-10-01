@@ -29,11 +29,8 @@ import {
   type ColorDescriptor,
   type InkStateCandidate,
   parseColor,
-  oklchToHex,
   evaluateContrast,
   deltaEOklab,
-  calculateWcagRatio,
-  calculateApcaEstimate,
 } from './dynamic-color';
 
 // ─── 1. Surface Data Models ──────────────────────────────────────────────────

@@ -16,7 +16,6 @@ import { situationForRequest } from '../style/retrieve';
 // plumbing in three files to keep one import out of this one.
 import { loadBrandIntelligence } from '../../services/brand-intelligence.service';
 import type {
-  BrandProfile,
   CaptionRequest,
   CaptionResult,
   CaptionVariation,

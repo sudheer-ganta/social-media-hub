@@ -1,6 +1,5 @@
 import { styleDnaToRecipe, type StyleDNA } from '../style-dna/style-dna';
 import type {
-  ArtDirectionFamily,
   CompositionArchetype,
   CreativeDirection,
   ImageCapabilities,

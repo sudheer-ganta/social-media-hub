@@ -3,12 +3,9 @@ import type {
   ReferenceDeviceAbstraction,
   ReferenceSourceType,
   CreativePersonality,
-  ScoredCreativeConcept,
-  GraphicDesignConcept,
   CreativeRealizationPlan,
 } from '../types';
 import type { CreativeBrief } from '../brand/creative-brief';
-import { claimSatisfied, claimTokens } from '../intent/claim-match';
 
 /**
  * Reference-Aware Concept Engine & Multi-Dimensional Differentiation Tester.

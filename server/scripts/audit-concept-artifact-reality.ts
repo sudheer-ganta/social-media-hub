@@ -3,12 +3,10 @@ import path from 'path';
 import sharp from 'sharp';
 import {
   abstractReferenceDevice,
-  buildReferenceAwareConcept,
   evaluateConceptDifferentiation,
   evaluateConceptPairDifferentiation,
   deriveConceptAwareCopy,
   buildCreativeRealizationPlan,
-  compileRealizationPrompt,
 } from '../src/ai/strategy/reference-concept-engine';
 import { buildVisualArtifactComposition } from '../src/ai/render/visual-artifact-composition';
 import { buildCreativeRealizationContract } from '../src/ai/intent/creative-realization-contract';
@@ -17,8 +15,6 @@ import {
   CreativeBrief,
   DesignNode,
   ReferenceAwareConcept,
-  CreativePersonality,
-  ReferenceSourceType,
 } from '../src/ai/types';
 
 const AUDIT_OUT_DIR = path.resolve(__dirname, '../artifacts/audit_reality');

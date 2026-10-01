@@ -2,14 +2,12 @@ import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
 import {
   createCanvasRepresentation,
-  createBrandDesignRepresentation,
   createDesignField,
 } from './design-representation';
 import { analyzeImageField } from './image-field';
 import { discoverOptimizedComposition } from './composition-evaluation';
 import { evaluateRenderedDesign } from '../generators/design-critic.generator';
 import { renderDesignerPlan, type DesignNode } from './designer-composition';
-import { evaluateCompositionAlignment } from './dynamic-alignment';
 
 describe('Dynamic Alignment Engine — 10 Real Production Creatives Validation', { timeout: 60000 }, () => {
   // Helper to generate distinct real visual fields

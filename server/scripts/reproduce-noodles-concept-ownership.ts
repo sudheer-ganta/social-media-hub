@@ -1,12 +1,9 @@
 import {
-  claimSatisfied,
   claimTokens,
-  evaluateConceptIntentAffordance,
   evaluateIntentFidelity,
 } from '../src/ai/intent/claim-match';
 import {
   deriveConceptAwareCopy,
-  buildCreativeRealizationPlan,
   evaluateConceptDifferentiation,
 } from '../src/ai/strategy/reference-concept-engine';
 import {

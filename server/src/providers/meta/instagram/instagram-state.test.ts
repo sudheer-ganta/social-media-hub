@@ -23,7 +23,6 @@ import {
   createInstagramState,
   consumeInstagramState,
   INSTAGRAM_STATE_COOKIE,
-  INSTAGRAM_STATE_TTL_MS,
 } from './instagram-state';
 import { createCookieStateStore } from '../../oauth-state-cookie';
 

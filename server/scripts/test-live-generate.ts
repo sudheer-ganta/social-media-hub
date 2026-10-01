@@ -1,6 +1,5 @@
 import { env } from '../src/config/env';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 
 async function testSingle() {
   const userId = 'd15e131b-34da-43d2-bfaf-a9ba332506fd';

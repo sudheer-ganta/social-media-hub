@@ -47,16 +47,16 @@ const FORMAT_SUFFIX_REGEX = /\s+(?:post|posts|ad|ads|flyer|flyers|banner|banners
  * Structural patterns indicating code/JSON/dict serialization contamination.
  * Detects structural code syntax without rejecting normal marketing copy with punctuation.
  */
-const STRUCTURED_KEY_VALUE_REGEX = /(?:^|[,\s{\[])['"][a-zA-Z0-9_\-\s]+['"]\s*:\s*['"][^'"]*['"]/;
-const STRUCTURED_KEY_NONSTRING_REGEX = /(?:^|[,\s{\[])['"][a-zA-Z0-9_\-\s]+['"]\s*:\s*(?:\{|\[|\d+|true|false|null)/i;
-const UNQUOTED_KNOWN_KEY_REGEX = /(?:^|[,\s{\[])(?:cta|headline|body|marketing|title|subtitle|offer|event|copy|text|image|prompt|detail|message|role|priority)\s*:\s*['"]/i;
+const STRUCTURED_KEY_VALUE_REGEX = /(?:^|[,\s{[])['"][a-zA-Z0-9_\-\s]+['"]\s*:\s*['"][^'"]*['"]/;
+const STRUCTURED_KEY_NONSTRING_REGEX = /(?:^|[,\s{[])['"][a-zA-Z0-9_\-\s]+['"]\s*:\s*(?:\{|\[|\d+|true|false|null)/i;
+const UNQUOTED_KNOWN_KEY_REGEX = /(?:^|[,\s{[])(?:cta|headline|body|marketing|title|subtitle|offer|event|copy|text|image|prompt|detail|message|role|priority)\s*:\s*['"]/i;
 const JSON_OBJECT_ENCLOSURE_REGEX = /^\s*\{.*['"][a-zA-Z0-9_\-\s]+['"]\s*:.*\}\s*$/s;
 const JSON_ARRAY_ENCLOSURE_REGEX = /^\s*\[\s*['"].*['"]\s*\]\s*$/s;
 const SERIALIZED_FRAGMENT_COMMA_REGEX = /['"]\s*,\s*['"][a-zA-Z0-9_\-\s]+['"]\s*:/;
 const MULTIPLE_KEY_VAL_FRAGMENT_REGEX = /['"][a-zA-Z0-9_\-\s]+['"]\s*:[^,]+,\s*['"][a-zA-Z0-9_\-\s]+['"]/;
 const OBJECT_INSPECTION_REGEX = /^<.*(?:object|function|module|class|dict)\s+.*>$/i;
 const PROMPT_META_REGEX = /(?:json output|prompt instructions?|response schema|system instruction|ai text provider|generation parameters?)/i;
-const DANGLING_QUOTE_KEY_REGEX = /(?:^|[,\s{\[])[a-zA-Z0-9_\-]+['"]\s*:\s*['"][^'"]*['"]/;
+const DANGLING_QUOTE_KEY_REGEX = /(?:^|[,\s{[])[a-zA-Z0-9_-]+['"]\s*:\s*['"][^'"]*['"]/;
 
 /**
  * Detects structural patterns of code/JSON/dict syntax.

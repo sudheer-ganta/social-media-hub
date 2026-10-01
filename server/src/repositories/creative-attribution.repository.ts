@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma';
+import { UserFacingError } from '../utils/user-facing-error';
 
 export type CreativeScope = { userId: string; contextType: 'personal' | 'brand'; brandId?: string | null };
 export type CreativeEventType =
@@ -28,10 +29,10 @@ export async function appendEvent(scope: CreativeScope, input: {
 
 export async function syncPostAssets(scope: CreativeScope, postId: string, media: Array<{ id: string; generatedAssetId?: string }>, eventId?: string) {
   const post = await prisma.post.findFirst({ where: { id: postId, created_by: scope.userId, context_type: scope.contextType, brand_id: scope.contextType === 'brand' ? (scope.brandId ?? null) : null } });
-  if (!post) throw new Error('Post not found in this creation context.');
+  if (!post) throw new UserFacingError('Post not found in this creation context.', 404);
   const requested = new Map(media.filter((m) => m.generatedAssetId).map((m) => [m.generatedAssetId!, m.id]));
   const assets = requested.size ? await prisma.generatedAsset.findMany({ where: { id: { in: [...requested.keys()] }, userId: scope.userId, contextType: scope.contextType, brandId: scope.contextType === 'brand' ? (scope.brandId ?? null) : null } }) : [];
-  if (assets.length !== requested.size) throw new Error('One or more generated assets are not available in this creation context.');
+  if (assets.length !== requested.size) throw new UserFacingError('One or more generated assets are not available in this creation context.', 404);
 
   return prisma.$transaction(async (tx) => {
     const active = await tx.postCreativeAsset.findMany({ where: { postId, ownerId: scope.userId, attachmentState: 'attached' } });

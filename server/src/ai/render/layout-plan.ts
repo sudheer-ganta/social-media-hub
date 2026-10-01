@@ -1576,7 +1576,7 @@ function buildCollageLayeredPlan(input: LayoutPlanInput, ctx: LayoutPlanCtx): La
   });
 
   // 6. Typographic Headline: Bold, overlapping the lower section with slight tilt
-  let headlineTopY = Math.max(imgY + imgH * 0.72, h * 0.58);
+  const headlineTopY = Math.max(imgY + imgH * 0.72, h * 0.58);
   const headlineX = w * 0.10;
   const headlineColW = w * 0.80;
   let headlineBlockH = 0;
@@ -2541,7 +2541,7 @@ export function buildLayoutPlan(input: LayoutPlanInput): LayoutPlan {
   let imageRect: Rect;
   let bodyOnPaper = false; // text sits on paper (framed/inset) vs over the photo (full-bleed)
   let bodyTop = m;
-  let bodyBottom = footerY - (wantsFooter ? m * 0.35 : m) - (wantsFooter ? 0 : bottomSafe);
+  const bodyBottom = footerY - (wantsFooter ? m * 0.35 : m) - (wantsFooter ? 0 : bottomSafe);
 
   if (treatment === 'full-bleed') {
     imageRect = norm(0, 0, w, wantsFooter ? footerY + h * 0.02 : h);

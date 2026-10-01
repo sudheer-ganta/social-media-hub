@@ -1,6 +1,6 @@
 import type { GraphicDesignConcept } from '../types';
 import type { SemanticRole, TypeSystem } from '../typography/type-system';
-import type { FieldRect, ImageField } from './image-field';
+import type { ImageField } from './image-field';
 import type { DesignBox, DesignNode, DesignerPlan } from './designer-composition';
 
 /**

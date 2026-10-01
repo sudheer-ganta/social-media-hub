@@ -9,7 +9,7 @@ import { fontFilePath } from './font-catalog';
 import { createDynamicCopyModel } from '../render/copy-model';
 import { createCanvasRepresentation, createBrandDesignRepresentation, createDesignField } from '../render/design-representation';
 import { analyzeImageField } from '../render/image-field';
-import { discoverOptimizedComposition, evaluateCompositionState } from '../render/composition-evaluation';
+import { discoverOptimizedComposition } from '../render/composition-evaluation';
 import { fittedCopySvg, type DesignNode } from '../render/designer-composition';
 import sharp from 'sharp';
 

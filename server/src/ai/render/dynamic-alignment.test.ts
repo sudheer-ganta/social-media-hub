@@ -2,16 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   discoverNaturalAxes,
   evaluateCandidateAlignment,
-  enhancePlacementCandidatesWithAlignment,
   deriveDesignSubstrate,
   buildRelationalAlignmentGraph,
   evaluateCompositionAlignment,
-  extractElementGeometricBounds,
 } from './dynamic-alignment';
-import { discoverPlacementCandidates } from './dynamic-placement';
 import {
   createCanvasRepresentation,
-  createBrandDesignRepresentation,
   createDesignField,
 } from './design-representation';
 import { analyzeImageField } from './image-field';

@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "npm run db:generate && ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "npm install --prefix .. && npm run db:generate && tsc",
+    "build": "npm install --include=dev && npm install --include=dev --prefix .. && npm run db:generate && tsc",
     "start": "node dist/server.js",
     "db:generate": "npm --prefix .. run db:generate",
     "verify:sprint2": "ts-node-dev --transpile-only --quiet src/scripts/verify-sprint2.ts",
@@ -39,6 +39,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^10.0.13",
     "pg": "^8.22.0",

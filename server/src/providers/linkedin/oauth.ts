@@ -4,7 +4,8 @@ import {
   ProviderError,
   type Provider,
 } from '../provider.interface';
-import { createOAuthStateStore, firstQueryValue } from '../oauth-state';
+import { firstQueryValue } from '../oauth-state';
+import { createLinkedInState, consumeLinkedInState } from './linkedin-state';
 import {
   readContext,
   assertContextOwned,
@@ -39,15 +40,9 @@ import type { LinkedInAuthorizationParams } from './types';
  */
 
 /**
- * Pending OAuth states for LinkedIn.
- *
- * The store itself moved to `providers/oauth-state.ts` when Instagram arrived —
- * behaviour unchanged, but there is now one implementation of single-use,
- * expiry and entropy rather than one per network. This instance is LinkedIn's
- * alone, so a state minted for another provider can never satisfy a callback
- * here.
+ * OAuth state lives in a signed HttpOnly cookie — see `linkedin-state.ts` for why
+ * (it binds the flow to the member's browser, which an in-memory Map cannot).
  */
-const states = createOAuthStateStore(linkedinConfig.stateTtlMs);
 
 /**
  * Builds the full authorization URL. Kept exported and pure so it can be
@@ -95,7 +90,7 @@ async function connect(req: Request, res: Response): Promise<void> {
   const context = readContext(req.query);
   await assertContextOwned(req.user.id, context);
 
-  const state = states.create(req.user.id, context);
+  const state = createLinkedInState(res, req.user.id, context);
   const authorizationUrl = buildAuthorizationUrl(state);
 
   // Scopes are safe to log; the state, the client secret and any token are not.
@@ -123,7 +118,9 @@ async function callback(req: Request, res: Response): Promise<void> {
 
   // Resolved before anything can throw, so the catch block can attribute the
   // failure to a user in the audit trail.
-  const pending = state ? states.consume(state) : null;
+  // Also clears the cookie, on success and failure alike, so the redirect cannot
+  // be replayed.
+  const pending = consumeLinkedInState(req, res, state);
 
   try {
     // The member pressed Cancel, or LinkedIn refused the request outright.

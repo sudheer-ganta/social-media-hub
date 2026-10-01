@@ -1,8 +1,57 @@
+import { API_BASE_URL } from "@/constants/api";
+import { authenticatedFetch } from "@/lib/auth-token";
+
 const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 export function isCloudinaryConfigured(): boolean {
-  return Boolean(cloudName && uploadPreset);
+  return Boolean(cloudName);
+}
+
+/**
+ * Parameters the backend signed for one upload.
+ *
+ * Uploads used to go out with a public *unsigned* preset, which meant anyone
+ * who read its name out of this bundle could upload anything, of any size, to
+ * the account with no login. Now the browser asks the API first — which needs a
+ * session — and Cloudinary only accepts an upload carrying that signature, into
+ * the member's own folder, in the formats the signature names. The API secret
+ * never reaches the browser.
+ */
+interface SignedUpload {
+  cloudName: string;
+  apiKey: string;
+  timestamp: string;
+  signature: string;
+  folder: string;
+  allowedFormats: string;
+  uploadPreset?: string;
+}
+
+async function requestSignature(
+  resourceType: "image" | "video",
+): Promise<SignedUpload> {
+  const response = await authenticatedFetch(
+    `${API_BASE_URL}/api/uploads/sign`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resourceType }),
+    },
+    "Sign in to upload media.",
+  );
+
+  if (!response.ok) {
+    let message = "Could not start the upload. Please try again.";
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      // keep the generic message
+    }
+    throw new Error(message);
+  }
+
+  return (await response.json()) as SignedUpload;
 }
 
 /**
@@ -53,10 +102,11 @@ export interface CloudinaryUploadResult {
 }
 
 /**
- * Delete tokens returned by unsigned uploads (valid ~10 minutes). Lets us
- * clean up a just-uploaded asset when the user replaces it, without
- * exposing an API secret in the browser. Older assets simply expire from
- * this map — deleting those safely requires a signed backend call.
+ * Delete tokens, which Cloudinary returns only for *unsigned* uploads. Signed
+ * uploads (what this app does now) return none, so this stays empty and
+ * {@link cloudinaryService.deleteImage} is a no-op; replaced assets are pruned
+ * from the Cloudinary console. Deleting them properly needs a signed backend
+ * call.
  */
 const deleteTokens = new Map<string, string>();
 
@@ -117,7 +167,7 @@ export const cloudinaryService = {
     if (!isCloudinaryConfigured()) {
       return Promise.reject(
         new Error(
-          "Cloudinary is not configured. Set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET in your .env file.",
+          "Cloudinary is not configured. Set VITE_CLOUDINARY_CLOUD_NAME in your .env file.",
         ),
       );
     }
@@ -129,70 +179,79 @@ export const cloudinaryService = {
     const isVideo = file.type.startsWith("video/");
     const resourceType = isVideo ? "video" : "image";
 
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open(
-        "POST",
-        `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
-      );
+    return requestSignature(resourceType).then(
+      (signed) =>
+        new Promise<CloudinaryUploadResult>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open(
+            "POST",
+            `https://api.cloudinary.com/v1_1/${signed.cloudName}/${resourceType}/upload`,
+          );
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && onProgress) {
-          onProgress(Math.round((event.loaded / event.total) * 100));
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const body = JSON.parse(xhr.responseText) as CloudinaryResponse;
-            if (body.delete_token) {
-              deleteTokens.set(body.secure_url, body.delete_token);
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && onProgress) {
+              onProgress(Math.round((event.loaded / event.total) * 100));
             }
+          };
 
-            const kind = body.resource_type === "video" ? "video" : "image";
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try {
+                const body = JSON.parse(xhr.responseText) as CloudinaryResponse;
+                if (body.delete_token) {
+                  deleteTokens.set(body.secure_url, body.delete_token);
+                }
 
-            resolve({
-              url: body.secure_url,
-              kind,
-              // Spread rather than assigned, so a field Cloudinary omitted stays
-              // absent instead of becoming `undefined` on a defined key or, far
-              // worse, zero.
-              ...(body.width ? { width: body.width } : {}),
-              ...(body.height ? { height: body.height } : {}),
-              ...(body.bytes ? { bytes: body.bytes } : {}),
-              ...(body.duration
-                ? { durationMs: Math.round(body.duration * 1000) }
-                : {}),
-              ...(toMimeType(body) ? { mimeType: toMimeType(body)! } : {}),
-              ...(kind === "video" && toPosterUrl(body.secure_url)
-                ? { posterUrl: toPosterUrl(body.secure_url)! }
-                : {}),
-            });
-          } catch {
-            reject(new Error("Unexpected response from Cloudinary."));
-          }
-        } else {
-          let message = `Upload failed (${xhr.status}).`;
-          try {
-            const body = JSON.parse(xhr.responseText) as {
-              error?: { message?: string };
-            };
-            if (body.error?.message) message = body.error.message;
-          } catch {
-            // keep the generic message
-          }
-          reject(new Error(message));
-        }
-      };
+                const kind = body.resource_type === "video" ? "video" : "image";
 
-      xhr.onerror = () => reject(new Error("Network error during upload."));
+                resolve({
+                  url: body.secure_url,
+                  kind,
+                  // Spread rather than assigned, so a field Cloudinary omitted stays
+                  // absent instead of becoming `undefined` on a defined key or, far
+                  // worse, zero.
+                  ...(body.width ? { width: body.width } : {}),
+                  ...(body.height ? { height: body.height } : {}),
+                  ...(body.bytes ? { bytes: body.bytes } : {}),
+                  ...(body.duration
+                    ? { durationMs: Math.round(body.duration * 1000) }
+                    : {}),
+                  ...(toMimeType(body) ? { mimeType: toMimeType(body)! } : {}),
+                  ...(kind === "video" && toPosterUrl(body.secure_url)
+                    ? { posterUrl: toPosterUrl(body.secure_url)! }
+                    : {}),
+                });
+              } catch {
+                reject(new Error("Unexpected response from Cloudinary."));
+              }
+            } else {
+              let message = `Upload failed (${xhr.status}).`;
+              try {
+                const body = JSON.parse(xhr.responseText) as {
+                  error?: { message?: string };
+                };
+                if (body.error?.message) message = body.error.message;
+              } catch {
+                // keep the generic message
+              }
+              reject(new Error(message));
+            }
+          };
 
-      const form = new FormData();
-      form.append("file", file);
-      form.append("upload_preset", uploadPreset);
-      xhr.send(form);
-    });
+          xhr.onerror = () => reject(new Error("Network error during upload."));
+
+          const form = new FormData();
+          form.append("file", file);
+          form.append("api_key", signed.apiKey);
+          form.append("timestamp", signed.timestamp);
+          form.append("signature", signed.signature);
+          form.append("folder", signed.folder);
+          form.append("allowed_formats", signed.allowedFormats);
+          if (signed.uploadPreset)
+            form.append("upload_preset", signed.uploadPreset);
+          xhr.send(form);
+        }),
+    );
   },
 
   /**

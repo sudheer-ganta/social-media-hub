@@ -170,15 +170,17 @@ export function normalizeConceptCandidate(
   const imageRole = raw.imageRole || raw.visualRealizationIntent?.imageRole || 'full-bleed';
   const mechanismOwner = raw.mechanismOwner;
   const visualWorld = asString(raw.visualWorld || raw.visualRealizationIntent?.visualWorld, 300);
-  const physicalArtifacts = Array.isArray(raw.physicalArtifacts || raw.visualRealizationIntent?.physicalArtifacts)
-    ? (raw.physicalArtifacts || raw.visualRealizationIntent?.physicalArtifacts).filter((p: any) => typeof p === 'string')
+  const physicalArtifactsSource = raw.physicalArtifacts || raw.visualRealizationIntent?.physicalArtifacts;
+  const physicalArtifacts = Array.isArray(physicalArtifactsSource)
+    ? physicalArtifactsSource.filter((p: any) => typeof p === 'string')
     : [];
   const compositionMechanism = asString(raw.compositionMechanism || raw.visualRealizationIntent?.compositionMechanism, 200);
   const copyAngle = asString(raw.copyAngle || raw.conceptIntent?.copyAngle, 300);
   const textImageRelationship = asString(raw.textImageRelationship, 100);
   const referenceInsight = asString(raw.referenceInsight || raw.referenceInsights || raw.conceptIntent?.referenceInsight, 200);
-  const requiredVisualElements = Array.isArray(raw.requiredVisualElements || raw.visualRealizationIntent?.requiredVisualElements)
-    ? (raw.requiredVisualElements || raw.visualRealizationIntent?.requiredVisualElements).filter((p: any) => typeof p === 'string')
+  const requiredVisualElementsSource = raw.requiredVisualElements || raw.visualRealizationIntent?.requiredVisualElements;
+  const requiredVisualElements = Array.isArray(requiredVisualElementsSource)
+    ? requiredVisualElementsSource.filter((p: any) => typeof p === 'string')
     : [];
   const rawProof = raw.requiredVisualProof || raw.visualRealizationIntent?.requiredVisualProof;
   const requiredVisualProof = Array.isArray(rawProof) && rawProof.length > 0
@@ -186,8 +188,12 @@ export function normalizeConceptCandidate(
     : dominantVisualObject
       ? [dominantVisualObject]
       : [];
-  const prohibitedVisualInterpretations = Array.isArray(raw.prohibitedVisualInterpretations || raw.prohibitedInterpretations || raw.visualRealizationIntent?.prohibitedInterpretations)
-    ? (raw.prohibitedVisualInterpretations || raw.prohibitedInterpretations || raw.visualRealizationIntent?.prohibitedInterpretations).filter((p: any) => typeof p === 'string')
+  const prohibitedVisualInterpretationsSource =
+    raw.prohibitedVisualInterpretations ||
+    raw.prohibitedInterpretations ||
+    raw.visualRealizationIntent?.prohibitedInterpretations;
+  const prohibitedVisualInterpretations = Array.isArray(prohibitedVisualInterpretationsSource)
+    ? prohibitedVisualInterpretationsSource.filter((p: any) => typeof p === 'string')
     : [];
   const styleDirection = asString(raw.styleDirection || raw.artDirectionFamily, 100);
   const conceptSpecificity = asScore(raw.conceptSpecificity || raw.conceptIntent?.conceptSpecificity || raw.scores?.conceptStrength);

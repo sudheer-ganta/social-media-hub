@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.middleware';
 import { prisma } from '../config/prisma';
+import { UserFacingError } from '../utils/user-facing-error';
 import { creativeAttributionRepository, type CreativeScope } from '../repositories/creative-attribution.repository';
 import { creativePerformanceService } from '../services/creative-performance.service';
 
@@ -8,11 +9,24 @@ const router = Router();
 const scope = (userId: string, input: Record<string, unknown>): CreativeScope => {
   const contextType = input.contextType === 'brand' ? 'brand' : 'personal';
   const brandId = contextType === 'brand' && typeof input.brandId === 'string' ? input.brandId : null;
-  if (contextType === 'brand' && !brandId) throw new Error('Choose a brand.');
+  if (contextType === 'brand' && !brandId) throw new UserFacingError('Choose a brand.');
   return { userId, contextType, brandId };
 };
 const where = (s: CreativeScope) => ({ userId: s.userId, contextType: s.contextType, brandId: s.contextType === 'brand' ? (s.brandId ?? null) : null });
-const handle = (fn: any) => async (req: any, res: any) => { try { await fn(req, res); } catch (error) { console.error('[creative-history]', error); res.status(400).json({ error: error instanceof Error ? error.message : 'Request failed.' }); } };
+const handle = (fn: any) => async (req: any, res: any) => {
+  try {
+    await fn(req, res);
+  } catch (error) {
+    console.error('[creative-history]', error);
+    // Only messages written for a person go to the browser; a Prisma or driver
+    // error stays in the log.
+    if (error instanceof UserFacingError) {
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+};
 
 router.post('/attribution/sync', requireAuth, handle(async (req: any, res: any) => {
   const body = (req.body ?? {}) as Record<string, any>;

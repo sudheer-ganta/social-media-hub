@@ -2,9 +2,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { generateCreativeConcepts } from '../generators/creative-concepts.generator';
-import { generateCreativeStrategy } from '../generators/creative-strategy.generator';
-import { generateArtDirectorBlueprint } from '../generators/art-director.generator';
-import { generateImagePrompt } from '../generators/image-prompt.generator';
 import { buildCreativeRealizationContract } from './creative-realization-contract';
 import { evaluateConceptRealizability, isEligibleFallback } from './concept-realizability-gate';
 import { buildConceptIdentity, analyzeConceptPoolDivergence, evaluateConceptDivergence } from '../strategy/creative-differentiation';
@@ -12,7 +9,6 @@ import { buildCanonicalCreativeBrief } from '../brand/creative-brief';
 import { resolveBrandProfile } from '../brand/brand-profile';
 import { resolveCreativeDna } from '../brand/creative-dna';
 import { activeProvider } from '../providers';
-import type { AiTextProvider } from '../providers';
 import type { CreativeIntentBrief, ScoredCreativeConcept, BrandProfile } from '../types';
 
 async function runLiveAcceptance() {

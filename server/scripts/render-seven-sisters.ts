@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import sharp from 'sharp';
 import { renderCreative } from '../src/ai/render/creative-renderer';
 import { getStyleDNA } from '../src/ai/style-dna/style-dna';
 import type { CreativeDirection, ResolvedCreativeDna } from '../src/ai/types';

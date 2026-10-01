@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateConceptRealizability, assertConceptRealizable, isEligibleFallback } from './concept-realizability-gate';
+import { evaluateConceptRealizability } from './concept-realizability-gate';
 import { buildCreativeRealizationContract, assertCreativeRealizationContractConsistent } from './creative-realization-contract';
 import { buildImageRealizationSpec, compileImagePromptFromSpec } from './image-realization-spec';
 

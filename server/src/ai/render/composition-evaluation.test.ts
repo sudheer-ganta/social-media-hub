@@ -7,8 +7,6 @@ import {
 import { analyzeImageField } from './image-field';
 import {
   discoverOptimizedComposition,
-  evaluateCompositionState,
-  DEFAULT_COMPOSITION_WEIGHTS,
 } from './composition-evaluation';
 import { discoverSurfaceCandidates } from './dynamic-surface';
 import { discoverInkCandidates } from './dynamic-color';

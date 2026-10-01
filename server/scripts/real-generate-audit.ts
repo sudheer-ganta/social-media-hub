@@ -3,11 +3,6 @@ import path from 'path';
 import jwt from 'jsonwebtoken';
 import { env } from '../src/config/env';
 import { resolveAffordances } from '../src/ai/intent/image-affordance-evaluation';
-import { evaluateCandidateComposition } from '../src/ai/render/composition-evaluation';
-import { renderSvgComposition } from '../src/ai/render/svg-renderer';
-import { rasterizeSvg } from '../src/ai/render/rasterizer';
-import { evaluateRenderQuality } from '../src/ai/render/critic';
-import { computeFidelityMetrics } from '../src/ai/render/creative-fidelity';
 
 interface TestCase {
   name: string;

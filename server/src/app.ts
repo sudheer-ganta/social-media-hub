@@ -1,8 +1,22 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { env } from './config/env';
+import { requireAuth } from './middleware/auth.middleware';
+import { globalLimiter, aiLimiter, creativeLimiter } from './middleware/rate-limit.middleware';
 
 const app = express();
+
+// Render (and most hosts) terminate TLS at one proxy hop. Without this `req.ip` is
+// the proxy's address and every client shares a single rate-limit bucket.
+// Set TRUST_PROXY=0 when running without a proxy in front.
+app.set('trust proxy', process.env.TRUST_PROXY === '0' ? false : 1);
+
+// Security headers. This is a JSON API, so the page-oriented defaults (CSP,
+// frame-ancestors, nosniff, no referrer, HSTS) are all free hardening: nothing
+// here is ever meant to be rendered or framed. `cross-origin` resource policy
+// because the SPA lives on a different origin and reads these responses.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 /**
  * CORS, with credentials.
@@ -19,13 +33,28 @@ const app = express();
  * provider redirects that land on `/callback` — is allowed through, because
  * there is no origin to police and no cookie for a browser to withhold.
  */
+const isProduction = process.env.NODE_ENV === 'production';
+
+/** https://userally.in or any subdomain of it. Parsed, not pattern-matched. */
+function isOwnDomain(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === 'https:' &&
+      (url.hostname === 'userally.in' || url.hostname.endsWith('.userally.in'))
+    );
+  } catch {
+    return false;
+  }
+}
+
 const defaultAllowed = [
   env.FRONTEND_URL,
   'https://userally.in',
   'https://www.userally.in',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:5000',
+  // Dev servers. In production a page on someone's own localhost has no business
+  // making credentialed calls to the API.
+  ...(isProduction ? [] : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5000']),
 ];
 
 const envAllowed = process.env.CORS_ORIGINS
@@ -46,11 +75,14 @@ app.use(
       }
       
       const normalized = origin.trim().replace(/\/$/, '');
+      // Deliberately no `*.vercel.app` wildcard: anyone can deploy a site to that
+      // domain, and with `credentials: true` an attacker's page there could call
+      // this API as the visitor. A Vercel deployment that needs access is listed
+      // by exact origin in `FRONTEND_URL` or `CORS_ORIGINS`.
       const isAllowed =
         allowedOrigins.includes(normalized) ||
-        /^https:\/\/([a-zA-Z0-9-]+\.)*userally\.in$/.test(normalized) ||
-        /^https:\/\/([a-zA-Z0-9-]+\.)*vercel\.app$/.test(normalized) ||
-        /^http:\/\/localhost(:\d+)?$/.test(normalized);
+        isOwnDomain(normalized) ||
+        (!isProduction && /^http:\/\/localhost(:\d+)?$/.test(normalized));
 
       if (isAllowed) {
         callback(null, true);
@@ -64,6 +96,9 @@ app.use(
 );
 app.use(express.json());
 
+// Ceiling on everything, before any route does work.
+app.use(globalLimiter);
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -73,8 +108,6 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.json({ message: 'Flow Post API is running perfectly!' });
 });
-
-import { requireAuth } from './middleware/auth.middleware';
 
 // Protected endpoint to test auth middleware
 app.get('/me', requireAuth, (req, res) => {
@@ -101,6 +134,10 @@ app.use('/api/integrations', integrationsRoutes);
 // between the browser and Gemini — see routes/ai.routes.ts.
 import aiRoutes from './routes/ai.routes';
 
+// Authenticate first so the limiter can count per user rather than per IP.
+// `requireAuth` is a no-op the second time a route names it.
+app.use('/api/ai/creative', requireAuth, creativeLimiter);
+app.use('/api/ai', requireAuth, aiLimiter);
 app.use('/api/ai', aiRoutes);
 
 // FlowPost's brand-native creative engine — natural language + brand identity
@@ -133,6 +170,11 @@ app.use('/api/scheduled-posts', scheduledPostsRoutes);
 import analyticsRoutes from './routes/analytics.routes';
 
 app.use('/api/analytics', analyticsRoutes);
+
+// Signed direct-to-Cloudinary uploads (replaces the public unsigned preset).
+import uploadsRoutes from './routes/uploads.routes';
+
+app.use('/api/uploads', uploadsRoutes);
 
 // SMTP / Email service routes (test connection, notifications, digests, verification)
 import emailRoutes from './routes/email.routes';

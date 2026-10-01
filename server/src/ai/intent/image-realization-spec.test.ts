@@ -4,9 +4,7 @@ import {
   compileImagePromptFromSpec,
   deriveCopyLoadProfile,
   deriveReadingSpaceRequirement,
-  deriveTextImageRelationship,
-  detectTextRelationshipMode,
-  ImageRealizationSpec
+  detectTextRelationshipMode
 } from './image-realization-spec';
 
 describe('ImageRealizationSpec Suite', () => {

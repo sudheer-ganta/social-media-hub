@@ -21,6 +21,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * the video path ever calls it, these tests fail — which is exactly the alarm
  * that matters.
  */
+/**
+ * The server's own Cloudinary account, pinned so the tests do not depend on
+ * whatever `.env` happens to be on the machine running them. URLs under any
+ * other cloud must be treated as foreign.
+ */
+vi.mock('../../config/env', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../config/env')>();
+  return { ...actual, env: { ...actual.env, CLOUDINARY_CLOUD_NAME: 'demo' } };
+});
+
 const fetchImageBytes = vi.hoisted(() =>
   vi.fn(async () => ({
     mimeType: 'image/jpeg',
@@ -129,6 +139,16 @@ describe('URL transport does not download the video', () => {
       'https://res.cloudinary.com/demo/video/upload/v1/clip.jpg',
     );
     expect(fetchImageBytes).not.toHaveBeenCalled();
+  });
+
+  // Anyone can open a free Cloudinary account and host a file under their own
+  // cloud name; being on cloudinary.com is not the same as being *our* storage.
+  it('does not treat another account\'s Cloudinary URL as our storage', async () => {
+    const assets = await resolvePostMedia(
+      post([{ url: 'https://res.cloudinary.com/attacker-cloud/video/upload/v1/clip.mp4', type: 'video' }]),
+      { requirements, transport: 'url' },
+    );
+    expect(assets[0].posterUrl).toBeNull();
   });
 
   it('prefers a stored poster over a derived one', async () => {

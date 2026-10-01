@@ -8,7 +8,6 @@ import {
 import {
   validateAndBuildRenderableCopy,
   isGenericMarketingFiller,
-  isStructuredArtifact,
 } from './copy-sanitizer';
 import { validateStyleBriefConsistency } from './style-brief-consistency';
 import { buildCreativeRealizationContract } from './creative-realization-contract';
@@ -18,7 +17,6 @@ import {
   createDesignField,
 } from '../render/design-representation';
 import {
-  discoverOptimizedComposition,
   evaluateCompositionState,
 } from '../render/composition-evaluation';
 import { analyzeImageField } from '../render/image-field';

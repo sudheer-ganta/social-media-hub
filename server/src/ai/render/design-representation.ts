@@ -1,6 +1,5 @@
 import type { FieldRect, ImageField, ToneReading, QuietRect } from './image-field';
 import { SPATIAL_OCCUPANCY_CALIBRATION } from './image-field';
-import type { BrandProfile, ResolvedCreativeDna as CreativeDna } from '../types';
 
 /**
  * FLOWPOST DYNAMIC DESIGN REPRESENTATION — PHASE 1

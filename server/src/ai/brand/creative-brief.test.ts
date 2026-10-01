@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { buildCanonicalCreativeBrief } from './creative-brief';
-import { resolveBrandProfile } from './brand-profile';
-import { resolveCreativeDna } from './creative-dna';
 import type { CreativeIntentBrief } from '../types';
 
 describe('buildCanonicalCreativeBrief', () => {

@@ -3,7 +3,6 @@ import type {
   VisualArtifactComposition,
   VisualArtifactSemanticRole,
   VisualArtifactRelationship,
-  VisualArtifactRelationshipType,
   VisualArtifactEdgeCharacter,
   VisualArtifactInteractionMode,
   VisualArtifactMaterial,

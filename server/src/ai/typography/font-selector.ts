@@ -17,7 +17,7 @@ import {
 } from './style-profiles';
 import { detectScriptsAcross } from './language';
 import { generateFontPairing, type FontPairingChoice } from './font-pairing.generator';
-import type { ArtDirectionFamily, CreativeDirection, CreativeResearch, ReferenceDesignRecipe, ResolvedCreativeDna } from '../types';
+import type { CreativeDirection, CreativeResearch, ReferenceDesignRecipe, ResolvedCreativeDna } from '../types';
 import type { StyleDNA } from '../style-dna/style-dna';
 import type { AiTextProvider } from '../providers';
 

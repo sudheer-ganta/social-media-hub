@@ -55,6 +55,34 @@ vi.mock('../repositories/social-account.repository', () => ({
   socialAccountRepository: repo,
 }));
 vi.mock('../repositories/post.repository', () => ({ postRepository: posts }));
+
+// Creative attribution is best-effort bookkeeping the publish service fires
+// after the fact. Left unmocked it reached the REAL Prisma client — i.e. the
+// database named in .env — with fixture ids like "post-1", which Postgres
+// rejected as invalid UUIDs, and turned a unit test into a slow, flaky network
+// test that touched live data.
+vi.mock('../repositories/creative-attribution.repository', () => ({
+  creativeAttributionRepository: {
+    recordPublication: vi.fn(async () => undefined),
+    recordPostLifecycle: vi.fn(async () => undefined),
+    syncPostAssets: vi.fn(async () => ({ attributed: 0, removed: 0 })),
+  },
+}));
+
+// Backstop: if anything else in the import graph reaches for Prisma, fail loudly
+// here instead of silently dialling the database from a unit test.
+vi.mock('../config/prisma', () => ({
+  prisma: new Proxy(
+    {},
+    {
+      get(_target, property) {
+        throw new Error(
+          `token-recovery.test.ts touched the real database (prisma.${String(property)}). Mock the repository instead.`,
+        );
+      },
+    },
+  ),
+}));
 vi.mock('./activity.service', () => ({
   activityService: {
     logRefresh: vi.fn(async () => undefined),

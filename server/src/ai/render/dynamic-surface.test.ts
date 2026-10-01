@@ -8,9 +8,7 @@ import { analyzeImageField } from './image-field';
 import { discoverInkCandidates } from './dynamic-color';
 import {
   discoverSurfaceCandidates,
-  evaluateSurfaceIntervention,
   DEFAULT_SURFACE_CALIBRATION,
-  type SurfaceField,
 } from './dynamic-surface';
 import sharp from 'sharp';
 

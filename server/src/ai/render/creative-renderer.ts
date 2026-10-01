@@ -30,7 +30,7 @@ import {
 import { rasterizeTextOverlay } from './text-rasterizer';
 import { selectTypography, type TypographySelection } from '../typography/font-selector';
 import type { AiTextProvider } from '../providers';
-import type { CreativeDirection, GraphicDesignConcept, ImageCapabilities, ReferenceStyleProfile, ResolvedCreativeDna } from '../types';
+import type { CreativeDirection, ImageCapabilities, ReferenceStyleProfile, ResolvedCreativeDna } from '../types';
 import type { StyleDNA } from '../style-dna/style-dna';
 
 /**

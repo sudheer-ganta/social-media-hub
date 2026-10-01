@@ -31,16 +31,11 @@
 
 import {
   FONT_CATALOG,
-  getFontDefinition,
   nearestAvailableWeight,
-  type FontCategory,
   type FontDefinition,
-  type FontRole,
-  type FontWidth,
   type ScriptTag,
 } from './font-catalog';
 import {
-  measureText,
   measureMultiLineBlock,
   type MeasuredBlockMetrics,
 } from './font-metrics.service';

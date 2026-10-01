@@ -2,8 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import sharp from 'sharp';
 import {
   designCreative,
-  renderDesignerPlan,
-  validateDesignerPlan,
   repairPlanMechanically,
   resolveLogoNegativeSpacePosition,
   type DesignerPlan,

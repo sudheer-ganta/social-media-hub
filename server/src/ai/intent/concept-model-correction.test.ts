@@ -1,7 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   evaluateConceptRealizability,
-  assertConceptRealizable,
   isEligibleFallback,
   isAbstractOccasionOrTheme,
 } from './concept-realizability-gate';
@@ -11,7 +10,6 @@ import {
 } from './creative-realization-contract';
 import {
   normalizeConceptCandidate,
-  generateCreativeConcepts,
 } from '../generators/creative-concepts.generator';
 import {
   buildConceptIdentity,
@@ -19,10 +17,6 @@ import {
   analyzeConceptPoolDivergence,
 } from '../strategy/creative-differentiation';
 import { buildCanonicalCreativeBrief } from '../brand/creative-brief';
-import { resolveBrandProfile } from '../brand/brand-profile';
-import { resolveCreativeDna } from '../brand/creative-dna';
-import type { AiTextProvider } from '../providers';
-import type { CreativeIntentBrief, ScoredCreativeConcept } from '../types';
 
 describe('FlowPost — Concept Model + Realization Contract Forensic Verification', () => {
   // ─────────────────────────────────────────────────────────────────────────

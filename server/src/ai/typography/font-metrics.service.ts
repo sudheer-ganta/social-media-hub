@@ -11,7 +11,6 @@
  */
 
 import fs from 'fs';
-import path from 'path';
 import { fontFilePath } from './font-catalog';
 
 export interface ParsedFontMetrics {

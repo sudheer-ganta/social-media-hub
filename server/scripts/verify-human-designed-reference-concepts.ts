@@ -3,16 +3,12 @@ import path from 'path';
 import sharp from 'sharp';
 import {
   abstractReferenceDevice,
-  buildReferenceAwareConcept,
   evaluateConceptDifferentiation,
   deriveConceptAwareCopy,
   buildCreativeRealizationPlan,
 } from '../src/ai/strategy/reference-concept-engine';
 import { buildVisualArtifactComposition } from '../src/ai/render/visual-artifact-composition';
 import { buildCreativeRealizationContract } from '../src/ai/intent/creative-realization-contract';
-import { evaluateCreativeIntentFidelity } from '../src/ai/intent/creative-intent-fidelity-gate';
-import { renderSvgComposition } from '../src/ai/render/svg-renderer';
-import { rasterizeSvg } from '../src/ai/render/rasterizer';
 import type { ReferenceAwareConcept, ReferenceSourceType, CreativePersonality } from '../src/ai/types';
 import type { CreativeBrief } from '../src/ai/brand/creative-brief';
 import type { DesignNode } from '../src/ai/render/designer-composition';

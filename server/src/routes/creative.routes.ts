@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../middleware/auth.middleware';
+import { UserFacingError } from '../utils/user-facing-error';
+import { ContextError } from '../services/account-context';
 import { AiProviderError } from '../ai';
 import { creativeGenerationService, CreativeError } from '../services/creative-generation.service';
 import { CloudinaryUploadError } from '../services/cloudinary.service';
@@ -50,7 +52,8 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
         || error?.name === 'CreativeError'
         || error?.name === 'AiProviderError'
         || error?.name === 'CloudinaryUploadError'
-        || (typeof error?.status === 'number' && error?.message);
+        || error instanceof UserFacingError
+        || error instanceof ContextError;
 
       if (isKnown) {
         const status = typeof error?.status === 'number' ? error.status : 502;
@@ -75,7 +78,9 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
         error: error instanceof Error ? `${error.name}: ${error.message}` : error,
         stack: error instanceof Error ? error.stack : undefined,
       });
-      res.status(500).json({ error: error instanceof Error && error.message ? error.message : 'Something went wrong. Please try again.' });
+      // Never the raw message: an unexpected error can quote a query, a vendor
+      // response or a connection string. It is in the log above.
+      res.status(500).json({ error: 'Something went wrong. Please try again.' });
     }
   };
 }

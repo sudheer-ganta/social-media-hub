@@ -4,7 +4,6 @@ import type { CreativeDirection } from '../types';
 import type { ResolvedStyleDNA } from '../style-dna/style-dna';
 import {
   classifyMechanismOwner,
-  evaluateConceptRealizability,
   isAbstractOccasionOrTheme,
   synthesizePhysicalDominantObject,
   normalizeVisualProofStatement,

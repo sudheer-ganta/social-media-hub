@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import sharp from 'sharp';
-import { designCreative, renderDesignerPlan, type DesignerInput } from './designer-composition';
+import { designCreative, type DesignerInput } from './designer-composition';
 import { resolveBrandProfile } from '../brand/brand-profile';
 import { resolveCreativeDna } from '../brand/creative-dna';
 import { resolveStyleDNA } from '../style-dna/style-dna';

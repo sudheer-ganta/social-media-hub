@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma';
 import { withDbRetry } from '../utils/db-resilience';
+import { UserFacingError } from '../utils/user-facing-error';
 
 export type IntelligencePolarity = 'positive' | 'negative';
 export type IntelligenceSource = 'explicit' | 'selected' | 'rejected' | 'saved' | 'reused' | 'regenerated';
@@ -10,7 +11,7 @@ export async function assertOwnedBrand(userId: string, brandId: string): Promise
     () => prisma.brand.findFirst({ where: { id: brandId, created_by: userId }, select: { id: true } }),
     { label: 'assertOwnedBrand' },
   );
-  if (!brand) throw new Error('Brand not found');
+  if (!brand) throw new UserFacingError('Brand not found', 404);
 }
 
 export async function recordSignals(userId: string, brandId: string, signals: IntelligenceSignalInput[]) {

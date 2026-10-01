@@ -1,13 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { createCanvasRepresentation, createDesignField, createBrandDesignRepresentation } from './design-representation';
+import { createCanvasRepresentation, createDesignField } from './design-representation';
 import { analyzeImageField } from './image-field';
 import {
   evaluatePairwiseSpacing,
-  discoverNaturalGroups,
   evaluateCompositionSpacing,
   enhanceMultiElementCompositionWithSpacing,
   determineSemanticRelationship,
-  DEFAULT_SPACING_WEIGHTS,
   SpacingElement,
 } from './dynamic-spacing';
 import sharp from 'sharp';

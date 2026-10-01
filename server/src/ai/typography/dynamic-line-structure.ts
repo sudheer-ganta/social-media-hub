@@ -33,7 +33,6 @@ import {
   type FontDefinition,
 } from './font-catalog';
 import {
-  measureText,
   measureMultiLineBlock,
   getFontMetrics,
   calculateTypographicMassProxy,

@@ -3,7 +3,6 @@ import {
   resolveTextImageRelationshipMode,
   evaluateTextImageRelationship,
   TEXT_IMAGE_RELATIONSHIP_CALIBRATION,
-  type TextImageRelationshipMode,
 } from './text-image-relationship';
 import { createDesignField } from '../render/design-representation';
 import type { ImageField } from '../render/image-field';

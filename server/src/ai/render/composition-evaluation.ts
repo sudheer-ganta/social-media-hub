@@ -32,18 +32,16 @@ import type { GraphicDesignConcept } from '../types';
 import type { FieldRect } from './image-field';
 import { createDynamicCopyModel, type DynamicCopyVisualObject } from './copy-model';
 import { exploreLineStructures, type LineStructureState } from '../typography/dynamic-line-structure';
-import { evaluateFontCandidates, evaluateFontFit } from '../typography/dynamic-typography';
+import { evaluateFontFit } from '../typography/dynamic-typography';
 import { getFontDefinition, nearestAvailableWeight } from '../typography/font-catalog';
-import { discoverPlacementCandidates, type PlacementCandidate } from './dynamic-placement';
+import { discoverPlacementCandidates } from './dynamic-placement';
 import {
   discoverNaturalAxes,
   enhancePlacementCandidatesWithAlignment,
   evaluateCompositionAlignment,
-  type AlignmentEnhancedCandidate,
   type CompositionAlignmentEvaluation,
 } from './dynamic-alignment';
-import { enhanceMultiElementCompositionWithSpacing, type SpacingElement, type SpacingEnhancedComposition } from './dynamic-spacing';
-import { discoverInkCandidates, type InkStateCandidate, type ColorDescriptor } from './dynamic-color';
+import { discoverInkCandidates, type InkStateCandidate } from './dynamic-color';
 import { discoverSurfaceCandidates, type SurfaceField, type SurfaceCandidate } from './dynamic-surface';
 import type { CompositionRecoveryContext } from './critic-recovery';
 import {
@@ -303,10 +301,10 @@ export function evaluateCompositionState(input: StateEvaluationInput): {
   const densityDistribution = Number((occupiedArea / Math.max(0.1, elements.length * 0.15)).toFixed(3));
 
   // 2. Typography Signals
-  let headlineState = elements.find((e) => e.role === 'headline');
-  let subState = elements.find((e) => e.role === 'subheadline');
-  let ctaState = elements.find((e) => e.role === 'cta');
-  let logoState = elements.find((e) => e.role === 'logo' || e.id.includes('logo') || e.id.includes('brand-mark'));
+  const headlineState = elements.find((e) => e.role === 'headline');
+  const subState = elements.find((e) => e.role === 'subheadline');
+  const ctaState = elements.find((e) => e.role === 'cta');
+  const logoState = elements.find((e) => e.role === 'logo' || e.id.includes('logo') || e.id.includes('brand-mark'));
 
   let scaleDiff = 0.8;
   let weightDiff = 0.8;

@@ -50,8 +50,8 @@ export function validateStyleBriefConsistency(
   const hero = concept?.hero || 'image';
   const mechanism = (concept?.creativeMechanism || (concept as any)?.mechanism || '').toLowerCase();
 
-  let repairedDirection: CreativeDirection | undefined = direction ? { ...direction } : undefined;
-  let repairedConcept: GraphicDesignConcept | undefined = concept ? { ...concept } : undefined;
+  const repairedDirection: CreativeDirection | undefined = direction ? { ...direction } : undefined;
+  const repairedConcept: GraphicDesignConcept | undefined = concept ? { ...concept } : undefined;
   let repairedStyleId: string | undefined = selectedStyleId;
 
   // 1. Incompatible: Asymmetric Editorial or Typographic Poster + Creator UGC

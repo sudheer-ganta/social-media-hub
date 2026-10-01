@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   buildCreativeRealizationContract,
-  type CreativeRealizationContract,
 } from './creative-realization-contract';
 import {
   evaluateCreativeIntentFidelity,

@@ -1,15 +1,48 @@
 import { Router, Request, Response } from 'express';
 import { emailService } from '../services/email.service';
 import { requireAuth } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/admin.middleware';
+import { emailLimiter } from '../middleware/rate-limit.middleware';
 import { env } from '../config/env';
 
+/**
+ * Email API. Mounted at `/api/email`.
+ *
+ * ─── What this is allowed to be ──────────────────────────────────────────────
+ * Every message goes out under Rally's own sender, so an endpoint that lets a
+ * caller choose the recipient, the body or an attachment is an open relay:
+ * phishing mail with a real `support@` From, and — through nodemailer's
+ * `attachments: [{ path }]` — a way to mail the server's own files (including
+ * `.env`) to anyone. So, deliberately:
+ *
+ *   - everything needs a session, and the diagnostics need an operator;
+ *   - the recipient is always the caller's own address — never the body;
+ *   - there is no raw-HTML mode and no attachments;
+ *   - links in a message are always this app's own URL, never caller-supplied;
+ *   - sends are rate limited.
+ *
+ * Mail to *other* people (a team invite, a digest to a client) must be sent by
+ * server code that has decided it should be sent, calling `emailService`
+ * directly — not by a route that forwards whatever a browser says.
+ */
 const router = Router();
 
+/** Trims and bounds a free-text field; empty/non-strings become undefined. */
+function text(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
+
+const ALERT_TYPES = ['error', 'warning', 'info', 'success'] as const;
+type AlertType = (typeof ALERT_TYPES)[number];
+
 /**
- * GET /api/email/status
- * Returns whether SMTP is enabled and current host metadata.
+ * GET /api/email/status — operators only.
+ * Whether SMTP is enabled. Host, port and sender are not returned: that is
+ * reconnaissance for anyone who is not running the deployment.
  */
-router.get('/status', (req: Request, res: Response) => {
+router.get('/status', requireAuth, requireAdmin, (_req: Request, res: Response) => {
   res.json({
     configured: emailService.isConfigured(),
     host: env.SMTP_HOST || null,
@@ -21,50 +54,45 @@ router.get('/status', (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/email/verify
+ * POST /api/email/verify — operators only.
  * Tests SMTP credentials and handshake.
  */
-router.post('/verify', async (req: Request, res: Response) => {
+router.post('/verify', requireAuth, requireAdmin, emailLimiter, async (_req: Request, res: Response) => {
   try {
     const result = await emailService.verifyConnection();
     if (!result.success) {
       return res.status(400).json(result);
     }
     return res.json(result);
-  } catch (err: any) {
+  } catch (err) {
+    console.error('[email] verify failed', err);
     return res.status(500).json({
       success: false,
-      message: err.message || 'Internal server error while testing SMTP connection',
+      message: 'Internal server error while testing SMTP connection',
     });
   }
 });
 
 /**
  * POST /api/email/send-test
- * Sends a sample test email to verify end-to-end delivery.
- * Requires auth or accepts destination email in body.
+ * Sends a sample message to the signed-in user's own address.
  */
-router.post('/send-test', requireAuth, async (req: Request, res: Response) => {
+router.post('/send-test', requireAuth, emailLimiter, async (req: Request, res: Response) => {
   try {
-    const userEmail = req.body.to || (req as any).user?.email;
-    if (!userEmail) {
+    const to = typeof req.user?.email === 'string' ? req.user.email : '';
+    if (!to) {
       return res.status(400).json({
         success: false,
-        error: 'Destination email address ("to") is required.',
+        error: 'Your account has no email address to send to.',
       });
     }
 
     const result = await emailService.sendAlertEmail({
-      to: userEmail,
+      to,
       alertType: 'success',
-      title: 'Rally SMTP Integration Test',
-      message: 'Congratulations! Your SMTP settings have been configured and verified successfully.',
-      details: {
-        'Timestamp': new Date().toUTCString(),
-        'SMTP Host': env.SMTP_HOST,
-        'SMTP Port': env.SMTP_PORT,
-        'Sender': `"${env.SMTP_FROM_NAME}" <${env.SMTP_FROM_EMAIL}>`,
-      },
+      title: 'Rally Email Test',
+      message: 'Your email notifications are working.',
+      details: { Timestamp: new Date().toUTCString() },
       actionUrl: env.FRONTEND_URL,
       actionText: 'Open Rally Dashboard',
     });
@@ -74,105 +102,81 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response) => {
     }
 
     return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      error: err.message || 'Failed to send test email',
-    });
+  } catch (err) {
+    console.error('[email] send-test failed', err);
+    return res.status(500).json({ success: false, error: 'Failed to send test email' });
   }
 });
 
 /**
  * POST /api/email/send
- * General-purpose endpoint to dispatch custom or templated emails.
+ * Sends a templated notification to the signed-in user's own address.
+ *
+ * Templates: `alert`, `welcome`, `digest`. (`password-reset` is Supabase's job
+ * and `invite` mails a third party, so neither is reachable from a browser.)
  */
-router.post('/send', requireAuth, async (req: Request, res: Response) => {
+router.post('/send', requireAuth, emailLimiter, async (req: Request, res: Response) => {
   try {
-    const { template, to, subject, html, text, ...params } = req.body;
-
+    const to = typeof req.user?.email === 'string' ? req.user.email : '';
     if (!to) {
-      return res.status(400).json({ success: false, error: 'Recipient "to" is required' });
+      return res.status(400).json({
+        success: false,
+        error: 'Your account has no email address to send to.',
+      });
     }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const template = text(body.template, 32);
 
     let result;
 
     switch (template) {
-      case 'alert':
+      case 'alert': {
+        const alertType: AlertType = ALERT_TYPES.includes(body.alertType as AlertType)
+          ? (body.alertType as AlertType)
+          : 'info';
         result = await emailService.sendAlertEmail({
           to,
-          alertType: params.alertType || 'info',
-          title: params.title || subject || 'System Alert',
-          message: params.message || '',
-          details: params.details,
-          actionUrl: params.actionUrl,
-          actionText: params.actionText,
+          alertType,
+          title: text(body.title, 120) ?? text(body.subject, 120) ?? 'Notification',
+          message: text(body.message, 1000) ?? '',
+          actionUrl: env.FRONTEND_URL,
+          actionText: 'Open Rally Dashboard',
         });
         break;
+      }
 
       case 'welcome':
         result = await emailService.sendWelcomeEmail({
           to,
-          name: params.name,
-          appUrl: params.appUrl,
+          name: text(body.name, 80),
+          appUrl: env.FRONTEND_URL,
         });
         break;
 
-      case 'password-reset':
-        if (!params.resetLink) {
-          return res.status(400).json({ success: false, error: 'resetLink is required for password-reset template' });
-        }
-        result = await emailService.sendPasswordResetEmail({
-          to,
-          name: params.name,
-          resetLink: params.resetLink,
-          expiryMinutes: params.expiryMinutes,
-        });
-        break;
-
-      case 'digest':
+      case 'digest': {
+        const stats = (body.stats ?? {}) as Record<string, unknown>;
         result = await emailService.sendAnalyticsDigestEmail({
           to,
-          name: params.name,
-          brandName: params.brandName,
-          period: params.period || 'Weekly Summary',
-          stats: params.stats || {},
-          reportUrl: params.reportUrl,
+          name: text(body.name, 80),
+          brandName: text(body.brandName, 80),
+          period: text(body.period, 60) ?? 'Weekly Summary',
+          stats: {
+            totalImpressions: text(String(stats.totalImpressions ?? ''), 20),
+            totalEngagement: text(String(stats.totalEngagement ?? ''), 20),
+            postsPublished: text(String(stats.postsPublished ?? ''), 20),
+            topNetwork: text(String(stats.topNetwork ?? ''), 40),
+          },
+          reportUrl: `${env.FRONTEND_URL.replace(/\/$/, '')}/analytics`,
         });
         break;
-
-      case 'invite':
-        if (!params.inviteUrl || !params.inviterName || !params.teamName) {
-          return res.status(400).json({
-            success: false,
-            error: 'inviterName, teamName, and inviteUrl are required for invite template',
-          });
-        }
-        result = await emailService.sendTeamInviteEmail({
-          to,
-          inviterName: params.inviterName,
-          teamName: params.teamName,
-          role: params.role,
-          inviteUrl: params.inviteUrl,
-        });
-        break;
+      }
 
       default:
-        // Raw custom email
-        if (!subject || !html) {
-          return res.status(400).json({
-            success: false,
-            error: 'Custom emails require "subject" and "html" body.',
-          });
-        }
-        result = await emailService.sendMail({
-          to,
-          subject,
-          html,
-          text,
-          replyTo: params.replyTo,
-          attachments: params.attachments,
+        return res.status(400).json({
+          success: false,
+          error: 'Unknown template. Use "alert", "welcome" or "digest".',
         });
-        break;
     }
 
     if (!result.success) {
@@ -180,11 +184,9 @@ router.post('/send', requireAuth, async (req: Request, res: Response) => {
     }
 
     return res.json(result);
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      error: err.message || 'Failed to process email send request',
-    });
+  } catch (err) {
+    console.error('[email] send failed', err);
+    return res.status(500).json({ success: false, error: 'Failed to process email send request' });
   }
 });
 

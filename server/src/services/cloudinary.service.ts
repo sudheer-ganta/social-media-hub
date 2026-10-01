@@ -122,8 +122,73 @@ async function uploadOnce(
   return body;
 }
 
+/**
+ * What a browser upload may be. Enforced by Cloudinary (the list is part of the
+ * signed parameters, so the browser cannot widen it), not just by the file
+ * picker.
+ */
+const ALLOWED_FORMATS: Record<'image' | 'video', string> = {
+  image: 'jpg,jpeg,png,gif,webp,heic,heif,avif',
+  video: 'mp4,mov,m4v,webm',
+};
+
+export interface SignedUpload {
+  cloudName: string;
+  apiKey: string;
+  timestamp: string;
+  signature: string;
+  folder: string;
+  allowedFormats: string;
+  uploadPreset?: string;
+}
+
 export const cloudinaryService = {
   isConfigured,
+
+  /**
+   * Parameters for ONE direct browser upload.
+   *
+   * Replaces the unsigned preset, which let anyone on the internet who read the
+   * public preset name out of the JS bundle upload anything to the account —
+   * unlimited, any type, no login. A signed upload needs this call first, and
+   * this call needs a session, so: only members upload, only into their own
+   * folder, only the formats above, and each signature is stale in about an
+   * hour (Cloudinary rejects old timestamps) and good for exactly these values.
+   * The API secret never leaves the server.
+   */
+  signUpload(userId: string, resourceType: 'image' | 'video'): SignedUpload {
+    if (!isConfigured()) {
+      throw new CloudinaryUploadError(
+        'Image storage is not configured on this server.',
+        'CLOUDINARY_CLOUD_NAME/API_KEY/API_SECRET is empty',
+      );
+    }
+
+    const safeUser = userId.replace(/[^A-Za-z0-9_-]/g, '');
+    if (!safeUser) throw new CloudinaryUploadError('Image storage is unavailable.');
+
+    const folder = `flowpost/uploads/${safeUser}`;
+    const allowedFormats = ALLOWED_FORMATS[resourceType];
+    const timestamp = Math.round(Date.now() / 1000).toString();
+    const uploadPreset = env.CLOUDINARY_SIGNED_PRESET || undefined;
+
+    const signature = sign({
+      allowed_formats: allowedFormats,
+      folder,
+      timestamp,
+      ...(uploadPreset ? { upload_preset: uploadPreset } : {}),
+    });
+
+    return {
+      cloudName: env.CLOUDINARY_CLOUD_NAME,
+      apiKey: env.CLOUDINARY_API_KEY,
+      timestamp,
+      signature,
+      folder,
+      allowedFormats,
+      ...(uploadPreset ? { uploadPreset } : {}),
+    };
+  },
 
   /**
    * Uploads bytes the backend already holds — a Gemini-generated image, not

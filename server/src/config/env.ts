@@ -192,6 +192,10 @@ export const env = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+  // Optional: the name of a **Signed** upload preset in the Cloudinary console.
+  // When set it rides every browser upload (and is covered by the signature), so
+  // whatever the preset enforces — a max file size, eager transforms — applies.
+  CLOUDINARY_SIGNED_PRESET: process.env.CLOUDINARY_SIGNED_PRESET || '',
 
   // Thinking depth for Gemini 3.x models, which cannot disable thinking and
   // reject thinkingBudget 0. "low" is their fastest level — right for caption

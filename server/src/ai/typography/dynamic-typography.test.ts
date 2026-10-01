@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   evaluateFontCandidates,
   deriveDynamicTypeSystem,
-  resolveModularRatio,
 } from './dynamic-typography';
 import { measureText } from './font-metrics.service';
 import { createDynamicCopyModel } from '../render/copy-model';

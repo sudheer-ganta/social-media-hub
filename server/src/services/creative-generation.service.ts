@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
-import { env } from '../config/env';
 import { prisma } from '../config/prisma';
 import {
   AiProviderError,
@@ -20,10 +19,10 @@ import { generateCreativeIntent, normaliseIntent } from '../ai/generators/creati
 import { generateCreativeResearch } from '../ai/generators/creative-research.generator';
 import { generateReferenceStyleProfile } from '../ai/generators/reference-style.generator';
 import { detectMarketingStrategy } from '../ai/strategy/marketing-strategy-detector';
-import { analyzeConceptPoolDivergence, buildConceptIdentity } from '../ai/strategy/creative-differentiation';
+import { analyzeConceptPoolDivergence } from '../ai/strategy/creative-differentiation';
 import { normaliseDesignRecipe } from '../ai/render/design-recipe';
 import { designCreative } from '../ai/render/designer-composition';
-import { assertConceptRealizable, isEligibleFallback } from '../ai/intent/concept-realizability-gate';
+import { isEligibleFallback } from '../ai/intent/concept-realizability-gate';
 import {
   getStyleDNA,
   resolveStyleDNA,
@@ -53,7 +52,6 @@ import type {
   CreativeGenerationRequest,
   CreativeIntentBrief,
   CreativeMode,
-  CreativeRefinementRequest,
   CreativeRenderContext,
   CreativeResearch,
   CreativeStrategy,
@@ -73,7 +71,7 @@ import {
   readPlatforms,
   readString,
 } from './ai.service';
-import { cloudinaryService, CloudinaryUploadError } from './cloudinary.service';
+import { cloudinaryService } from './cloudinary.service';
 import * as generatedAssetRepository from '../repositories/generated-asset.repository';
 import type { StoredGeneratedAsset } from '../repositories/generated-asset.repository';
 

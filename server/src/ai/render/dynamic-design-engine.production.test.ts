@@ -1,9 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import sharp from 'sharp';
-import { designCreative, renderDesignerPlan, type DesignerPlan, type DesignNode } from './designer-composition';
+import { designCreative, renderDesignerPlan, type DesignerPlan } from './designer-composition';
 import { resolveBrandProfile } from '../brand/brand-profile';
 import { resolveCreativeDna } from '../brand/creative-dna';
-import { resolveDesignRecipe } from './design-recipe';
 import { selectTypography } from '../typography/font-selector';
 import { collectCampaignCopy } from '../prompts/campaign-creative.prompt';
 import { createCanvasRepresentation, createBrandDesignRepresentation, createDesignField } from './design-representation';

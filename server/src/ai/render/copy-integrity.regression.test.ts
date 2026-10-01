@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   isStructuredArtifact,
-  isInternalMetadata,
-  sanitizeCopyText,
   validateAndBuildRenderableCopy,
 } from '../intent/copy-sanitizer';
 import {

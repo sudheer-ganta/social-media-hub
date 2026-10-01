@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
-import { analyzeImageField, type FieldRect, type ImageField } from './image-field';
+import { analyzeImageField, type ImageField } from './image-field';
 import { crossingIsDeclared, fitCopyToField, relativeLuminance } from './text-placement';
 import { buildTypeSystem, type TypeSystem } from '../typography/type-system';
 import type { TypographySelection } from '../typography/font-selector';

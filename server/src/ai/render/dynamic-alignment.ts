@@ -29,7 +29,6 @@ import type {
   CanvasRepresentation,
   BrandDesignRepresentation,
   DesignField,
-  VisualAxis,
 } from './design-representation';
 import type { FieldRect } from './image-field';
 import type { PlacementCandidate } from './dynamic-placement';

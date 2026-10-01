@@ -5,13 +5,13 @@ import type { AiTextProvider, AiImageProvider } from '../providers';
 import type { InlineImagePart } from '../providers/provider.interface';
 import type { CreativeDirection, CreativeRenderContext, CreativeResearch } from '../types';
 import type { ResolvedStyleDNA } from '../style-dna/style-dna';
-import { renderStyleDnaInstructions, resolveStyleDNA } from '../style-dna/style-dna';
+import { resolveStyleDNA } from '../style-dna/style-dna';
 import { resolveDesignRecipe } from './design-recipe';
 import { selectTypography, type TypographySelection } from '../typography/font-selector';
 import { buildTypeSystem, type TypeSystem } from '../typography/type-system';
 import type { CaseHint } from '../typography/style-profiles';
 import { analyzeImageField } from './image-field';
-import { fitCopyToField, type PlacementReport } from './text-placement';
+import { type PlacementReport } from './text-placement';
 import { fontFilePath } from '../typography/font-catalog';
 import { collectCampaignCopy, type CampaignCopyLine } from '../prompts/campaign-creative.prompt';
 import { evaluateIntentFidelity } from '../intent/claim-match';
@@ -20,7 +20,7 @@ import { detectCheckerboard } from './render-validation';
 import { validateAntiTemplateQuality } from './anti-template-validator';
 import { evaluateRenderedDesign, type DesignCriticEvaluation } from '../generators/design-critic.generator';
 import { generateGraphicDesignConcept } from '../generators/art-director.generator';
-import { compareGraphicConcepts, redesignDivergenceInstruction } from '../strategy/concept-similarity';
+import { compareGraphicConcepts } from '../strategy/concept-similarity';
 import type { CreativeBrief, GraphicDesignConcept } from '../brand/creative-brief';
 import { buildCreativeRealizationContract, assertCreativeRealizationContractConsistent } from '../intent/creative-realization-contract';
 import { assertConceptRealizable, isEligibleFallback } from '../intent/concept-realizability-gate';
@@ -31,10 +31,9 @@ import {
   CreativeRealizationAssertionError,
   type CreativeIntentFidelityResult,
 } from '../intent/creative-intent-fidelity-gate';
-import { createCanvasRepresentation, createBrandDesignRepresentation, createDesignField, type DesignField } from './design-representation';
-import { discoverOptimizedComposition, assertCompositionStateValid, type OptimizedCompositionState } from './composition-evaluation';
+import { createCanvasRepresentation, createBrandDesignRepresentation, createDesignField } from './design-representation';
+import { discoverOptimizedComposition, assertCompositionStateValid } from './composition-evaluation';
 import {
-  sanitizeAndFilterCopy,
   validateAndBuildRenderableCopy,
   isStructuredArtifact,
   type RenderableCopy,
@@ -44,11 +43,9 @@ import { classifyCriticFailure, type CompositionRecoveryContext } from './critic
 import {
   buildImageRealizationSpec,
   compileImagePromptFromSpec,
-  type ImageRealizationSpec,
 } from '../intent/image-realization-spec';
 import {
   evaluateImageAffordance,
-  type ImageAffordanceEvaluation,
 } from '../intent/image-affordance-evaluation';
 import { buildVisualArtifactComposition } from './visual-artifact-composition';
 
@@ -1453,7 +1450,8 @@ export function composeHighFidelityVisualPrompt(options: {
 }
 
 export async function designCreative(input: DesignerInput) {
-  let { direction, context, styleDna, textProvider, imageProvider, canonicalBrief, graphicConcept, onStageTiming } = input;
+  const { direction, context, textProvider, imageProvider, canonicalBrief, graphicConcept, onStageTiming } = input;
+  let { styleDna } = input;
   let currentGraphicConcept: GraphicDesignConcept =
     graphicConcept || direction.graphicConcept || fallbackConceptFrom(direction);
 

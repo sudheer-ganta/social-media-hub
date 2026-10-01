@@ -195,8 +195,8 @@ class EmailService {
     const ctaHtml = params.actionUrl
       ? `
         <div style="margin-top: 28px; text-align: center;">
-          <a href="${params.actionUrl}" style="background-color: #4F46E5; color: #FFFFFF; padding: 12px 24px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 15px;">
-            ${params.actionText || 'View in Dashboard'}
+          <a href="${this.safeUrl(params.actionUrl)}" style="background-color: #4F46E5; color: #FFFFFF; padding: 12px 24px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 15px;">
+            ${this.escapeHtml(params.actionText || 'View in Dashboard')}
           </a>
         </div>
       `
@@ -290,7 +290,7 @@ class EmailService {
         </p>
 
         <div style="margin: 28px 0; text-align: center;">
-          <a href="${params.resetLink}" style="background-color: #4F46E5; color: #FFFFFF; padding: 12px 28px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 15px;">
+          <a href="${this.safeUrl(params.resetLink)}" style="background-color: #4F46E5; color: #FFFFFF; padding: 12px 28px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 15px;">
             Reset Password
           </a>
         </div>
@@ -331,19 +331,19 @@ class EmailService {
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0;">
         <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 14px; border-radius: 8px; text-align: center;">
           <div style="font-size: 12px; color: #64748B; text-transform: uppercase; font-weight: 600;">Impressions</div>
-          <div style="font-size: 22px; font-weight: 700; color: #0F172A; margin-top: 4px;">${params.stats.totalImpressions ?? '—'}</div>
+          <div style="font-size: 22px; font-weight: 700; color: #0F172A; margin-top: 4px;">${this.escapeHtml(String(params.stats.totalImpressions ?? '—'))}</div>
         </div>
         <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 14px; border-radius: 8px; text-align: center;">
           <div style="font-size: 12px; color: #64748B; text-transform: uppercase; font-weight: 600;">Engagements</div>
-          <div style="font-size: 22px; font-weight: 700; color: #0F172A; margin-top: 4px;">${params.stats.totalEngagement ?? '—'}</div>
+          <div style="font-size: 22px; font-weight: 700; color: #0F172A; margin-top: 4px;">${this.escapeHtml(String(params.stats.totalEngagement ?? '—'))}</div>
         </div>
         <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 14px; border-radius: 8px; text-align: center;">
           <div style="font-size: 12px; color: #64748B; text-transform: uppercase; font-weight: 600;">Posts Published</div>
-          <div style="font-size: 22px; font-weight: 700; color: #0F172A; margin-top: 4px;">${params.stats.postsPublished ?? '0'}</div>
+          <div style="font-size: 22px; font-weight: 700; color: #0F172A; margin-top: 4px;">${this.escapeHtml(String(params.stats.postsPublished ?? '0'))}</div>
         </div>
         <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 14px; border-radius: 8px; text-align: center;">
           <div style="font-size: 12px; color: #64748B; text-transform: uppercase; font-weight: 600;">Top Network</div>
-          <div style="font-size: 18px; font-weight: 700; color: #4F46E5; margin-top: 6px;">${params.stats.topNetwork ?? 'Multi'}</div>
+          <div style="font-size: 18px; font-weight: 700; color: #4F46E5; margin-top: 6px;">${this.escapeHtml(String(params.stats.topNetwork ?? 'Multi'))}</div>
         </div>
       </div>
     `;
@@ -394,7 +394,7 @@ class EmailService {
         </p>
 
         <div style="margin: 28px 0; text-align: center;">
-          <a href="${params.inviteUrl}" style="background-color: #4F46E5; color: #FFFFFF; padding: 12px 28px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 15px;">
+          <a href="${this.safeUrl(params.inviteUrl)}" style="background-color: #4F46E5; color: #FFFFFF; padding: 12px 28px; font-weight: 600; text-decoration: none; border-radius: 6px; display: inline-block; font-size: 15px;">
             Accept Invitation
           </a>
         </div>
@@ -469,6 +469,22 @@ class EmailService {
     `;
   }
 
+
+  /**
+   * A URL safe to drop into an `href`: http(s) only, then attribute-escaped.
+   * Anything else (`javascript:`, `data:`, garbage) becomes a harmless `#`.
+   */
+  private safeUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return this.escapeHtml(parsed.toString());
+      }
+    } catch {
+      /* fall through */
+    }
+    return '#';
+  }
 
   private escapeHtml(str: string): string {
     return str

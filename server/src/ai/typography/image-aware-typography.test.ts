@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FONT_CATALOG, getFontDefinition, nearestAvailableWeight } from './font-catalog';
+import { FONT_CATALOG, getFontDefinition } from './font-catalog';
 import { selectTypography } from './font-selector';
 import { evaluateFontFit, evaluateFontCandidates } from './dynamic-typography';
 import { createDynamicCopyModel } from '../render/copy-model';

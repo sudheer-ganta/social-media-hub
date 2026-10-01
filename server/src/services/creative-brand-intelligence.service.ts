@@ -1,5 +1,6 @@
 import { brandIntelligenceRepository, type IntelligencePolarity, type IntelligenceSignalInput, type IntelligenceSource } from '../repositories/brand-intelligence.repository';
 import { prisma } from '../config/prisma';
+import { UserFacingError } from '../utils/user-facing-error';
 
 export type IntelligenceDimension = 'style' | 'color' | 'typography' | 'composition' | 'imagery' | 'lighting' | 'texture' | 'density' | 'alignment' | 'concept' | 'headline_length' | 'cta' | 'emoji' | 'tone' | 'vocabulary' | 'content_structure';
 const DIMENSIONS = new Set<IntelligenceDimension>(['style','color','typography','composition','imagery','lighting','texture','density','alignment','concept','headline_length','cta','emoji','tone','vocabulary','content_structure']);
@@ -38,7 +39,7 @@ export async function setExplicitPreference(userId: string, brandId: string, inp
   const dimension = clean(input.dimension) as IntelligenceDimension;
   const value = clean(input.value);
   const polarity: IntelligencePolarity = input.polarity === 'negative' ? 'negative' : 'positive';
-  if (!DIMENSIONS.has(dimension) || !value) throw new Error('Choose a valid preference and value.');
+  if (!DIMENSIONS.has(dimension) || !value) throw new UserFacingError('Choose a valid preference and value.');
   await brandIntelligenceRepository.recordSignals(userId, brandId, [{ dimension, value, polarity, source: 'explicit' }]);
   return resolveBrandIntelligence(userId, brandId);
 }
