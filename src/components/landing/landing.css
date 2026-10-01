@@ -1,0 +1,140 @@
+/**
+ * Landing page theme, scoped to .rl so the app's own tokens are untouched.
+ * Channels are space-separated RGB so Tailwind opacity modifiers work.
+ *
+ *   canvas #F4F1EA  surface #FBFAF7  ink #171717  muted #716F6A
+ *   line   #D9D5CC  orange  #FF4D32  soft  #FFE2DC  dark  #171717
+ *
+ * The page is always light: cream canvas, ink text, one orange accent. It does
+ * not follow the OS or app dark theme on purpose.
+ *
+ * Orange is for large display type and non-text marks. Small filled buttons use
+ * the slightly deeper --rl-accent-strong so white labels stay above 4.5:1.
+ */
+.rl {
+  --rl-bg: 244 241 234;
+  --rl-surface: 251 250 247;
+  --rl-ink: 23 23 23;
+  --rl-muted: 113 111 106;
+  --rl-line: 217 213 204;
+  --rl-accent: 255 77 50;
+  --rl-accent-strong: 214 52 26;
+  --rl-soft: 255 226 220;
+  --rl-dark: 23 23 23;
+
+  --rl-shadow: 0 20px 50px rgb(23 23 23 / 0.08);
+  --rl-shadow-hover: 0 25px 55px rgb(23 23 23 / 0.12);
+  --rl-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  color-scheme: light;
+  background: rgb(var(--rl-bg));
+  color: rgb(var(--rl-ink));
+  font-family: "Geist Variable", "Instrument Sans", system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* One container for every section: 1320 max, fluid gutters. */
+.rl-container {
+  width: 100%;
+  max-width: 1320px;
+  margin-inline: auto;
+  padding-inline: clamp(24px, 4.5vw, 64px);
+}
+
+/* Display type. Weight and tracking carry the hierarchy, not extra colour. */
+.rl-hero-title {
+  font-size: clamp(56px, 7vw, 104px);
+  line-height: 0.9;
+  letter-spacing: -0.07em;
+  font-weight: 800;
+}
+
+.rl-section-title {
+  font-size: clamp(44px, 5vw, 78px);
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+  font-weight: 760;
+}
+
+.rl-eyebrow {
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: rgb(var(--rl-muted));
+}
+
+/* Surfaces: restrained radii and very soft shadows. */
+.rl-card {
+  background: rgb(var(--rl-surface));
+  border: 1px solid rgb(var(--rl-line) / 0.8);
+  border-radius: 14px;
+  box-shadow: var(--rl-shadow);
+  transition: box-shadow 0.4s var(--rl-ease);
+}
+
+.rl-card-hover:hover {
+  box-shadow: var(--rl-shadow-hover);
+}
+
+/* Ambient drift: tiny, different per element, transform only. */
+@keyframes rl-drift {
+  0%,
+  100% {
+    transform: translate3d(0, calc(var(--amp, 6px) * -1), 0);
+  }
+  50% {
+    transform: translate3d(0, var(--amp, 6px), 0);
+  }
+}
+
+.rl-drift {
+  animation: rl-drift var(--dur, 7s) ease-in-out var(--delay, 0s) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-drift {
+    animation: none;
+  }
+}
+
+/* Visible keyboard focus on every interactive element in the page. */
+.rl a:focus-visible,
+.rl button:focus-visible {
+  outline: 2px solid rgb(var(--rl-ink));
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+/* A highlight sweep marks the words AI just changed. */
+@keyframes rl-mark {
+  0% {
+    background-size: 100% 100%;
+  }
+  100% {
+    background-size: 0% 100%;
+  }
+}
+
+.rl-mark {
+  background-image: linear-gradient(rgb(var(--rl-soft)), rgb(var(--rl-soft)));
+  background-repeat: no-repeat;
+  background-position: left center;
+  background-size: 100% 100%;
+  animation: rl-mark 1.8s var(--rl-ease) 0.6s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-mark {
+    animation: none;
+    background-size: 0% 100%;
+  }
+}
+
+/* The app styles h1-h3 globally with its own display font and weight. */
+.rl h1,
+.rl h2,
+.rl h3 {
+  font-family: inherit;
+}

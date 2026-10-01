@@ -20,8 +20,22 @@ export default {
         lead: ["Instrument Serif", "Georgia", "serif"],
         // Metadata: timestamps, counts, network names, publishing states.
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+        // Landing page margin notes only.
+        hand: ["Caveat", "Bradley Hand", "cursive"],
       },
       colors: {
+        // Landing page palette, scoped by the .rl class (see landing.css).
+        rl: {
+          bg: "rgb(var(--rl-bg) / <alpha-value>)",
+          surface: "rgb(var(--rl-surface) / <alpha-value>)",
+          ink: "rgb(var(--rl-ink) / <alpha-value>)",
+          muted: "rgb(var(--rl-muted) / <alpha-value>)",
+          line: "rgb(var(--rl-line) / <alpha-value>)",
+          accent: "rgb(var(--rl-accent) / <alpha-value>)",
+          strong: "rgb(var(--rl-accent-strong) / <alpha-value>)",
+          soft: "rgb(var(--rl-soft) / <alpha-value>)",
+          dark: "rgb(var(--rl-dark) / <alpha-value>)",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -102,11 +116,16 @@ export default {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-9px)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         shimmer: "shimmer 2s linear infinite",
+        float: "float 6s ease-in-out infinite",
       },
     },
   },

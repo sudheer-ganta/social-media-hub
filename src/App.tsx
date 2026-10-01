@@ -1,10 +1,12 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppProviders } from "@/app/providers";
 import { AppLayout } from "@/app/AppLayout";
+import { useAuth } from "@/app/AuthProvider";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { RouteLoader } from "@/components/shared/RouteLoader";
 
+const Landing = lazy(() => import("@/pages/Landing"));
 const Login = lazy(() => import("@/pages/auth/Login"));
 const Register = lazy(() => import("@/pages/auth/Register"));
 const ForgotPassword = lazy(() => import("@/pages/auth/ForgotPassword"));
@@ -23,6 +25,23 @@ const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
 const CreativeHistory = lazy(() => import("@/pages/CreativeHistory"));
+
+/**
+ * "/" is both the signed-in Dashboard and the public homepage. Signed-out
+ * visitors on exactly "/" get the landing page; everything else stays behind login.
+ */
+function AppShellGate() {
+  const { session, loading } = useAuth();
+  const { pathname } = useLocation();
+
+  if (!loading && !session && pathname === "/") return <Landing />;
+
+  return (
+    <ProtectedRoute>
+      <AppLayout />
+    </ProtectedRoute>
+  );
+}
 
 export default function App() {
   return (
@@ -43,13 +62,7 @@ export default function App() {
 
           {/* Protected app routes */}
           <Route path="onboarding" element={<Navigate to="/settings?tab=brands" replace />} />
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
+          <Route element={<AppShellGate />}>
             <Route index element={<Dashboard />} />
             <Route path="posts" element={<Posts />} />
             <Route path="posts/new" element={<CreatePost />} />

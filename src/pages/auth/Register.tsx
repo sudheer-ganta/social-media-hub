@@ -1,13 +1,20 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { MailCheck, UserPlus } from "lucide-react";
-import { AuthLayout } from "@/components/auth/AuthLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { MailCheck } from "lucide-react";
+import { AuthShell } from "@/components/auth/AuthShell";
+import {
+  afterShutter,
+  Field,
+  filled,
+  FormLink,
+  Notice,
+  NoticeButton,
+  PasswordField,
+  SubmitButton,
+} from "@/components/auth/fields";
 import { useAuth } from "@/app/AuthProvider";
 import { registerSchema, type RegisterValues } from "@/validators";
 
@@ -16,15 +23,26 @@ export default function Register() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
+  const [done, setDone] = useState(false);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: { fullName: "", email: "", password: "", confirmPassword: "" },
   });
+
+  // The photo wall develops as the form fills in, and fully once the account exists.
+  const develop =
+    done || confirmationSent
+      ? 1
+      : filled(watch("fullName"), 10) * 0.2 +
+        filled(watch("email"), 18) * 0.3 +
+        filled(watch("password"), 8) * 0.3 +
+        filled(watch("confirmPassword"), 8) * 0.2;
 
   const onSubmit = async (values: RegisterValues) => {
     setSubmitting(true);
@@ -38,7 +56,9 @@ export default function Register() {
         setConfirmationSent(true);
       } else {
         sessionStorage.setItem("is_new_signup", "true");
-        toast.success("Account created — welcome!");
+        toast.success("Account created, welcome!");
+        setDone(true);
+        await afterShutter();
         navigate("/", { replace: true });
       }
     } catch (error) {
@@ -52,105 +72,71 @@ export default function Register() {
 
   if (confirmationSent) {
     return (
-      <AuthLayout title="Check your inbox" subtitle="One more step to go.">
-        <div className="rounded-lg border bg-card p-6 text-center shadow-soft">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
-            <MailCheck className="h-6 w-6 text-success" />
-          </div>
-          <p className="mt-4 text-sm text-muted-foreground">
-            We sent a confirmation link to your email. Click it to activate
-            your account, then sign in.
-          </p>
-          <Button asChild className="mt-5 w-full">
-            <Link to="/login">Back to sign in</Link>
-          </Button>
-        </div>
-      </AuthLayout>
+      <AuthShell heading={["Check your", "inbox."]} subtitle="One more step to go." develop={1}>
+        <Notice
+          icon={<MailCheck className="h-6 w-6" aria-hidden="true" />}
+          action={<NoticeButton to="/login">Back to log in</NoticeButton>}
+        >
+          We sent a confirmation link to your email. Click it to activate your account, then
+          log in.
+        </Notice>
+      </AuthShell>
     );
   }
 
   return (
-    <AuthLayout
-      title="Create your account"
-      subtitle="Free to start — no credit card required."
+    <AuthShell
+      heading={["Create your", "account."]}
+      subtitle="Free to start, no credit card required."
+      develop={develop}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-        <div className="space-y-2">
-          <Label htmlFor="fullName">Full name</Label>
-          <Input
-            id="fullName"
-            autoComplete="name"
-            placeholder="Alex Morgan"
-            {...register("fullName")}
-          />
-          {errors.fullName && (
-            <p className="text-xs font-medium text-destructive">
-              {errors.fullName.message}
-            </p>
-          )}
-        </div>
+        <Field
+          id="fullName"
+          label="Full name"
+          autoComplete="name"
+          placeholder="Alex Morgan"
+          error={errors.fullName?.message}
+          {...register("fullName")}
+        />
 
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@company.com"
-            {...register("email")}
-          />
-          {errors.email && (
-            <p className="text-xs font-medium text-destructive">
-              {errors.email.message}
-            </p>
-          )}
-        </div>
+        <Field
+          id="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@company.com"
+          error={errors.email?.message}
+          {...register("email")}
+        />
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              placeholder="Min. 8 characters"
-              {...register("password")}
-            />
-            {errors.password && (
-              <p className="text-xs font-medium text-destructive">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              placeholder="Repeat password"
-              {...register("confirmPassword")}
-            />
-            {errors.confirmPassword && (
-              <p className="text-xs font-medium text-destructive">
-                {errors.confirmPassword.message}
-              </p>
-            )}
-          </div>
+          <PasswordField
+            id="password"
+            label="Password"
+            autoComplete="new-password"
+            placeholder="Min. 8 characters"
+            error={errors.password?.message}
+            {...register("password")}
+          />
+          <PasswordField
+            id="confirmPassword"
+            label="Confirm"
+            autoComplete="new-password"
+            placeholder="Repeat password"
+            error={errors.confirmPassword?.message}
+            {...register("confirmPassword")}
+          />
         </div>
 
-        <Button type="submit" className="w-full" loading={submitting}>
-          <UserPlus />
+        <SubmitButton loading={submitting} loadingLabel="Creating account">
           Create account
-        </Button>
+        </SubmitButton>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
-          </Link>
+        <p className="pt-2 text-center text-[14px] text-rl-muted">
+          Already have an account? <FormLink to="/login" className="text-rl-ink">Log in</FormLink>
         </p>
       </form>
-    </AuthLayout>
+    </AuthShell>
   );
 }

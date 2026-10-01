@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { LogIn } from "lucide-react";
-import { AuthLayout } from "@/components/auth/AuthLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AuthShell } from "@/components/auth/AuthShell";
+import {
+  afterShutter,
+  Field,
+  filled,
+  FormLink,
+  PasswordField,
+  SubmitButton,
+} from "@/components/auth/fields";
 import { useAuth } from "@/app/AuthProvider";
 import { loginSchema, type LoginValues } from "@/validators";
 
@@ -18,15 +22,20 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
+
+  // The photo wall develops as the form fills in, and fully on success.
+  const develop = done ? 1 : filled(watch("email"), 18) * 0.55 + filled(watch("password"), 8) * 0.45;
 
   const onSubmit = async (values: LoginValues) => {
     setSubmitting(true);
@@ -35,6 +44,8 @@ export default function Login() {
       sessionStorage.removeItem("is_new_signup");
       await creationProfileRepository.markCompleteForLogin().catch(() => {});
       toast.success("Welcome back!");
+      setDone(true);
+      await afterShutter();
       const from = (location.state as { from?: string } | null)?.from;
       navigate(from && from !== "/login" && from !== "/onboarding" ? from : "/", { replace: true });
     } catch (error) {
@@ -47,63 +58,44 @@ export default function Login() {
   };
 
   return (
-    <AuthLayout
-      title="Welcome back"
-      subtitle="Sign in to your content workspace."
+    <AuthShell
+      heading={["Welcome", "back."]}
+      subtitle="Log in to your content workspace."
+      develop={develop}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@company.com"
-            {...register("email")}
-          />
-          {errors.email && (
-            <p className="text-xs font-medium text-destructive">
-              {errors.email.message}
-            </p>
-          )}
-        </div>
+        <Field
+          id="email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@company.com"
+          error={errors.email?.message}
+          {...register("email")}
+        />
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <Link
-              to="/forgot-password"
-              className="text-xs font-medium text-primary hover:underline"
-            >
+        <PasswordField
+          id="password"
+          label="Password"
+          autoComplete="current-password"
+          placeholder="Your password"
+          error={errors.password?.message}
+          aside={
+            <FormLink to="/forgot-password" className="text-[13px]">
               Forgot password?
-            </Link>
-          </div>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="••••••••"
-            {...register("password")}
-          />
-          {errors.password && (
-            <p className="text-xs font-medium text-destructive">
-              {errors.password.message}
-            </p>
-          )}
-        </div>
+            </FormLink>
+          }
+          {...register("password")}
+        />
 
-        <Button type="submit" className="w-full" loading={submitting}>
-          <LogIn />
-          Sign in
-        </Button>
+        <SubmitButton loading={submitting} loadingLabel="Logging in">
+          Log in
+        </SubmitButton>
 
-        <p className="text-center text-sm text-muted-foreground">
-          New here?{" "}
-          <Link to="/register" className="font-medium text-primary hover:underline">
-            Create an account
-          </Link>
+        <p className="pt-2 text-center text-[14px] text-rl-muted">
+          New to Rally? <FormLink to="/register" className="text-rl-ink">Sign up</FormLink>
         </p>
       </form>
-    </AuthLayout>
+    </AuthShell>
   );
 }
