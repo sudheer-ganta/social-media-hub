@@ -22,7 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { photos } from "./data";
 import { GhostCursor } from "./hero/GhostCursor";
-import { EASE, Eyebrow, Magnetic, MaskLines, PlatformBadge, Reveal } from "./primitives";
+import { EASE, Eyebrow, Magnetic, MaskLines, PlatformBadge, RallyMark, Reveal } from "./primitives";
 
 interface AIAction {
   id: string;
@@ -94,8 +94,8 @@ function AIActionPanel({
   return (
     <div className="rl-card p-3">
       <p className="flex items-center gap-2 px-2.5 pb-2.5 pt-1.5 text-[14px] font-semibold tracking-[-0.02em]">
-        <Sparkles className="h-4 w-4 text-rl-accent" aria-hidden="true" />
-        Improve with AI
+        <RallyMark className="h-4 w-4" />
+        Improve with Rally
       </p>
       <ul className="space-y-1">
         {ACTIONS.map(({ id, label, icon: Icon }) => {

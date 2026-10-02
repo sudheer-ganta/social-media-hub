@@ -30,9 +30,13 @@ const STATUS_FILTERS: { value: PostStatus | "all"; label: string }[] = [
 interface PostFiltersProps {
   value: Filters;
   onChange: (value: Filters) => void;
+  /** The page shows status as chips of its own, so the select can be dropped. */
+  hideStatus?: boolean;
 }
 
-export function PostFilters({ value, onChange }: PostFiltersProps) {
+const PILL = "h-11 rounded-[12px] bg-card";
+
+export function PostFilters({ value, onChange, hideStatus }: PostFiltersProps) {
   const patch = (partial: Partial<Filters>) => onChange({ ...value, ...partial });
   const hasDateRange = Boolean(value.from || value.to);
   const { brands } = useBrands();
@@ -52,21 +56,21 @@ export function PostFilters({ value, onChange }: PostFiltersProps) {
   };
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row">
+    <div className="flex flex-col gap-3 xl:flex-row">
       <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" strokeWidth={2} />
         <Input
           value={value.search}
           onChange={(e) => patch({ search: e.target.value })}
-          placeholder="Search by title or caption…"
-          className="pl-9"
+          placeholder="Search by title or caption"
+          className={`${PILL} pl-11 text-[15px]`}
           aria-label="Search posts"
         />
       </div>
 
       <div className="flex flex-wrap gap-3">
         <Select value={contextValue} onValueChange={handleContextChange}>
-          <SelectTrigger className="w-36" aria-label="Filter by context">
+          <SelectTrigger className={`${PILL} w-40`} aria-label="Filter by context">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -80,11 +84,12 @@ export function PostFilters({ value, onChange }: PostFiltersProps) {
           </SelectContent>
         </Select>
 
+        {!hideStatus && (
         <Select
           value={value.status}
           onValueChange={(status) => patch({ status: status as PostStatus | "all" })}
         >
-          <SelectTrigger className="w-36" aria-label="Filter by status">
+          <SelectTrigger className={`${PILL} w-40`} aria-label="Filter by status">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -95,6 +100,7 @@ export function PostFilters({ value, onChange }: PostFiltersProps) {
             ))}
           </SelectContent>
         </Select>
+        )}
 
         <Select
           value={value.platform}
@@ -102,7 +108,7 @@ export function PostFilters({ value, onChange }: PostFiltersProps) {
             patch({ platform: platform as Platform | "all" })
           }
         >
-          <SelectTrigger className="w-36" aria-label="Filter by platform">
+          <SelectTrigger className={`${PILL} w-40`} aria-label="Filter by platform">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -119,7 +125,7 @@ export function PostFilters({ value, onChange }: PostFiltersProps) {
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className={hasDateRange ? "border-primary/60 bg-accent" : undefined}
+              className={`${PILL} ${hasDateRange ? "bg-accent text-accent-foreground" : ""}`}
             >
               <CalendarRange />
               {hasDateRange ? `${value.from || "…"} → ${value.to || "…"}` : "Dates"}
@@ -162,7 +168,7 @@ export function PostFilters({ value, onChange }: PostFiltersProps) {
           value={value.sort}
           onValueChange={(sort) => patch({ sort: sort as SortOption })}
         >
-          <SelectTrigger className="w-44" aria-label="Sort posts">
+          <SelectTrigger className={`${PILL} w-48`} aria-label="Sort posts">
             <span className="flex items-center gap-2 truncate">
               <ArrowUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
               <SelectValue />

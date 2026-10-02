@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Sparkles, Upload, PenLine } from "lucide-react";
+import { Upload, PenLine } from "lucide-react";
+import { RallyIcon } from "@/components/brand/Logo";
 import { cn } from "@/lib/utils";
 import { CreateWithFlowPostDialog } from "./CreateWithFlowPostDialog";
 import type { PostMediaItem } from "@/types";
@@ -19,7 +20,7 @@ interface CreateWithFlowPostChooserProps {
 }
 
 const OPTIONS = [
-  { id: "flowpost", icon: Sparkles, label: "Create with Rally", hint: "AI, tuned to your brand" },
+  { id: "flowpost", icon: RallyIcon, label: "Create with Rally", hint: "AI, tuned to your brand" },
   { id: "upload", icon: Upload, label: "Upload your content", hint: "Your own photo or video" },
   { id: "manual", icon: PenLine, label: "Create manually", hint: "Start from scratch" },
 ] as const;

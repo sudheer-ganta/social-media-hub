@@ -1,16 +1,10 @@
 import { useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Brain, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { analyticsService } from "@/services/analytics.service";
 import { useBrands } from "@/hooks/useBrands";
 import { PERSONAL_CONTEXT, brandContext } from "@/constants/integrations";
@@ -84,15 +78,15 @@ function ContextTabs({
   const isPersonal = value.contextType === "personal";
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Context">
       <button
         type="button"
         onClick={() => onChange(PERSONAL_CONTEXT)}
         className={cn(
-          "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+          "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
           isPersonal
-            ? "border-primary bg-primary/10 text-primary"
-            : "text-muted-foreground hover:text-foreground",
+            ? "border-foreground bg-foreground text-background"
+            : "border-transparent bg-secondary text-muted-foreground hover:text-foreground",
         )}
       >
         Personal
@@ -103,10 +97,10 @@ function ContextTabs({
           type="button"
           onClick={() => onChange(brandContext(brand.id))}
           className={cn(
-            "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+            "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
             value.brandId === brand.id
-              ? "border-primary bg-primary/10 text-primary"
-              : "text-muted-foreground hover:text-foreground",
+              ? "border-foreground bg-foreground text-background"
+              : "border-transparent bg-secondary text-muted-foreground hover:text-foreground",
           )}
         >
           {brand.name}
@@ -212,7 +206,7 @@ export function BrandIntelligenceSettings() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-12">
       <ContextTabs
         value={context}
         onChange={setContext}
@@ -220,12 +214,11 @@ export function BrandIntelligenceSettings() {
       />
 
       {context.contextType === "brand" && context.brandId && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Creative preferences</CardTitle>
-            <CardDescription>Explicit rules always win. Repeated selections and rejections become guidance only after several observations.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <SettingsSection
+          title="Creative preferences"
+          description="Explicit rules always win. Repeated selections and rejections become guidance only after several observations."
+        >
+          <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <select className="h-9 rounded-md border bg-background px-2 text-xs" value={preferenceDimension} onChange={(event) => setPreferenceDimension(event.target.value)}>
                 {['style','color','typography','composition','imagery','lighting','texture','density','alignment','headline_length','cta','emoji'].map((dimension) => <option key={dimension} value={dimension}>{dimension.replace('_', ' ')}</option>)}
@@ -241,39 +234,28 @@ export function BrandIntelligenceSettings() {
               {creativeIntelligence?.learned.filter((item) => item.strength === 'strong').map((item) => <Badge key={item.id} variant="outline">Learned: {item.polarity === 'negative' ? 'avoid' : 'prefer'} {item.value}</Badge>)}
               {!creativeIntelligence?.explicit.length && !creativeIntelligence?.learned.some((item) => item.strength === 'strong') && <p className="text-xs text-muted-foreground">No strong creative preferences yet.</p>}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </SettingsSection>
       )}
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Brain className="h-4 w-4" />
-                Brand Intelligence
-              </CardTitle>
-              <CardDescription>
-                What Rally has learned from this context&rsquo;s own published
-                posts. Nothing here needs setting up.
-              </CardDescription>
-            </div>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              disabled={reset.isPending || isLoading}
-              onClick={() => reset.mutate()}
-            >
-              <RotateCcw className="mr-1.5 h-3 w-3" />
-              Reset learning
-            </Button>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-6">
+      <SettingsSection
+        title="Brand Intelligence"
+        description="What Rally has learned from this context's own published posts. Nothing here needs setting up."
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            disabled={reset.isPending || isLoading}
+            onClick={() => reset.mutate()}
+          >
+            <RotateCcw className="mr-1.5 h-3 w-3" />
+            Reset learning
+          </Button>
+        }
+      >
+        <div className="space-y-8">
           {isLoading && (
             <p className="text-xs text-muted-foreground">Reading the history…</p>
           )}
@@ -287,13 +269,13 @@ export function BrandIntelligenceSettings() {
 
           {view && (
             <>
-              <section className="space-y-2">
+              <section className="space-y-3">
                 <p className="text-sm font-semibold">Voice</p>
                 <VoiceMix view={view} />
               </section>
 
               {view.style.themes.length > 0 && (
-                <section className="space-y-2 border-t pt-4">
+                <section className="space-y-3 border-t pt-8">
                   <p className="text-sm font-semibold">Recurring themes</p>
                   <div className="flex flex-wrap gap-1.5">
                     {view.style.themes.map((theme) => (
@@ -312,7 +294,7 @@ export function BrandIntelligenceSettings() {
                 </section>
               )}
 
-              <section className="space-y-2 border-t pt-4">
+              <section className="space-y-3 border-t pt-8">
                 <p className="text-sm font-semibold">What has worked</p>
 
                 {view.performance.platforms.every(
@@ -361,7 +343,7 @@ export function BrandIntelligenceSettings() {
 
               {(view.hashtags.frequent.length > 0 ||
                 view.hashtags.noDifference.length > 0) && (
-                <section className="space-y-3 border-t pt-4">
+                <section className="space-y-3 border-t pt-8">
                   <p className="text-sm font-semibold">Hashtags</p>
 
                   {view.hashtags.strongerPosts.length > 0 && (
@@ -402,8 +384,8 @@ export function BrandIntelligenceSettings() {
               )}
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsSection>
     </div>
   );
 }

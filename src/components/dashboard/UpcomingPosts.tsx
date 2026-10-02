@@ -1,17 +1,8 @@
+import dayjs from "dayjs";
 import { Link } from "react-router-dom";
-import { ArrowRight, CalendarClock } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PlatformIcon } from "@/components/shared/PlatformIcon";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { formatDisplayDate, formatDisplayTime, publishDayjs } from "@/utils/date";
+import { formatDisplayTime, publishDayjs } from "@/utils/date";
+import { PanelEmpty, PanelHeader, PlatformBadge } from "./parts";
 import type { Post } from "@/types";
 
 interface UpcomingPostsProps {
@@ -19,75 +10,72 @@ interface UpcomingPostsProps {
   loading: boolean;
 }
 
+/** Scheduled posts on a timeline: date, a connecting rail, then the post. */
 export function UpcomingPosts({ posts, loading }: UpcomingPostsProps) {
   const upcoming = (posts ?? [])
     .filter((p) => p.status === "scheduled")
     .sort((a, b) => publishDayjs(a).valueOf() - publishDayjs(b).valueOf())
-    .slice(0, 5);
+    .slice(0, 4);
 
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle>Today's Queue</CardTitle>
-          <CardDescription>Next scheduled posts</CardDescription>
-        </div>
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/calendar">
-            View calendar
-            <ArrowRight />
-          </Link>
-        </Button>
-      </CardHeader>
-      <CardContent className="flex-1 space-y-3">
-        {loading &&
-          Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
+    <section className="rd-panel p-6" aria-label="Upcoming posts">
+      <PanelHeader title="Upcoming" to="/scheduled" linkLabel="View all" />
+
+      <div className="mt-5">
+        {loading && (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={i} className="h-12 w-full bg-rl-line/50" />
+            ))}
+          </div>
+        )}
 
         {!loading && upcoming.length === 0 && (
-          <EmptyState
-            icon={CalendarClock}
+          <PanelEmpty
             title="Nothing in the queue"
-            description="Schedule a post and it will show up here."
-            className="py-10"
+            body="Schedule a post and the next ones will line up here."
+            to="/posts/new"
+            action="Schedule a post"
           />
         )}
 
-        {!loading &&
-          upcoming.map((post) => (
-            <Link
-              key={post.id}
-              to={`/posts/${post.id}/edit`}
-              className="flex items-center gap-3 rounded-md border p-3 transition-colors hover:bg-accent/50"
-            >
-              <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-md bg-accent text-accent-foreground">
-                <span className="text-[10px] font-semibold uppercase leading-none">
-                  {formatDisplayDate(post.publish_date).slice(0, 3)}
-                </span>
-                <span className="mt-0.5 text-xs font-bold leading-none">
-                  {formatDisplayTime(post.publish_time)}
-                </span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{post.title || "Untitled"}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {formatDisplayDate(post.publish_date)}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {post.platforms.slice(0, 3).map((platform) => (
-                  <span
-                    key={platform}
-                    className="flex h-5 w-5 items-center justify-center rounded bg-muted text-muted-foreground"
+        {!loading && upcoming.length > 0 && (
+          <ol className="relative">
+            {/* The rail runs through the dots, behind them. */}
+            <span
+              aria-hidden="true"
+              className="absolute bottom-6 left-[58px] top-6 w-px bg-rl-line"
+            />
+            {upcoming.map((post) => {
+              const day = dayjs(publishDayjs(post));
+              const first = post.platforms[0];
+              return (
+                <li key={post.id}>
+                  <Link
+                    to={`/posts/${post.id}/edit`}
+                    className="rd-row -mx-2 flex items-center gap-3 rounded-[12px] px-2 py-3"
                   >
-                    <PlatformIcon platform={platform} className="h-2.5 w-2.5" />
-                  </span>
-                ))}
-              </div>
-            </Link>
-          ))}
-      </CardContent>
-    </Card>
+                    <span className="w-9 shrink-0 text-center leading-none">
+                      <span className="block text-[12px] text-rl-muted">{day.format("MMM")}</span>
+                      <span className="rd-numeral mt-1 block text-[20px]">{day.format("DD")}</span>
+                    </span>
+                    <span className="relative z-10 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-rl-surface bg-rl-muted/70" />
+                    {first && <PlatformBadge platform={first} size={34} />}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14.5px] font-semibold tracking-[-0.02em]">
+                        {post.title || "Untitled"}
+                      </span>
+                      <span className="block text-[12.5px] text-rl-muted">
+                        {formatDisplayTime(post.publish_time)}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </div>
+    </section>
   );
 }

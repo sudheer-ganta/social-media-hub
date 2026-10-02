@@ -79,7 +79,7 @@ export function IntelligencePanel({ state, className }: { state: number; classNa
     <div className={cn("rl-card w-full p-5", className)}>
       <div className="flex items-center gap-3">
         <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-rl-ink text-rl-surface">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          <RallyMark className="h-4 w-4" />
         </span>
         <p className="text-[14px] font-semibold tracking-[-0.02em]">Brand Intelligence</p>
       </div>

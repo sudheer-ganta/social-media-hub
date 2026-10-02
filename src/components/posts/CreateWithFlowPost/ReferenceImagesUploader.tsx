@@ -90,9 +90,9 @@ export function ReferenceImagesUploader({ images, onChange, disabled }: Referenc
   }
 
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-semibold">Show Rally what you like</Label>
-      <p className="text-xs text-muted-foreground">
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Show Rally what you like</Label>
+      <p className="max-w-[62ch] text-xs leading-relaxed text-muted-foreground">
         Add designs whose look you want to follow. Rally uses their typography, composition and visual treatment with your own content. Add products in the product-images section above.
       </p>
 
@@ -127,7 +127,7 @@ export function ReferenceImagesUploader({ images, onChange, disabled }: Referenc
               <select
                 value={img.label ?? ""}
                 onChange={(e) => setLabelAt(i, e.target.value)}
-                className="w-full rounded border bg-transparent px-1 py-0.5 text-[10px] text-muted-foreground"
+                className="w-full rounded-md border bg-transparent px-1.5 py-1 text-[11px] text-muted-foreground"
               >
                 <option value="">Auto</option>
                 {LABELS.map((l) => (
@@ -143,21 +143,21 @@ export function ReferenceImagesUploader({ images, onChange, disabled }: Referenc
         <div
           {...getRootProps()}
           className={cn(
-            "flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-3 text-xs text-muted-foreground transition-colors",
+            "flex cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-5 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-secondary/50",
             isDragActive && "border-foreground bg-secondary",
             (disabled || uploadingCount > 0) && "pointer-events-none opacity-60",
           )}
         >
           <input {...getInputProps()} disabled={disabled} />
           {uploadingCount > 0 ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
           )}
           {uploadingCount > 0
             ? "Uploading…"
             : images.length === 0
-              ? "Drag & drop, or click to add 1–6 images"
+              ? "Drag and drop, or click to add 1-6 images"
               : `Add more (${remaining} left)`}
         </div>
       )}

@@ -1,12 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { RallyIcon } from "@/components/brand/Logo";
 import { useAuth } from "@/app/AuthProvider";
 
 function SplashScreen() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary shadow-glow">
-        <Sparkles className="h-6 w-6 text-primary-foreground" />
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-card border border-border shadow-md">
+        <RallyIcon className="h-7 w-7" />
       </div>
       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
     </div>

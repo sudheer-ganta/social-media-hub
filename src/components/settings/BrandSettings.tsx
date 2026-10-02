@@ -4,13 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -18,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useBrands } from "@/hooks/useBrands";
 import type { Brand, BrandInsert } from "@/types";
@@ -73,65 +67,81 @@ export function BrandSettings() {
   };
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between space-y-0">
-        <div>
-          <CardTitle>Brands</CardTitle>
-          <CardDescription>
-            Each brand is its own publishing context, with its own connected
-            accounts, posts and analytics.
-          </CardDescription>
-        </div>
+    <SettingsSection
+      title="Brands"
+      description="Each brand is its own publishing context, with its own connected accounts, posts and analytics."
+      actions={
         <Button size="sm" onClick={() => openEditor("new")}>
           <Plus />
           New Brand
         </Button>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {isLoading ? null : brands.length === 0 ? (
-          <EmptyState
-            icon={Building2}
-            title="No brands yet"
-            description="Create a brand to connect its social accounts and publish as it."
-          />
-        ) : (
-          brands.map((brand) => (
-            <div
+      }
+    >
+      {isLoading ? (
+        <ul className="divide-y border-y" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <li key={i} className="flex items-center gap-4 py-4">
+              <span className="h-10 w-10 animate-pulse rounded-lg bg-muted" />
+              <span className="flex-1 space-y-2">
+                <span className="block h-3.5 w-32 animate-pulse rounded bg-muted" />
+                <span className="block h-3 w-64 max-w-full animate-pulse rounded bg-muted" />
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : brands.length === 0 ? (
+        <EmptyState
+          icon={Building2}
+          title="No brands yet"
+          description="Create a brand to connect its social accounts and publish as it."
+        />
+      ) : (
+        <ul className="divide-y border-y">
+          {brands.map((brand) => (
+            <li
               key={brand.id}
-              className="flex items-center gap-3 rounded-lg border p-3"
+              className="group flex items-center gap-4 py-4 transition-colors"
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-sm font-semibold text-primary">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
                 {brand.name.slice(0, 2).toUpperCase()}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{brand.name}</p>
-                {(brand.description || brand.website) && (
-                  <p className="truncate text-xs text-muted-foreground">
-                    {brand.description || brand.website}
+                <p className="truncate text-sm font-semibold">{brand.name}</p>
+                {brand.description && (
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                    {brand.description}
                   </p>
                 )}
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => openEditor(brand)}
-                aria-label={`Edit ${brand.name}`}
-              >
-                <Pencil />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setPendingDelete(brand)}
-                aria-label={`Delete ${brand.name}`}
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          ))
-        )}
-      </CardContent>
+              {brand.website && (
+                <span className="text-meta hidden max-w-[220px] truncate normal-case tracking-normal md:block">
+                  {brand.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                </span>
+              )}
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => openEditor(brand)}
+                  aria-label={`Edit ${brand.name}`}
+                >
+                  <Pencil />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setPendingDelete(brand)}
+                  aria-label={`Delete ${brand.name}`}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <Dialog
         open={Boolean(editing)}
@@ -217,6 +227,6 @@ export function BrandSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </SettingsSection>
   );
 }

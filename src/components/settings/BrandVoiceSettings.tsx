@@ -1,15 +1,9 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Star, Trash2, Edit2, Check, Wand2, Building2 } from "lucide-react";
+import { Plus, Star, Trash2, Edit2, Check, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsSection } from "@/components/settings/SettingsSection";
 import { BrandVoicePanel } from "@/components/marketing/BrandVoicePanel";
 import { useBrandVoices } from "@/hooks/useBrandVoices";
 import { useBrands } from "@/hooks/useBrands";
@@ -81,133 +75,112 @@ export function BrandVoiceSettings() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Wand2 className="h-4 w-4 text-primary" />
-              Brand Voice Profiles
-            </CardTitle>
-            <CardDescription>
-              Configure default brand personality profiles. All AI generations automatically inherit your Default profile.
-            </CardDescription>
-          </div>
-          {!isCreating && !editingId && (
-            <Button size="sm" onClick={handleStartCreate} className="gap-1 text-xs">
-              <Plus className="h-3.5 w-3.5" />
-              Add Brand Voice
-            </Button>
-          )}
-        </CardHeader>
-
-        <CardContent className="space-y-4">
-          {/* Saved Profiles List */}
-          {!isCreating && !editingId && (
-            <div>
-              {isLoading ? (
-                <p className="text-xs text-muted-foreground py-4">Loading profiles...</p>
-              ) : profiles.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-6 text-center space-y-3">
-                  <p className="text-sm font-medium">No Brand Voice profiles created yet</p>
-                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                    Create your first Brand Voice profile to set your tone, vocabulary, and brand rules across all AI content.
-                  </p>
-                  <Button size="sm" onClick={handleStartCreate} className="text-xs gap-1">
-                    <Plus className="h-3.5 w-3.5" />
-                    Create First Profile
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {profiles.map((p: BrandVoiceProfile) => (
-                    <div
-                      key={p.id}
-                      className="rounded-xl border bg-card p-4 space-y-3 flex flex-col justify-between transition-all hover:border-primary/40"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            {p.voice.logoUrl ? (
-                              <img
-                                src={p.voice.logoUrl}
-                                alt={`${p.name} logo`}
-                                className="h-9 w-9 rounded-lg border bg-secondary/80 object-contain p-1 shrink-0 shadow-xs"
-                              />
-                            ) : (
-                              <div className="h-9 w-9 rounded-lg border border-dashed flex items-center justify-center bg-muted/40 shrink-0 text-muted-foreground/60">
-                                <Building2 className="h-4 w-4" />
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold truncate">{p.name}</p>
-                              {p.voice.logoUrl ? (
-                                <span className="text-[10px] text-emerald-500 font-medium flex items-center gap-0.5">
-                                  <Check className="h-2.5 w-2.5" /> Logo ready
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                          {p.is_default ? (
-                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] gap-1 shrink-0">
-                              <Star className="h-3 w-3 fill-current" /> Default
-                            </Badge>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground shrink-0"
-                              onClick={() => setDefault(p.id)}
-                            >
-                              Make Default
-                            </Button>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-1">
-                          {p.voice.personality && (
-                            <Badge variant="secondary" className="text-[10px]">
-                              {p.voice.personality}
-                            </Badge>
-                          )}
-                          {p.voice.tone && (
-                            <Badge variant="outline" className="text-[10px]">
-                              {p.voice.tone}
-                            </Badge>
-                          )}
-                        </div>
-
-                        {p.voice.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                            {p.voice.description}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1.5 pt-2 border-t">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => handleEdit(p.id, p.name, p.voice, p.brand_id)}
-                        >
-                          <Edit2 className="h-3 w-3 mr-1" /> Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
-                          onClick={() => deleteProfile(p.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+    <SettingsSection
+      title="Brand Voice Profiles"
+      description="Personality profiles for each brand. Every AI generation inherits your Default profile."
+      actions={
+        !isCreating && !editingId ? (
+          <Button size="sm" onClick={handleStartCreate} className="gap-1 text-xs">
+            <Plus className="h-3.5 w-3.5" />
+            Add Brand Voice
+          </Button>
+        ) : undefined
+      }
+    >
+      {/* Saved Profiles List */}
+      {!isCreating && !editingId && (
+        <div>
+          {isLoading ? (
+            <p className="py-4 text-sm text-muted-foreground">Loading profiles...</p>
+          ) : profiles.length === 0 ? (
+            <div className="space-y-3 rounded-lg border border-dashed p-8 text-center">
+              <p className="text-sm font-medium">No Brand Voice profiles yet</p>
+              <p className="mx-auto max-w-sm text-sm text-muted-foreground">
+                Create a profile to set tone, vocabulary and brand rules across all AI content.
+              </p>
+              <Button size="sm" onClick={handleStartCreate} className="gap-1 text-xs">
+                <Plus className="h-3.5 w-3.5" />
+                Create First Profile
+              </Button>
             </div>
+          ) : (
+            <ul className="divide-y border-y">
+              {profiles.map((p: BrandVoiceProfile) => (
+                <li key={p.id} className="flex items-start gap-4 py-5">
+                  {p.voice.logoUrl ? (
+                    <img
+                      src={p.voice.logoUrl}
+                      alt={`${p.name} logo`}
+                      className="h-10 w-10 shrink-0 rounded-lg border bg-secondary/80 object-contain p-1"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed bg-muted/40 text-muted-foreground/60">
+                      <Building2 className="h-4 w-4" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold">{p.name}</p>
+                      {p.is_default && (
+                        <Badge className="gap-1 border-primary/20 bg-primary/10 text-[10px] text-primary">
+                          <Star className="h-3 w-3 fill-current" /> Default
+                        </Badge>
+                      )}
+                      {p.voice.personality && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {p.voice.personality}
+                        </Badge>
+                      )}
+                      {p.voice.tone && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {p.voice.tone}
+                        </Badge>
+                      )}
+                    </div>
+                    {p.voice.description && (
+                      <p className="line-clamp-2 max-w-[70ch] text-sm leading-relaxed text-muted-foreground">
+                        {p.voice.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    {!p.is_default && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => setDefault(p.id)}
+                      >
+                        Make default
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => handleEdit(p.id, p.name, p.voice, p.brand_id)}
+                      aria-label={`Edit ${p.name}`}
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => deleteProfile(p.id)}
+                      aria-label={`Delete ${p.name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
+        </div>
+      )}
 
           {/* Active Editor */}
           {(isCreating || editingId) && (
@@ -252,8 +225,6 @@ export function BrandVoiceSettings() {
               />
             </div>
           )}
-        </CardContent>
-      </Card>
-    </div>
+    </SettingsSection>
   );
 }

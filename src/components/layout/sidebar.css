@@ -1,0 +1,141 @@
+/**
+ * Sidebar: a warm-black slab against the cream page. Plain CSS on purpose, so
+ * the surface never depends on utility classes resolving. In the app's dark
+ * theme the slab goes darker than the page and keeps a hairline edge.
+ */
+.rs {
+  --rs-bg: 21 19 17;
+  --rs-fg: 246 242 235;
+  --rs-muted: 154 148 139;
+  --rs-line: 255 255 255 / 0.08;
+  --rs-hover: 255 255 255 / 0.05;
+  --rs-active: 255 255 255 / 0.08;
+  --rs-panel: 255 255 255 / 0.045;
+  --rs-accent: 255 88 48;
+  --rs-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  background: rgb(var(--rs-bg));
+  color: rgb(var(--rs-fg));
+  font-family: "Geist Variable", "Instrument Sans", system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  border-right: 1px solid rgb(var(--rs-line));
+}
+
+.dark .rs {
+  --rs-bg: 10 10 11;
+}
+
+.rs a {
+  color: inherit;
+}
+
+.rs-muted {
+  color: rgb(var(--rs-muted));
+}
+
+.rs-panel {
+  background: rgb(var(--rs-panel));
+  border: 1px solid rgb(var(--rs-line));
+  border-radius: 14px;
+  color: rgb(var(--rs-fg));
+  transition: background-color 0.2s;
+}
+
+a.rs-panel:hover {
+  background: rgb(var(--rs-active));
+  color: rgb(var(--rs-fg));
+}
+
+.rs-link {
+  position: relative;
+  display: flex;
+  height: 46px;
+  align-items: center;
+  gap: 14px;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: rgb(var(--rs-muted));
+  transition: color 0.2s, background-color 0.2s;
+}
+
+.rs-link:hover {
+  background: rgb(var(--rs-hover));
+  color: rgb(var(--rs-fg));
+}
+
+.rs-link .rs-icon {
+  flex-shrink: 0;
+  transition: transform 0.3s var(--rs-ease), color 0.2s;
+}
+
+.rs-link:hover .rs-icon {
+  transform: translateX(2px);
+}
+
+.rs-link[aria-current="page"] {
+  background: rgb(var(--rs-active));
+  color: rgb(var(--rs-fg));
+  font-weight: 600;
+}
+
+.rs-link[aria-current="page"] .rs-icon {
+  color: rgb(var(--rs-accent));
+  transform: none;
+}
+
+/* The orange edge on the current page. */
+.rs-bar {
+  position: absolute;
+  left: -12px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: rgb(var(--rs-accent));
+}
+
+.rs-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--rs-muted));
+}
+
+.rs-icon-btn {
+  display: flex;
+  height: 34px;
+  width: 34px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: rgb(var(--rs-muted));
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.rs-icon-btn:hover {
+  background: rgb(var(--rs-hover));
+  color: rgb(var(--rs-fg));
+}
+
+.rs a:focus-visible,
+.rs button:focus-visible {
+  outline: 2px solid rgb(var(--rs-fg));
+  outline-offset: 2px;
+}
+
+.rs-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rs * {
+    transition-duration: 0.01ms !important;
+  }
+}

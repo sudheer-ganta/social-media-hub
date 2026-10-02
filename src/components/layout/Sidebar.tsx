@@ -1,61 +1,79 @@
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   BarChart3,
   Calendar,
   CalendarClock,
+  ChevronDown,
   ChevronsLeft,
   FileText,
+  Images,
   LayoutDashboard,
   LogOut,
   Monitor,
   Moon,
   PenLine,
-  Images,
   Plug,
   Settings,
   Sun,
+  type LucideIcon,
 } from "lucide-react";
+import dayjs from "dayjs";
 import { toast } from "sonner";
+import "@fontsource-variable/geist";
+import "./sidebar.css";
 import { Logo } from "@/components/brand/Logo";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { PlatformIcon } from "@/components/shared/PlatformIcon";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useBrands } from "@/hooks/useBrands";
+import { useDashboardStats, useUpcomingPosts } from "@/hooks/useDashboard";
 import { useTheme } from "@/hooks/useTheme";
 import { useSettings } from "@/hooks/useSettings";
 import { useAuth } from "@/app/AuthProvider";
+import { publishDayjs } from "@/utils/date";
 import { initialsOf } from "@/utils/text";
 import { cn } from "@/lib/utils";
-import type { Theme } from "@/types";
 
-const NAV_ITEMS = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+type CountKey = "scheduled" | "drafts";
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  /** Real workspace count, shown only when above zero. */
+  count?: CountKey;
+  /** Overrides the default "path starts with `to`" test. */
+  match?: (path: string) => boolean;
+}
+
+const NAV_MAIN: NavItem[] = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, match: (p) => p === "/" },
+  { to: "/posts/new", label: "Create", icon: PenLine },
   { to: "/calendar", label: "Plan", icon: Calendar },
-  { to: "/scheduled", label: "Schedule", icon: CalendarClock },
-  { to: "/posts", label: "Library", icon: FileText },
+  { to: "/scheduled", label: "Schedule", icon: CalendarClock, count: "scheduled" },
+  {
+    to: "/posts",
+    label: "Library",
+    icon: FileText,
+    count: "drafts",
+    match: (p) => p.startsWith("/posts") && !p.startsWith("/posts/new"),
+  },
   { to: "/creatives", label: "Creatives", icon: Images },
   { to: "/analytics", label: "Insights", icon: BarChart3 },
   { to: "/integrations", label: "Accounts", icon: Plug },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
-];
+const NAV_FOOT: NavItem[] = [{ to: "/settings", label: "Settings", icon: Settings }];
+
+/** "42m", "3h 12m", "2d 4h", or "now" once the time has passed. */
+function until(target: dayjs.Dayjs, now: dayjs.Dayjs): string {
+  const mins = target.diff(now, "minute");
+  if (mins <= 0) return "now";
+  if (mins < 60) return `${mins}m`;
+  if (mins < 60 * 24) return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  return `${Math.floor(mins / 1440)}d ${Math.floor((mins % 1440) / 60)}h`;
+}
 
 interface SidebarProps {
   collapsed: boolean;
@@ -66,13 +84,36 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const { settings } = useSettings();
   const { user, signOut } = useAuth();
+  const { brands } = useBrands();
   const location = useLocation();
+  const reduce = useReducedMotion();
+  const stats = useDashboardStats();
+  const upcoming = useUpcomingPosts();
+
+  // Coarse clock for the countdown. One tick a minute is all the precision it shows.
+  const [now, setNow] = useState(() => dayjs());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(dayjs()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const next = useMemo(
+    () =>
+      (upcoming.data ?? [])
+        .filter((p) => p.status === "scheduled")
+        .sort((a, b) => publishDayjs(a).valueOf() - publishDayjs(b).valueOf())[0],
+    [upcoming.data],
+  );
+
+  const counts: Record<CountKey, number> = {
+    scheduled: stats.data?.scheduled ?? 0,
+    drafts: stats.data?.drafts ?? 0,
+  };
 
   const displayName =
-    (user?.user_metadata?.full_name as string | undefined) ||
-    settings.fullName ||
-    "Your profile";
-  const displayEmail = user?.email || settings.email || "Free plan";
+    (user?.user_metadata?.full_name as string | undefined) || settings.fullName || "Your profile";
+  const displayEmail = user?.email || settings.email || displayName;
+  const brand = brands[0];
 
   const handleSignOut = async () => {
     try {
@@ -85,177 +126,198 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
     }
   };
 
-  const ThemeIcon =
-    THEME_OPTIONS.find((o) => o.value === theme)?.icon ?? Monitor;
+  const nextTheme = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
+  const ThemeIcon = theme === "dark" ? Moon : theme === "light" ? Sun : Monitor;
+
+  const tip = (key: string, label: string, node: React.ReactNode) =>
+    collapsed ? (
+      <Tooltip key={key} delayDuration={0}>
+        <TooltipTrigger asChild>{node}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    ) : (
+      node
+    );
+
+  const renderItem = ({ to, label, icon: Icon, count, match }: NavItem) => {
+    const active = match ? match(location.pathname) : location.pathname.startsWith(to);
+    const n = count ? counts[count] : 0;
+    const link = (
+      <NavLink
+        to={to}
+        aria-current={active ? "page" : undefined}
+        className={cn("rs-link", collapsed && "justify-center px-0")}
+      >
+        {active && (
+          <motion.span
+            layoutId="rs-bar"
+            transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
+            className="rs-bar"
+            style={collapsed ? { left: -12 } : undefined}
+          />
+        )}
+        <Icon className="rs-icon h-[20px] w-[20px]" strokeWidth={1.7} />
+        {!collapsed && (
+          <>
+            <span className="flex-1">{label}</span>
+            {n > 0 && <span className="rs-count">{n}</span>}
+          </>
+        )}
+      </NavLink>
+    );
+    return <li key={to}>{tip(to, n > 0 ? `${label} (${n})` : label, link)}</li>;
+  };
 
   return (
     <motion.aside
-      animate={{ width: collapsed ? 72 : 240 }}
-      transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-      className="sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r bg-card lg:flex"
+      animate={{ width: collapsed ? 88 : 272 }}
+      transition={{ duration: reduce ? 0 : 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+      className="rs sticky top-0 z-30 hidden h-screen shrink-0 flex-col lg:flex"
     >
-      {/* Brand */}
+      {/* Brand row */}
       <div
         className={cn(
-          "flex h-12 items-center gap-3 border-b px-6",
-          collapsed && "justify-center px-0",
+          "flex h-[72px] shrink-0 items-center justify-between px-6",
+          collapsed && "flex-col justify-center gap-1 px-0 pt-2",
         )}
       >
-        <Link to="/" className="flex items-center gap-2.5" aria-label="Rally Home">
-          <Logo iconOnly={collapsed} size="md" />
+        <Link to="/" aria-label="Rally home">
+          <Logo iconOnly={collapsed} size="md" variant="white" />
         </Link>
-      </div>
-
-      {/* Compose Button */}
-      <div className="p-3">
-        {collapsed ? (
-          <Tooltip delayDuration={0}>
-            <TooltipTrigger asChild>
-              <Button asChild size="icon" className="w-full shadow-glow">
-                <Link to="/posts/new" aria-label="Compose">
-                  <PenLine className="h-4 w-4" />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Compose</TooltipContent>
-          </Tooltip>
-        ) : (
-          <Button asChild className="w-full shadow-glow">
-            <Link to="/posts/new" className="flex items-center gap-2">
-              <PenLine className="h-4 w-4" />
-              Compose
-            </Link>
-          </Button>
+        {tip(
+          "collapse",
+          collapsed ? "Expand" : "Collapse",
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="rs-icon-btn"
+          >
+            <ChevronsLeft
+              className={cn("h-4 w-4 transition-transform duration-300", collapsed && "rotate-180")}
+              strokeWidth={1.75}
+            />
+          </button>,
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 scrollbar-thin">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
-          const active =
-            to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
-          const link = (
-            <NavLink
-              key={to}
-              to={to}
-              className={cn(
-                "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                collapsed && "justify-center px-0",
-                active
-                  ? "text-primary font-semibold"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-              )}
+      {/* Workspace brand */}
+      {brand && (
+        <div className="px-3 pb-5">
+          {tip(
+            "brand",
+            brand.name,
+            <Link
+              to="/settings?tab=brands"
+              className={cn("rs-panel flex items-center gap-3 p-3", collapsed && "justify-center p-2")}
             >
-              {active && (
-                <motion.span
-                  layoutId="sidebar-active"
-                  className="absolute inset-0 rounded-md bg-accent"
-                  transition={{ type: "spring", bounce: 0.15, duration: 0.4 }}
-                />
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[14px] font-bold tracking-[-0.02em]"
+                style={{ background: "rgb(var(--rs-fg))", color: "rgb(var(--rs-bg))" }}
+              >
+                {brand.name.slice(0, 2).toUpperCase()}
+              </span>
+              {!collapsed && (
+                <>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14.5px] font-semibold leading-tight tracking-[-0.02em]">
+                      {brand.name}
+                    </span>
+                    <span className="rs-muted block truncate text-[12.5px]">
+                      {brands.length} {brands.length === 1 ? "brand" : "brands"}
+                    </span>
+                  </span>
+                  <ChevronDown className="rs-muted h-4 w-4 shrink-0" strokeWidth={1.75} />
+                </>
               )}
-              <Icon className="relative z-10 h-[18px] w-[18px] shrink-0" />
-              {!collapsed && <span className="relative z-10">{label}</span>}
-            </NavLink>
-          );
+            </Link>,
+          )}
+        </div>
+      )}
 
-          return collapsed ? (
-            <Tooltip key={to} delayDuration={0}>
-              <TooltipTrigger asChild>{link}</TooltipTrigger>
-              <TooltipContent side="right">{label}</TooltipContent>
-            </Tooltip>
-          ) : (
-            link
-          );
-        })}
+      {/* Navigation */}
+      <nav aria-label="Main" className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-3">
+        <ul className="space-y-1">{NAV_MAIN.map(renderItem)}</ul>
+        <ul className="mt-6 space-y-1">{NAV_FOOT.map(renderItem)}</ul>
       </nav>
 
-      {/* Bottom */}
-      <div className="space-y-1 border-t p-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                collapsed && "justify-center px-0",
-              )}
-            >
-              <ThemeIcon className="h-[18px] w-[18px] shrink-0" />
-              {!collapsed && <span>Theme</span>}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="end" className="w-40">
-            <DropdownMenuLabel>Appearance</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-              <DropdownMenuItem
-                key={value}
-                onClick={() => setTheme(value)}
-                className={cn(theme === value && "bg-accent text-accent-foreground")}
+      {/* Up next: the one thing worth glancing at from any page */}
+      {!collapsed && (
+        <div className="px-3 pt-3">
+          {next ? (
+            <Link to={`/posts/${next.id}/edit`} className="rs-panel block p-4">
+              <span className="flex items-center justify-between">
+                <span className="rs-muted text-[13px]">Up next</span>
+                <span className="rs-muted flex items-center gap-1.5">
+                  {next.platforms.slice(0, 3).map((p) => (
+                    <PlatformIcon key={p} platform={p} className="h-3 w-3" />
+                  ))}
+                </span>
+              </span>
+              <span
+                className="rs-num mt-2.5 block text-[32px]"
+                style={{ color: "rgb(var(--rs-accent))" }}
               >
-                <Icon className="h-4 w-4 mr-2" />
-                {label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <button
-          onClick={onToggleCollapse}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-            collapsed && "justify-center px-0",
+                {until(publishDayjs(next), now)}
+              </span>
+              <span className="mt-2 block truncate text-[13.5px] font-medium tracking-[-0.01em]">
+                {next.title || "Untitled"}
+              </span>
+            </Link>
+          ) : (
+            <Link to="/posts/new" className="rs-panel block p-4">
+              <span className="rs-muted block text-[13px]">Up next</span>
+              <span className="mt-1.5 block text-[15px] font-semibold tracking-[-0.02em]">
+                Nothing scheduled
+              </span>
+              <span className="rs-muted mt-0.5 block text-[13px]">
+                Schedule a post to see it here.
+              </span>
+            </Link>
           )}
-        >
-          <ChevronsLeft
-            className={cn(
-              "h-[18px] w-[18px] shrink-0 transition-transform duration-300",
-              collapsed && "rotate-180",
-            )}
-          />
-          {!collapsed && <span>Collapse</span>}
-        </button>
+        </div>
+      )}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-accent",
-                collapsed && "justify-center px-0",
-              )}
-              aria-label="Account menu"
-            >
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs">
-                  {initialsOf(displayName)}
-                </AvatarFallback>
-              </Avatar>
-              {!collapsed && (
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{displayName}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">
-                    {displayEmail}
-                  </p>
-                </div>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="end" className="w-56">
-            <DropdownMenuLabel className="font-normal">
-              <p className="truncate text-sm font-medium">{displayName}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {displayEmail}
-              </p>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={handleSignOut}
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {/* Account */}
+      <div
+        className={cn(
+          "flex items-center gap-3 p-4",
+          collapsed && "flex-col gap-2 px-0",
+        )}
+      >
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold"
+          style={{ background: "rgb(255 255 255 / 0.1)" }}
+        >
+          {initialsOf(displayName)}
+        </span>
+        {!collapsed && (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13.5px] font-medium tracking-[-0.01em]">
+              {displayEmail}
+            </span>
+            <span className="rs-muted block truncate text-[12px]">{displayName}</span>
+          </span>
+        )}
+        {tip(
+          "theme",
+          `Theme: ${theme}`,
+          <button
+            type="button"
+            onClick={() => setTheme(nextTheme)}
+            aria-label={`Theme: ${theme}. Switch to ${nextTheme}`}
+            className="rs-icon-btn"
+          >
+            <ThemeIcon className="h-4 w-4" strokeWidth={1.75} />
+          </button>,
+        )}
+        {tip(
+          "signout",
+          "Sign out",
+          <button type="button" onClick={handleSignOut} aria-label="Sign out" className="rs-icon-btn">
+            <LogOut className="h-4 w-4" strokeWidth={1.75} />
+          </button>,
+        )}
       </div>
     </motion.aside>
   );

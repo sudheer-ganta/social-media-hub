@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 import animate from "tailwindcss-animate";
 
+// Config reload trigger
 export default {
   darkMode: "class",
   content: ["./index.html", "./src/**/*.{ts,tsx}"],

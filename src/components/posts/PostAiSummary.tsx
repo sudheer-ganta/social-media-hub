@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { RallyIcon } from "@/components/brand/Logo";
 import { cn } from "@/lib/utils";
 import type { Post } from "@/types";
 import {
@@ -101,7 +102,7 @@ export function PostAiSummary({ post, onApplyCaption }: PostAiSummaryProps) {
           onClick={() => requestAi.mutate(post.id)}
           className="h-8 text-xs shrink-0 gap-1.5"
         >
-          <Sparkles className="h-3.5 w-3.5" />
+          <RallyIcon className="h-3.5 w-3.5" />
           Generate AI Content
         </Button>
       </div>
@@ -114,11 +115,11 @@ export function PostAiSummary({ post, onApplyCaption }: PostAiSummaryProps) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
-            <Sparkles className="h-4 w-4 text-primary" />
+            <RallyIcon className="h-4 w-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold">Generated with AI</span>
+              <span className="text-xs font-bold">Generated with Rally</span>
               {isReady && (
                 <Badge variant="outline" className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                   <Award className="h-3 w-3" />

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /**
- * FlowPost design tokens — the Masthead contract.
+ * Rally design tokens.
  *
  * FlowPost is achromatic. Surfaces, type, chrome and actions are paper and
  * ink; the only hue in the product belongs to the user's connected networks
@@ -15,7 +15,7 @@
 @layer base {
   :root {
     /* Paper stack — neutral, very slightly warm so it is not a screen grey */
-    --background: 60 9% 96%;
+    --background: 40 43% 95%; /* warm paper, #F9F5EE */
     --card: 0 0% 100%;
     --popover: 0 0% 100%;
     --secondary: 60 7% 93%;
@@ -28,11 +28,12 @@
     --secondary-foreground: 240 3% 16%;
     --muted-foreground: 240 2% 42%;
 
-    /* Brand-infused Primary Actions (Indigo / Electric Cyan accent from Logo) */
-    --primary: 239 84% 67%;
+    /* Rally coral. --primary is the deeper #D6341A so white labels stay above 4.5:1,
+       the same pairing the landing page uses (--rl-accent-strong). */
+    --primary: 8 78% 47%;
     --primary-foreground: 0 0% 100%;
-    --accent: 239 84% 96%;
-    --accent-foreground: 239 84% 35%;
+    --accent: 8 100% 94%;
+    --accent-foreground: 8 78% 32%;
 
     /* Semantic state. Small type, indicators and trends only — never a fill. */
     --success: 158 55% 27%;
@@ -41,13 +42,13 @@
     --warning-foreground: 60 9% 98%;
     --destructive: 4 76% 41%;
     --destructive-foreground: 60 9% 98%;
-    --info: 239 84% 67%;
+    --info: 205 70% 38%;
     --info-foreground: 60 9% 98%;
 
     /* Rules */
     --border: 50 8% 85%;
     --input: 50 8% 80%;
-    --ring: 239 84% 67%;
+    --ring: 8 78% 47%;
 
     --radius: 0.5rem;
   }
@@ -65,11 +66,11 @@
     --secondary-foreground: 60 4% 87%;
     --muted-foreground: 240 3% 62%;
 
-    /* Brand-infused Dark Mode Primary (Vibrant Indigo-Violet from Logo) */
-    --primary: 239 84% 67%;
-    --primary-foreground: 0 0% 100%;
-    --accent: 239 45% 18%;
-    --accent-foreground: 239 84% 85%;
+    /* Dark mode uses the brighter #FF4D32 with ink labels (white on it is under 4.5:1). */
+    --primary: 8 100% 60%;
+    --primary-foreground: 8 50% 8%;
+    --accent: 8 40% 17%;
+    --accent-foreground: 8 100% 88%;
 
     --success: 158 39% 49%;
     --success-foreground: 158 40% 7%;
@@ -77,12 +78,12 @@
     --warning-foreground: 38 50% 8%;
     --destructive: 4 85% 66%;
     --destructive-foreground: 4 40% 8%;
-    --info: 239 84% 67%;
-    --info-foreground: 239 40% 8%;
+    --info: 205 75% 62%;
+    --info-foreground: 205 40% 8%;
 
     --border: 240 4% 17%;
     --input: 240 4% 21%;
-    --ring: 239 84% 67%;
+    --ring: 8 100% 60%;
   }
 
   /**

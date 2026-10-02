@@ -1,4 +1,3 @@
-import { useId } from "react";
 import { cn } from "@/lib/utils";
 
 interface LogoProps {
@@ -9,54 +8,16 @@ interface LogoProps {
 }
 
 export function RallyIcon({ className = "h-8 w-8" }: { className?: string }) {
-  const uid = useId().replace(/:/g, "");
-  const g1 = `fpG1${uid}`;
-  const g2 = `fpG2${uid}`;
-  const gGlow = `fpGlow${uid}`;
-
   return (
-    <svg
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-    >
-      <defs>
-        <linearGradient id={g1} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#4F46E5" />
-          <stop offset="50%" stopColor="#6366F1" />
-          <stop offset="100%" stopColor="#818CF8" />
-        </linearGradient>
-        <linearGradient id={g2} x1="100%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#3730A3" />
-          <stop offset="100%" stopColor="#818CF8" />
-        </linearGradient>
-        <linearGradient id={gGlow} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#6366F1" />
-          <stop offset="100%" stopColor="#C084FC" />
-        </linearGradient>
-      </defs>
-
-      {/* Outer subtle guide ring */}
-      <circle cx="50" cy="50" r="42" stroke={`url(#${g2})`} strokeWidth="1.5" strokeOpacity="0.4" fill="none" />
-
-      {/* Overlapping Spiraling Rings (Swirl Node Pattern) */}
-      <circle cx="50" cy="38" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="60" cy="46" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="54" cy="58" r="26" stroke={`url(#${gGlow})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="42" cy="54" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-      <circle cx="38" cy="44" r="26" stroke={`url(#${g1})`} strokeWidth="2.5" fill="none" strokeOpacity="0.9" />
-
-      {/* Inner ring */}
-      <circle cx="50" cy="50" r="18" stroke={`url(#${gGlow})`} strokeWidth="2.5" fill="none" />
-
-      {/* Central Solid Circle matching UI Accent/Primary */}
-      <circle cx="50" cy="50" r="12" fill={`url(#${g1})`} />
+    <svg viewBox="0 0 32 32" className={className} aria-hidden="true" fill="none">
+      <rect x="2" y="5" width="20" height="11" rx="5.5" transform="rotate(-18 12 10.5)" fill="#FF4D32" />
+      <rect x="10" y="15" width="20" height="11" rx="5.5" transform="rotate(-18 20 20.5)" fill="#FF4D32" opacity="0.82" />
     </svg>
   );
 }
 
 export const FlowPostIcon = RallyIcon;
+export const RallyMark = RallyIcon;
 
 export function Logo({
   className,
@@ -65,10 +26,10 @@ export function Logo({
   variant = "default",
 }: LogoProps) {
   const sizeClasses = {
-    sm: { icon: "h-7 w-7", text: "text-lg" },
-    md: { icon: "h-8 w-8", text: "text-xl" },
-    lg: { icon: "h-10 w-10", text: "text-2xl" },
-    xl: { icon: "h-16 w-16", text: "text-4xl" },
+    sm: { icon: "h-6 w-6", text: "text-[18px]" },
+    md: { icon: "h-7 w-7", text: "text-[20px]" },
+    lg: { icon: "h-9 w-9", text: "text-[24px]" },
+    xl: { icon: "h-12 w-12", text: "text-[32px]" },
   }[size];
 
   const textColor = {
@@ -78,13 +39,14 @@ export function Logo({
   }[variant];
 
   return (
-    <div className={cn("inline-flex items-center gap-2.5 font-bold tracking-tight select-none", className)}>
+    <div className={cn("inline-flex items-center gap-2.5 font-semibold tracking-[-0.04em] select-none", className)}>
       <RallyIcon className={sizeClasses.icon} />
       {!iconOnly && (
-        <span className={cn(sizeClasses.text, textColor, "font-extrabold tracking-tight")}>
-          R<span className="text-[#2563EB]">ally</span>
+        <span className={cn(sizeClasses.text, textColor, "font-semibold tracking-[-0.04em]")}>
+          Rally
         </span>
       )}
     </div>
   );
 }
+

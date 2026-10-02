@@ -7,13 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsGroup } from "@/components/settings/SettingsSection";
 import {
   Select,
   SelectContent,
@@ -74,13 +68,12 @@ export function SettingsForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>How you appear across the workspace.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <SettingsGroup
+        title="Profile"
+        description="How you appear across the workspace."
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="fullName">Full name</Label>
             <Input id="fullName" placeholder="Alex Morgan" {...register("fullName")} />
@@ -129,46 +122,42 @@ export function SettingsForm() {
               )}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SettingsGroup>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Default platforms</CardTitle>
-          <CardDescription>
-            Pre-selected whenever you create a new post.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Controller
-            control={control}
-            name="defaultPlatforms"
-            render={({ field }) => (
-              <PlatformSelector
-                value={field.value as Platform[]}
-                onChange={field.onChange}
-                integrations={integrations}
-                contextLabel="Personal"
-              />
-            )}
-          />
-        </CardContent>
-      </Card>
+      <SettingsGroup
+        title="Default platforms"
+        description="Pre-selected whenever you create a new post."
+      >
+        <Controller
+          control={control}
+          name="defaultPlatforms"
+          render={({ field }) => (
+            <PlatformSelector
+              value={field.value as Platform[]}
+              onChange={field.onChange}
+              integrations={integrations}
+              contextLabel="Personal"
+            />
+          )}
+        />
+      </SettingsGroup>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Notifications</CardTitle>
-          <CardDescription>Decide what lands in your inbox.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <SettingsGroup
+        title="Notifications"
+        description="Decide what lands in your inbox."
+      >
+        <ul className="divide-y border-y">
           {NOTIFICATION_OPTIONS.map((option) => (
-            <div
+            <li
               key={option.key}
-              className="flex items-center justify-between gap-4 rounded-md border p-4"
+              className="flex items-center justify-between gap-6 py-4"
             >
               <div>
                 <p className="text-sm font-medium">{option.label}</p>
-                <p className="text-xs text-muted-foreground">{option.description}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {option.description}
+                </p>
               </div>
               <Controller
                 control={control}
@@ -181,12 +170,12 @@ export function SettingsForm() {
                   />
                 )}
               />
-            </div>
+            </li>
           ))}
-        </CardContent>
-      </Card>
+        </ul>
+      </SettingsGroup>
 
-      <div className="flex justify-end">
+      <div className="sticky bottom-0 -mx-1 flex justify-end border-t bg-background/90 px-1 py-4 backdrop-blur-md">
         <Button type="submit" loading={isSubmitting} className="min-w-36">
           {saved ? (
             <>

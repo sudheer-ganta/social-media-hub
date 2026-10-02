@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Sparkles, Wand2, X, Camera, Palette, Compass, Lightbulb, Check } from "lucide-react";
+import { Loader2, Plus, Sparkles, Wand2, X, Camera, Palette, Compass, Lightbulb, Check } from "lucide-react";
+import { RallyIcon } from "@/components/brand/Logo";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -38,6 +39,7 @@ import type {
 import type { PostMediaItem } from "@/types";
 import { ReferenceImagesUploader, type ReferenceImage } from "./ReferenceImagesUploader";
 import { GenerationMatrixProgress } from "./GenerationMatrixProgress";
+import { EditableHeadline } from "./EditableHeadline";
 
 /**
  * "Create with FlowPost" — the AI creative-generation flow.
@@ -104,8 +106,8 @@ function ArtDirectionPreview({
   family: string;
   brandColors: string[];
 }) {
-  const c1 = brandColors[0] || "#3b82f6";
-  const c2 = brandColors[1] || "#8b5cf6";
+  const c1 = brandColors[0] || "#71717a";
+  const c2 = brandColors[1] || "#a1a1aa";
 
   const containerStyle = {
     background: `linear-gradient(135deg, ${c1}10, ${c2}20)`,
@@ -447,20 +449,34 @@ export function CreateWithFlowPostDialog({
    * already have: `asset` is only replaced on success, so the previous
    * creative stays on screen exactly as it was.
    */
-  async function handleRefine() {
-    if (!asset || !refineInstruction.trim()) return;
+  async function runRefine(instruction: string): Promise<boolean> {
+    if (!asset) return false;
     setRefining(true);
     try {
-      const result = await creativeService.refineCreative(asset.id, refineInstruction.trim());
+      const result = await creativeService.refineCreative(asset.id, instruction);
       setAsset(result);
-      setRefineInstruction("");
+      return true;
     } catch (err) {
       toast.error("Refinement failed. Your previous creative is unchanged.", {
         description: err instanceof Error ? err.message : undefined,
       });
+      return false;
     } finally {
       setRefining(false);
     }
+  }
+
+  async function handleRefine() {
+    const instruction = refineInstruction.trim();
+    if (!instruction) return;
+    if (await runRefine(instruction)) setRefineInstruction("");
+  }
+
+  /** The member typed their own headline: redraw with exactly that wording. */
+  function handleEditHeadline(text: string): Promise<boolean> {
+    return runRefine(
+      `Change the headline text on the image to exactly "${text}". Keep the scene, composition, logo and every other element unchanged.`,
+    );
   }
 
   async function handleRejectConcept(concept: ScoredCreativeConcept) {
@@ -524,47 +540,53 @@ export function CreateWithFlowPostDialog({
         if (!next) reset();
       }}
     >
-      <DialogContent className={cn("p-0 overflow-hidden transition-all duration-300", (step === "result" || step === "concepts") ? "max-w-4xl sm:max-w-4xl" : (step === "generating" || step === "discovering") ? "max-w-3xl sm:max-w-3xl" : "max-w-2xl sm:max-w-2xl")}>
-        <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle className="flex items-center gap-2 font-display text-lg">
-            <Sparkles className="h-4 w-4" />
-            Create with Rally
-          </DialogTitle>
-          <DialogDescription className="text-xs">
-            {step === "concepts"
-              ? "Rally found these creative directions. Pick the idea, not just a look."
-              : step === "generating" || step === "discovering"
-              ? "Rally AI is crafting your bespoke visual identity and campaign composition."
-              : "Describe the creative you want. Rally brings your brand's visual identity to it."}
-          </DialogDescription>
+      <DialogContent className={cn("flex max-h-[92dvh] flex-col gap-0 overflow-hidden bg-background p-0 transition-all duration-300", (step === "result" || step === "concepts") ? "max-w-4xl sm:max-w-4xl" : (step === "generating" || step === "discovering") ? "max-w-3xl sm:max-w-3xl" : "max-w-2xl sm:max-w-2xl")}>
+        <DialogHeader className="shrink-0 flex-row items-center gap-3 space-y-0 border-b px-6 py-4 pr-14 text-left">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <RallyIcon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 space-y-0.5">
+            <DialogTitle className="font-display text-base leading-tight">
+              Create with Rally
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-snug">
+              {step === "concepts"
+                ? "Rally found these creative directions. Pick the idea, not just a look."
+                : step === "discovering"
+                ? "Rally is exploring different ways to tell your idea."
+                : step === "generating"
+                ? "Rally is building your creative from the direction you picked."
+                : "Describe the creative you want. Rally brings your brand's visual identity to it."}
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4 max-h-[82vh] overflow-y-auto scrollbar-thin">
+        <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-6 py-6 scrollbar-thin">
           {step === "input" && (
             <>
-              <div className="space-y-1.5">
-                <Label htmlFor="fp-prompt" className="text-sm font-semibold">
+              <div className="space-y-2">
+                <Label htmlFor="fp-prompt" className="text-sm font-medium">
                   What are you creating?
                 </Label>
                 <Textarea
                   id="fp-prompt"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder='e.g. "A premium Diwali campaign for our new black kurta collection — elegant and festive, not loud."'
+                  placeholder='e.g. "A premium Diwali campaign for our new black kurta collection, elegant and festive, not loud."'
                   rows={4}
+                  className="resize-none bg-card"
                   disabled={busy}
                 />
               </div>
 
-              <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-2.5">
-                <div className="flex items-center justify-between">
+              <div className="space-y-3 rounded-xl border bg-secondary/40 px-4 py-3.5">
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                    <span className="text-xs font-medium text-foreground">
-                      Marketing Strategy
+                    <span className="text-sm font-medium text-foreground">
+                      Marketing strategy
                     </span>
                     {!customStrategyOverride && (
-                      <span className="text-[10px] bg-primary/10 text-primary font-medium px-2 py-0.5 rounded-full">
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                         Auto-detected
                       </span>
                     )}
@@ -573,7 +595,7 @@ export function CreateWithFlowPostDialog({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => setCustomStrategyOverride(!customStrategyOverride)}
                     disabled={busy}
                   >
@@ -582,26 +604,26 @@ export function CreateWithFlowPostDialog({
                 </div>
 
                 {!customStrategyOverride ? (
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-foreground">Goal:</span>
-                      <span className="bg-background/80 px-2 py-0.5 rounded border text-[11px] font-medium text-foreground">
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <span>Goal</span>
+                      <span className="rounded-md border bg-card px-2.5 py-1 text-xs font-medium text-foreground">
                         {GOAL_META[activeGoal]?.label || activeGoal}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-foreground">Funnel:</span>
-                      <span className="bg-background/80 px-2 py-0.5 rounded border text-[11px] font-medium text-foreground">
+                    <div className="flex items-center gap-2">
+                      <span>Funnel</span>
+                      <span className="rounded-md border bg-card px-2.5 py-1 text-xs font-medium text-foreground">
                         {FUNNEL_META[activeFunnelStage]?.label || activeFunnelStage}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Goal</Label>
+                  <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Goal</Label>
                       <Select value={manualGoal} onValueChange={(v) => setManualGoal(v as MarketingGoal)} disabled={busy}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-card"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {GOALS.map((g) => (
                             <SelectItem key={g} value={g}>{GOAL_META[g].label}</SelectItem>
@@ -609,10 +631,10 @@ export function CreateWithFlowPostDialog({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Funnel stage</Label>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Funnel stage</Label>
                       <Select value={manualFunnelStage} onValueChange={(v) => setManualFunnelStage(v as FunnelStage)} disabled={busy}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="bg-card"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {FUNNEL_STAGES.map((f) => (
                             <SelectItem key={f} value={f}>{FUNNEL_META[f].label}</SelectItem>
@@ -624,10 +646,10 @@ export function CreateWithFlowPostDialog({
                 )}
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Creative style</Label>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Creative style</Label>
                 <Select value={styleId} onValueChange={setStyleId} disabled={busy}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-card"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="auto">Auto-detect from my brief</SelectItem>
                     {styles.map((style) => (
@@ -635,48 +657,48 @@ export function CreateWithFlowPostDialog({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs leading-relaxed text-muted-foreground">
                   Your choice guides the composition, typography, colors and image style. Reference images guide the look within this style.
                 </p>
               </div>
 
               {(
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-semibold">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label className="text-sm font-medium">
                       Brand logo <span className="text-destructive">*</span>
                     </Label>
                     {isUsingSavedBrandLogo && (
-                      <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/20 bg-emerald-500/10 gap-1 font-normal">
-                        <Check className="h-3 w-3" /> Auto-loaded from {brandVoiceProfile?.name || activeBrand?.name || "Brand Voice"}
+                      <Badge variant="outline" className="gap-1 border-success/25 bg-success/10 text-[11px] font-normal text-success">
+                        <Check className="h-3 w-3" /> Loaded from {brandVoiceProfile?.name || activeBrand?.name || "Brand Voice"}
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
                     Required. Your original logo gets its own clear space, away from text and product images.
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 pt-1">
                     {logoAssetUrl ? (
                       <img
                         src={logoAssetUrl}
                         alt="Brand logo"
-                        className="h-10 w-10 rounded border bg-secondary object-contain p-1 shrink-0"
+                        className="h-12 w-12 shrink-0 rounded-lg border bg-secondary object-contain p-1.5"
                       />
                     ) : null}
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs"
+                      className="h-9 bg-card text-sm"
                       disabled={uploadingLogo || busy}
                       onClick={() => logoInputRef.current?.click()}
                     >
                       {uploadingLogo ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : logoAssetUrl ? (
                         "Replace logo"
                       ) : (
-                        "+ Upload logo"
+                        "Upload logo"
                       )}
                     </Button>
                     {logoOverride && brandVoiceLogo && (
@@ -684,7 +706,7 @@ export function CreateWithFlowPostDialog({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                        className="h-9 text-sm text-muted-foreground hover:text-foreground"
                         onClick={() => setLogoOverride(null)}
                       >
                         Reset to brand logo
@@ -703,28 +725,31 @@ export function CreateWithFlowPostDialog({
                     />
                   </div>
                   {logoMissing && (
-                    <p className="text-[11px] text-destructive">
+                    <p className="text-xs font-medium text-destructive">
                       Add your logo to create a creative.
                     </p>
                   )}
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Product images to include (optional)</Label>
-                <div className="flex flex-wrap gap-2">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Product images <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <div className="flex flex-wrap items-center gap-2">
                   {assets.map((a) => (
                     <span
                       key={a.url}
-                      className="inline-flex items-center gap-1.5 rounded-full border bg-secondary px-2.5 py-1 text-xs"
+                      className="inline-flex h-9 items-center gap-2 rounded-lg border bg-card px-3 text-sm"
                     >
                       {a.name}
                       <button
                         type="button"
                         onClick={() => setAssets((prev) => prev.filter((x) => x.url !== a.url))}
+                        aria-label={`Remove ${a.name}`}
                         className="text-muted-foreground hover:text-foreground"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" />
                       </button>
                     </span>
                   ))}
@@ -732,11 +757,11 @@ export function CreateWithFlowPostDialog({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs"
+                    className="h-9 gap-1.5 bg-card text-sm"
                     disabled={uploading || busy || assets.length >= 5}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : "+ Add"}
+                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Plus className="h-4 w-4" />Add image</>)}
                   </Button>
                   <input
                     ref={fileInputRef}
@@ -751,7 +776,7 @@ export function CreateWithFlowPostDialog({
                   />
                 </div>
                 {assets.length > 0 && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
                     Every image you add will appear in the post, without redrawing or cropping it.
                   </p>
                 )}
@@ -763,32 +788,32 @@ export function CreateWithFlowPostDialog({
                 disabled={busy}
               />
 
-              {error && <p className="text-xs text-destructive">{error}</p>}
+              {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             </>
           )}
 
           {step === "discovering" && (
             <div className="py-2">
-              <GenerationMatrixProgress initialStage="Analyzing brief & discovering directions" />
+              <GenerationMatrixProgress variant="concepts" />
             </div>
           )}
 
           {step === "generating" && (
             <div className="py-2">
-              <GenerationMatrixProgress initialStage="Sketching it out" />
+              <GenerationMatrixProgress variant="image" />
             </div>
           )}
 
           {step === "concepts" && (
             <div className="space-y-3">
               {referenceStyle && referenceStyle.analysed && (
-                <div className="rounded-md border border-dashed px-3 py-2">
+                <div className="rounded-xl border border-dashed bg-card px-4 py-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Rally understood your style
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {summariseReferenceStyleTags(referenceStyle).map((tag) => (
-                      <span key={tag} className="rounded-full bg-secondary px-2 py-0.5 text-[11px]">
+                      <span key={tag} className="rounded-full bg-secondary px-2.5 py-0.5 text-xs">
                         {tag}
                       </span>
                     ))}
@@ -799,18 +824,15 @@ export function CreateWithFlowPostDialog({
                   <p className="mt-1 text-[11px] text-muted-foreground">Creating something original from this direction.</p>
                 </div>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2">
                 {concepts.map((concept) => (
                   <div
                     key={concept.conceptId ?? concept.conceptName}
-                    style={{
-                      borderTop: `2px solid ${creativeDnaProfile?.dna.brandColors?.[0] || '#3b82f6'}`
-                    }}
-                    className="flex flex-col gap-3 rounded-lg border bg-card/45 backdrop-blur-sm p-3.5 justify-between shadow-sm hover:shadow-md transition-all duration-300 hover:scale-[1.01] hover:border-muted-foreground/20"
+                    className="flex flex-col justify-between gap-5 rounded-xl border bg-card p-4 shadow-sm transition-shadow duration-300 hover:border-foreground/25 hover:shadow-md"
                   >
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       {concept.generationStatus === "generated" && (
-                        <span className="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                        <span className="inline-flex rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
                           Generated
                         </span>
                       )}
@@ -825,7 +847,7 @@ export function CreateWithFlowPostDialog({
                         <span className="rounded bg-secondary/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
                           {concept.visualMechanism}
                         </span>
-                        <span className="rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                        <span className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
                           {concept.artDirectionFamily.includes("PHOTO") || concept.artDirectionFamily === "DOCUMENTARY" || concept.artDirectionFamily === "CINEMATIC" ? (
                             <Camera className="h-2.5 w-2.5" />
                           ) : (
@@ -833,23 +855,23 @@ export function CreateWithFlowPostDialog({
                           )}
                           {formatArtDirectionFamily(concept.artDirectionFamily)}
                         </span>
-                        <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider flex items-center gap-1">
+                        <span className="flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
                           <Compass className="h-2.5 w-2.5" />
                           {concept.mode}
                         </span>
                       </div>
 
                       {/* Concept Title */}
-                      <p className="text-sm font-bold leading-snug text-foreground">{concept.conceptName}</p>
+                      <p className="font-display text-base font-semibold leading-snug tracking-tight text-foreground">{concept.conceptName}</p>
 
                       {/* Big Idea Description */}
-                      <p className="text-xs text-muted-foreground leading-relaxed">{concept.bigIdea}</p>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{concept.bigIdea}</p>
 
                       {/* Why it works visual callout */}
                       {concept.whyItWouldStopTheScroll && (
-                        <div className="rounded bg-primary/5 border border-primary/10 p-2 text-[10px] leading-relaxed text-muted-foreground">
-                          <span className="font-semibold text-primary flex items-center gap-1 mb-0.5">
-                            <Lightbulb className="h-3 w-3" /> Why this works:
+                        <div className="rounded-lg bg-secondary/60 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+                          <span className="mb-1 flex items-center gap-1.5 font-medium text-foreground">
+                            <Lightbulb className="h-3.5 w-3.5" /> Why this works
                           </span>
                           {concept.whyItWouldStopTheScroll}
                         </div>
@@ -857,16 +879,15 @@ export function CreateWithFlowPostDialog({
 
                       {/* Brand connection */}
                       {concept.brandConnection && (
-                        <p className="text-[10px] text-muted-foreground/80 italic pl-1.5 border-l border-muted">
+                        <p className="border-l-2 pl-3 text-xs italic leading-relaxed text-muted-foreground">
                           {concept.brandConnection}
                         </p>
                       )}
                     </div>
 
-                    <div className="mt-2 flex gap-2">
+                    <div className="flex gap-2">
                     <Button
-                      size="sm"
-                      className="w-full flex items-center justify-center gap-1.5 shadow-sm"
+                      className="h-10 flex-1 gap-1.5"
                       disabled={busy || logoMissing}
                       onClick={() => handleCreateConcept(concept)}
                     >
@@ -878,7 +899,7 @@ export function CreateWithFlowPostDialog({
                       {concept.generationStatus === "generated" ? "Show creative" : "Create this creative"}
                     </Button>
                     {contextType === "brand" && concept.generationStatus !== "generated" && (
-                      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => handleRejectConcept(concept)}>
+                      <Button type="button" variant="outline" className="h-10" disabled={busy} onClick={() => handleRejectConcept(concept)}>
                         Not for us
                       </Button>
                     )}
@@ -894,7 +915,7 @@ export function CreateWithFlowPostDialog({
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
               <div className="md:col-span-6 space-y-2">
                 {asset.imageUrl && (
-                  <div className="relative overflow-hidden rounded-xl border bg-black/5 shadow-md flex items-center justify-center">
+                  <div className="relative flex items-center justify-center overflow-hidden rounded-xl border bg-secondary/50 shadow-sm">
                     <img
                       src={asset.imageUrl}
                       alt={asset.creativeBrief.concept}
@@ -905,15 +926,16 @@ export function CreateWithFlowPostDialog({
               </div>
               <div className="md:col-span-6 space-y-4">
                 <div>
-                  <h3 className="text-base font-bold text-foreground leading-snug">{asset.creativeBrief.concept}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{asset.creativeBrief.visualStory}</p>
+                  <h3 className="font-display text-lg font-semibold leading-snug tracking-tight text-foreground">{asset.creativeBrief.concept}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{asset.creativeBrief.visualStory}</p>
                 </div>
                 
                 {asset.creativeBrief.headline && (
-                  <div className="rounded-lg bg-secondary/50 p-3 border">
-                    <p className="text-xs font-semibold text-foreground">Headline Hook:</p>
-                    <p className="mt-0.5 text-xs text-foreground/90 font-medium">"{asset.creativeBrief.headline}"</p>
-                  </div>
+                  <EditableHeadline
+                    value={asset.creativeBrief.headline}
+                    busy={refining}
+                    onApply={handleEditHeadline}
+                  />
                 )}
                 {asset.creativeBrief.marketingCreative?.brandMessage && (
                   <p className="text-xs text-muted-foreground">"{asset.creativeBrief.marketingCreative.brandMessage}"</p>
@@ -932,17 +954,17 @@ export function CreateWithFlowPostDialog({
                   </div>
                 )}
 
-                <div className="pt-2 space-y-1.5 border-t">
-                  <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                <div className="space-y-2 border-t pt-4">
+                  <label className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                     <Wand2 className="h-3.5 w-3.5 text-primary" /> Refine Creative
                   </label>
                   <div className="flex items-center gap-2">
                     <Textarea
                       value={refineInstruction}
                       onChange={(e) => setRefineInstruction(e.target.value)}
-                      placeholder='Refine — e.g. "make it brighter", "more vibrant flowers"'
+                      placeholder='Refine, e.g. "make it brighter", "more vibrant flowers"'
                       rows={2}
-                      className="resize-none text-xs"
+                      className="resize-none bg-card text-sm"
                       disabled={refining}
                     />
                     <Button size="sm" disabled={refining || !refineInstruction.trim()} onClick={handleRefine} className="h-full px-3">
@@ -955,7 +977,7 @@ export function CreateWithFlowPostDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-background px-6 py-4">
           {step === "input" && (
             <Button onClick={handleDiscoverConcepts} disabled={busy || !prompt.trim()}>
               <Sparkles className="mr-1.5 h-4 w-4" />

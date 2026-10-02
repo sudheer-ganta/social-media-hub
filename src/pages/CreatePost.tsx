@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { toast } from "sonner";
-import { PageContainer } from "@/components/layout/PageContainer";
+import { RallyPage } from "@/components/layout/RallyPage";
 import { CreatePostForm } from "@/components/posts/CreatePostForm";
 import { ContextSwitcher } from "@/components/posts/ContextSwitcher";
 import { Button } from "@/components/ui/button";
@@ -166,76 +166,42 @@ export default function CreatePost() {
 
   if (isLoading) {
     return (
-      <PageContainer title={editing ? "Edit Post" : "New Post"}>
+      <RallyPage title={editing ? "Edit post" : "New post"}>
         <div className="grid gap-6 lg:grid-cols-2">
-          <Skeleton className="h-96 w-full rounded-lg" />
-          <Skeleton className="h-96 w-full rounded-lg" />
+          <Skeleton className="h-96 w-full rounded-[18px]" />
+          <Skeleton className="h-96 w-full rounded-[18px]" />
         </div>
-      </PageContainer>
+      </RallyPage>
     );
   }
 
   if (!editing && brands.length === 0) {
     return (
-      <PageContainer
-        title={
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={() => navigate("/posts")}
-              aria-label="Back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <span>New Post</span>
-          </div>
-        }
+      <RallyPage
+        title="New post"
+        onBack={() => navigate("/posts")}
         description="Set up your brand profile to start creating tailored content."
       >
-        <div className="mx-auto mt-8 max-w-lg rounded-xl border border-primary/20 bg-gradient-to-b from-card via-card to-primary/[0.04] p-8 text-center shadow-soft">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm">
+        <div className="rd-panel mx-auto mt-4 max-w-lg p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rd-tile">
             <Building2 className="h-7 w-7" />
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-foreground">Create your Brand Profile first</h2>
-          <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-foreground">Create your Brand Profile first</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             Rally uses your brand identity, tone of voice, and guidelines to generate tailored, high-converting social media posts.
           </p>
-          <Button
-            onClick={() => navigate("/settings?tab=brands")}
-            className="mt-6 gap-2 shadow-glow"
-          >
+          <Button onClick={() => navigate("/settings?tab=brands")} className="mt-6 gap-2">
             <Building2 className="h-4 w-4" />
             <span>Set Up Brand Profile</span>
           </Button>
         </div>
-      </PageContainer>
+      </RallyPage>
     );
   }
 
   const brand: Brand | null = resolvedContext.brandId
     ? (brands.find((b) => b.id === resolvedContext.brandId) ?? null)
     : null;
-
-  const titleNode = editing ? (
-    "Edit Post"
-  ) : (
-    <div className="flex items-center gap-3">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-        onClick={() => navigate("/posts")}
-        aria-label="Back"
-      >
-        <ArrowLeft className="h-4 w-4" />
-      </Button>
-      <span>New Post</span>
-    </div>
-  );
 
   const description = editing
     ? "Refine your post and reschedule if needed."
@@ -245,8 +211,9 @@ export default function CreatePost() {
 
   return (
     <>
-      <PageContainer
-        title={titleNode}
+      <RallyPage
+        title={editing ? "Edit post" : "New post"}
+        onBack={editing ? undefined : () => navigate("/posts")}
         description={description}
         className="pb-0 sm:pb-0 lg:pb-0"
         actions={
@@ -266,7 +233,7 @@ export default function CreatePost() {
           onDirtyChange={setIsFormDirty}
           saveDraftRef={saveDraftRef}
         />
-      </PageContainer>
+      </RallyPage>
 
       <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
         <DialogContent>

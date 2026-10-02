@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Building2, Wand2, ArrowRight, Sparkles } from "lucide-react";
+import { Building2, Wand2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RallyIcon } from "@/components/brand/Logo";
 import { useBrands } from "@/hooks/useBrands";
 import { useBrandVoices } from "@/hooks/useBrandVoices";
 
@@ -29,7 +30,7 @@ export function BrandHeaderPrompt() {
           <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
-                <Sparkles className="h-3.5 w-3.5" />
+                <RallyIcon className="h-3.5 w-3.5" />
               </span>
               <p className="font-medium">
                 <strong className="text-primary font-semibold">Welcome to Rally!</strong> Create your Brand Profile to start generating tailored, on-brand social content.
