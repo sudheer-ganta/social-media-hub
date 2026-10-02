@@ -3,7 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { env } from './config/env';
 import { requireAuth } from './middleware/auth.middleware';
-import { globalLimiter, aiLimiter, creativeLimiter } from './middleware/rate-limit.middleware';
+import { globalLimiter, aiLimiter, creativeLimiter, creativeEditLimiter } from './middleware/rate-limit.middleware';
+import { FONTS_ROOT } from './ai/typography/font-catalog';
 
 const app = express();
 
@@ -99,6 +100,16 @@ app.use(express.json());
 // Ceiling on everything, before any route does work.
 app.use(globalLimiter);
 
+// The self-hosted fonts the renderer sets type in, so the editor can preview a
+// font with the very file the creative will use. Open-licence files, nothing
+// private, so no auth: a browser font load cannot send a token. Static, .ttf
+// only, and immutable, so each file is downloaded once per browser.
+app.use('/api/fonts', (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') { res.sendStatus(405); return; }
+  if (!/\.ttf$/i.test(req.path)) { res.sendStatus(404); return; }
+  next();
+}, express.static(FONTS_ROOT, { maxAge: '365d', immutable: true, index: false, dotfiles: 'ignore', extensions: false }));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -137,6 +148,7 @@ import aiRoutes from './routes/ai.routes';
 // Authenticate first so the limiter can count per user rather than per IP.
 // `requireAuth` is a no-op the second time a route names it.
 app.use('/api/ai/creative', requireAuth, creativeLimiter);
+app.use('/api/ai/creative/retype', creativeEditLimiter);
 app.use('/api/ai', requireAuth, aiLimiter);
 app.use('/api/ai', aiRoutes);
 

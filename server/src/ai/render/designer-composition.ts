@@ -48,6 +48,8 @@ import {
   evaluateImageAffordance,
 } from '../intent/image-affordance-evaluation';
 import { buildVisualArtifactComposition } from './visual-artifact-composition';
+import { applyTextStyles, copyBaseScales, summariseTypeset, type AppliedTextStyles } from './type-style-apply';
+import { LayoutMismatchError, type PersistedLayout, type TextStylesByRole } from './type-style';
 
 export class InvalidRenderableCopyError extends Error {
   constructor(message: string, readonly invalidContent: string) {
@@ -152,7 +154,33 @@ export interface DesignerInput {
   fallbackConcepts?: GraphicDesignConcept[];
   /** Research from the brand+occasion+style grounded search — used for AI font selection and vision composition. */
   research?: CreativeResearch;
+  /**
+   * Text-edit mode: re-typeset new copy over a picture that already exists.
+   * No image is generated and the critic's verdict cannot trigger a redesign
+   * (both would change a picture the member did not ask to change); a render
+   * that cannot be fitted throws instead.
+   */
+  retype?: boolean;
+  /** The picture to keep, as saved on the original creative. Absent for creatives that have no generated picture. */
+  lockedVisual?: InlineImagePart;
+  /** The original creative's typography, so a text edit keeps its fonts. */
+  lockedTypography?: TypographySelection;
+  /** The member's font, weight, size and colour choices per copy role. Only honoured in retype mode. */
+  textStyles?: TextStylesByRole;
 }
+
+/** Stands in for the critic on a text edit, where its verdict is never acted on. */
+const RETYPE_CRITIC_SKIPPED: DesignCriticEvaluation = {
+  passed: true,
+  templateLook: false,
+  humanCraft: true,
+  singleClearIdea: true,
+  layoutExpressesIdea: true,
+  interchangeableWithAnotherEvent: false,
+  problems: [],
+  reasonsToReject: [],
+  redesignFeedback: '',
+};
 
 /**
  * Kill switch for the measured-placement stage (image-field + text-placement +
@@ -1449,14 +1477,13 @@ export function composeHighFidelityVisualPrompt(options: {
     .join('\n\n');
 }
 
-export async function designCreative(input: DesignerInput) {
-  const { direction, context, textProvider, imageProvider, canonicalBrief, graphicConcept, onStageTiming } = input;
-  let { styleDna } = input;
-  let currentGraphicConcept: GraphicDesignConcept =
-    graphicConcept || direction.graphicConcept || fallbackConceptFrom(direction);
-
-  const requiredClaims = context.intent?.requiredClaims ?? [];
-  const effectiveCopyPlan = currentGraphicConcept.copyPlan ?? (
+/**
+ * The copy roles this creative's idea asked for. One definition, shared by the
+ * generation path and by text editing, so what a member can edit is exactly
+ * what the renderer would typeset.
+ */
+export function resolveEffectiveCopyPlan(direction: CreativeDirection, concept: GraphicDesignConcept) {
+  return concept.copyPlan ?? (
     direction.copyTreatment === 'none'
       ? { requiredRoles: [], maxTextElements: 0, rationale: 'Visual hero without copy overlay' }
       : (direction.copyTreatment as any) === 'headline_only'
@@ -1465,6 +1492,103 @@ export async function designCreative(input: DesignerInput) {
       ? { requiredRoles: ['HEADLINE', 'SUPPORT', 'CTA'], maxTextElements: 3, rationale: 'Headline with supporting statement and action' }
       : { requiredRoles: ['HEADLINE', 'OFFER', 'CTA'], maxTextElements: 3, rationale: 'Essential campaign message, offer and action' }
   );
+}
+
+/**
+ * Re-renders a finished creative's SAVED layout with new wording and/or
+ * typography on the lines the member touched, leaving every other line exactly
+ * where, how big and what colour it was.
+ *
+ * This is what a text edit runs. It takes no model providers at all: it cannot
+ * generate an image, ask a critic, pick fonts or search for a different layout,
+ * so it cannot rearrange the creative around the edit. It throws
+ * {@link LayoutMismatchError} when the saved layout no longer describes the
+ * creative's lines, and the caller falls back to {@link designCreative}.
+ */
+export async function retypeCreativeFromLayout(input: {
+  direction: CreativeDirection;
+  context: CreativeRenderContext;
+  styleDna?: ResolvedStyleDNA;
+  graphicConcept?: GraphicDesignConcept;
+  products: InlineImagePart[];
+  logo: InlineImagePart;
+  lockedVisual?: InlineImagePart;
+  typography: TypographySelection;
+  layout: PersistedLayout;
+  /** Typography requested NOW, keyed by copy role. Earlier choices are already part of the saved layout. */
+  changes: TextStylesByRole;
+}) {
+  const { direction, context, layout, typography } = input;
+  const concept = input.graphicConcept || direction.graphicConcept || fallbackConceptFrom(direction);
+  const requiredClaims = context.intent?.requiredClaims ?? [];
+  const copyPlan = resolveEffectiveCopyPlan(direction, concept);
+  const renderable = validateAndBuildRenderableCopy(
+    collectCampaignCopy(direction, concept.elementsToOmit, copyPlan, requiredClaims),
+    requiredClaims,
+    copyPlan.maxTextElements || 3,
+  );
+  const copy = renderable.map((r) => ({ role: r.role, text: r.text }));
+  const missing = evaluateIntentFidelity(requiredClaims, copy.map((c) => c.text).join(' ')).missingRequirements;
+  if (missing.length) throw new Error(`Copy is missing required campaign facts: ${missing.join(', ')}.`);
+
+  // The saved layout must describe exactly these lines: same set, same roles.
+  const byId = new Map(renderable.map((r) => [r.id, r]));
+  const copyNodes = layout.plan.nodes.filter((n) => n.kind === 'copy');
+  if (copyNodes.length !== renderable.length || copyNodes.some((n) => byId.get(n.id)?.role !== layout.roles[n.id])) {
+    throw new LayoutMismatchError('The saved layout does not match the lines on this creative.');
+  }
+
+  const plan = structuredClone(layout.plan);
+  const texts: Record<string, string> = {};
+  for (const r of renderable) if (layout.copy[r.id] !== r.text) texts[r.id] = r.text;
+
+  const canvas = dimensions(direction.aspectRatio);
+  const applied = applyTextStyles({
+    nodes: plan.nodes,
+    roleByNodeId: layout.roles,
+    styles: input.changes,
+    texts,
+    baseScales: layout.baseScales,
+    canvas,
+  });
+
+  const { recipe } = resolveDesignRecipe(direction, context.creativeDna, {
+    styleDna: input.styleDna?.style, styleDnaVariant: input.styleDna?.variant, referenceStyle: context.referenceStyle,
+  });
+  const typeSystem = buildTypeSystem({ typography, concept, copy });
+  const data = await renderDesignerPlan(
+    plan,
+    { products: input.products, logo: input.logo, direction },
+    copy,
+    typography,
+    input.lockedVisual,
+    recipe.texture,
+    concept,
+    typeSystem,
+  );
+
+  return {
+    data,
+    mimeType: 'image/png' as const,
+    visual: input.lockedVisual,
+    plan,
+    typography,
+    typeset: summariseTypeset(plan.nodes, layout.roles),
+    appliedTextStyles: Object.keys(applied).length ? applied : undefined,
+    copyNodeRoles: layout.roles,
+    copyById: Object.fromEntries(renderable.map((r) => [r.id, r.text])),
+    baseScales: layout.baseScales,
+  };
+}
+
+export async function designCreative(input: DesignerInput) {
+  const { direction, context, textProvider, imageProvider, canonicalBrief, graphicConcept, onStageTiming } = input;
+  let { styleDna } = input;
+  let currentGraphicConcept: GraphicDesignConcept =
+    graphicConcept || direction.graphicConcept || fallbackConceptFrom(direction);
+
+  const requiredClaims = context.intent?.requiredClaims ?? [];
+  const effectiveCopyPlan = resolveEffectiveCopyPlan(direction, currentGraphicConcept);
   const rawCopy = collectCampaignCopy(
     direction, currentGraphicConcept.elementsToOmit, effectiveCopyPlan, requiredClaims,
   );
@@ -1483,7 +1607,7 @@ export async function designCreative(input: DesignerInput) {
   const { recipe, source } = resolveDesignRecipe(direction, context.creativeDna, {
     styleDna: styleDna?.style, styleDnaVariant: styleDna?.variant, referenceStyle: context.referenceStyle,
   });
-  const typography = await selectTypography({
+  const typography = input.lockedTypography ?? await selectTypography({
     direction,
     creativeDna: context.creativeDna,
     recipe,
@@ -1601,7 +1725,9 @@ export async function designCreative(input: DesignerInput) {
     hardRequirementsCount: creativeRealizationContract.hardRequirements.length,
   });
 
-  let visual: InlineImagePart | undefined;
+  let visual: InlineImagePart | undefined = input.lockedVisual
+    ? Object.assign({ ...input.lockedVisual }, { fidelityVerified: true })
+    : undefined;
   let firstAttemptResult: any = null;
   let activeRecoveryContext: CompositionRecoveryContext | undefined;
 
@@ -1844,14 +1970,16 @@ export async function designCreative(input: DesignerInput) {
     const copyItems = renderableCopy.map((c) => {
       const isHeadline = c.role === 'HEADLINE' || c.semanticRole === 'primary-hook';
       const isSub = c.role === 'OFFER' || c.semanticRole === 'secondary-hook';
+      // A family the member chose is the ONLY candidate, so the solver wraps and fits around it.
+      const chosenFamily = input.retype ? input.textStyles?.[c.role]?.fontFamily : undefined;
       return {
         id: c.id,
         text: c.text,
         role: (isHeadline ? 'headline' : isSub ? 'subheadline' : 'body') as 'headline' | 'subheadline' | 'body',
         priority: c.priority,
-        font: isHeadline ? typography.headlineFont : typography.bodyFont,
-        approvedFonts: isHeadline ? approvedHeadlineFonts : approvedBodyFonts,
-        weight: isHeadline ? typography.headlineWeight : typography.bodyWeight,
+        font: chosenFamily ?? (isHeadline ? typography.headlineFont : typography.bodyFont),
+        approvedFonts: chosenFamily ? [chosenFamily] : isHeadline ? approvedHeadlineFonts : approvedBodyFonts,
+        weight: input.textStyles?.[c.role]?.fontWeight ?? (isHeadline ? typography.headlineWeight : typography.bodyWeight),
       };
     });
 
@@ -2046,6 +2174,19 @@ export async function designCreative(input: DesignerInput) {
       });
     }
 
+    const copyNodeRoles = Object.fromEntries(renderableCopy.map((r) => [r.id, r.role as string]));
+    // Taken before any member styling: each line's 100%, which later size choices are measured against.
+    const baseScales = copyBaseScales(planNodes);
+    let appliedTextStyles: AppliedTextStyles | undefined;
+    if (input.retype && input.textStyles && Object.keys(input.textStyles).length) {
+      appliedTextStyles = applyTextStyles({
+        nodes: planNodes,
+        roleByNodeId: copyNodeRoles,
+        styles: input.textStyles,
+        canvas: canvasDims,
+      });
+    }
+
     const plan: DesignerPlan = {
       background: normalizeHex((recipe as any).background || '#111111', '#111111'),
       rationale: bestState.evaluation.reasons.join('; '),
@@ -2075,9 +2216,9 @@ export async function designCreative(input: DesignerInput) {
       );
       onStageTiming?.('render', Date.now() - renderStart);
 
-      input.onCall?.('text');
+      if (!input.retype) input.onCall?.('text');
       const criticStart = Date.now();
-      critic = await evaluateRenderedDesign({
+      critic = input.retype ? RETYPE_CRITIC_SKIPPED : await evaluateRenderedDesign({
         provider: textProvider,
         renderedPng: rendered,
         brief: {
@@ -2142,7 +2283,7 @@ export async function designCreative(input: DesignerInput) {
         };
       }
     } catch (renderError) {
-      if (renderError instanceof InvalidRenderableCopyError && attempt === 0) {
+      if (renderError instanceof InvalidRenderableCopyError && attempt === 0 && !input.retype) {
         console.warn('[creative] renderer invariant caught structured artifact; routing to recovery', {
           invalidContent: renderError.invalidContent,
         });
@@ -2190,9 +2331,16 @@ export async function designCreative(input: DesignerInput) {
       assetIds: plan.nodes.filter(n => n.kind === 'product').map(n => n.id),
       critic,
       visualArtifactComposition,
+      /** What was typeset per copy role, and the member's style overrides as actually applied. */
+      typeset: summariseTypeset(planNodes, copyNodeRoles),
+      appliedTextStyles,
+      /** What a later text edit needs to re-render this exact layout: see {@link PersistedLayout}. */
+      copyNodeRoles,
+      copyById: Object.fromEntries(renderableCopy.map((r) => [r.id, r.text])),
+      baseScales,
     };
 
-    if (critic.passed) {
+    if (critic.passed || input.retype) {
       return currentResult;
     }
 

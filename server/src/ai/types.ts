@@ -1850,6 +1850,21 @@ export interface CreativeRenderContext {
    * so an image model is never handed back typography it then has to redraw.
    */
   visualImageUrl?: string;
+  /** What the composer typeset per copy role (see render/type-style.ts `TypesetLine`). */
+  typeset?: Record<string, { fontFamily: string; fontWeight: number; fontScale: number; color: string }>;
+  /**
+   * The solved layout, so a text edit re-renders THIS layout and re-fits only the
+   * lines touched (see render/type-style.ts `PersistedLayout`). Absent on creatives
+   * made before it was kept: an edit then re-solves the layout instead.
+   */
+  layout?: {
+    plan: { background: string; rationale: string; visualPrompt?: string; nodes: any[] };
+    roles: Record<string, string>;
+    copy: Record<string, string>;
+    baseScales: Record<string, number>;
+  };
+  /** The member's typography choices per copy role, as applied (see render/type-style.ts `RoleTextStyle`). */
+  textStyles?: Record<string, { fontFamily?: string; fontWeight?: number; sizeScale?: number; color?: string }>;
 }
 
 /** The request behind `POST /api/ai/creative/direction` and `/generate`. */

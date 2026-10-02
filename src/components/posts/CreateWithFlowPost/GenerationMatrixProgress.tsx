@@ -42,16 +42,21 @@ const STAGES: Record<GenerationVariant, Stage[]> = {
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
+/** After this long the wait is longer than usual, and the screen says so instead of sitting at 98% as if stuck. */
+const SLOW_AFTER_MS = 75_000;
+
 /** Advances through the timed stages, then holds on the last and creeps. */
 function useStagedProgress(stages: Stage[]) {
   const [percent, setPercent] = useState(8);
   const [stage, setStage] = useState(0);
+  const [slow, setSlow] = useState(false);
 
   useEffect(() => {
     const last = stages.length - 1;
     const startTime = Date.now();
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
+      if (elapsed > SLOW_AFTER_MS) setSlow(true);
       let accumulated = 0;
       let found = false;
 
@@ -78,7 +83,7 @@ function useStagedProgress(stages: Stage[]) {
     return () => clearInterval(interval);
   }, [stages]);
 
-  return { percent, stage };
+  return { percent, stage, slow };
 }
 
 const sheetShell =
@@ -343,7 +348,7 @@ function ImageVisual({ stage, reduce }: { stage: number; reduce: boolean }) {
 export function GenerationMatrixProgress({ variant }: GenerationMatrixProgressProps) {
   const reduce = useReducedMotion() ?? false;
   const stages = STAGES[variant];
-  const { percent, stage } = useStagedProgress(stages);
+  const { percent, stage, slow } = useStagedProgress(stages);
 
   return (
     <div className="mx-auto grid w-full max-w-[640px] items-center gap-8 py-2 md:grid-cols-[250px_minmax(0,1fr)] md:gap-12">
@@ -405,6 +410,12 @@ export function GenerationMatrixProgress({ variant }: GenerationMatrixProgressPr
           </div>
           <span className="text-meta tnum w-9 text-right normal-case tracking-normal">{percent}%</span>
         </div>
+
+        {slow && (
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            This one is taking longer than usual. Rally is still working, and your creative will appear here as soon as it is ready.
+          </p>
+        )}
       </div>
     </div>
   );

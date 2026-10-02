@@ -39,7 +39,7 @@ import type {
 import type { PostMediaItem } from "@/types";
 import { ReferenceImagesUploader, type ReferenceImage } from "./ReferenceImagesUploader";
 import { GenerationMatrixProgress } from "./GenerationMatrixProgress";
-import { EditableHeadline } from "./EditableHeadline";
+import { CreativeTextEditor } from "@/components/creative/CreativeTextEditor";
 
 /**
  * "Create with FlowPost" — the AI creative-generation flow.
@@ -59,6 +59,7 @@ import { EditableHeadline } from "./EditableHeadline";
  */
 
 const GOALS = Object.keys(GOAL_META) as MarketingGoal[];
+
 const FUNNEL_STAGES = Object.keys(FUNNEL_META) as FunnelStage[];
 
 type Step = "input" | "discovering" | "concepts" | "generating" | "result";
@@ -470,13 +471,6 @@ export function CreateWithFlowPostDialog({
     const instruction = refineInstruction.trim();
     if (!instruction) return;
     if (await runRefine(instruction)) setRefineInstruction("");
-  }
-
-  /** The member typed their own headline: redraw with exactly that wording. */
-  function handleEditHeadline(text: string): Promise<boolean> {
-    return runRefine(
-      `Change the headline text on the image to exactly "${text}". Keep the scene, composition, logo and every other element unchanged.`,
-    );
   }
 
   async function handleRejectConcept(concept: ScoredCreativeConcept) {
@@ -930,16 +924,12 @@ export function CreateWithFlowPostDialog({
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{asset.creativeBrief.visualStory}</p>
                 </div>
                 
-                {asset.creativeBrief.headline && (
-                  <EditableHeadline
-                    value={asset.creativeBrief.headline}
-                    busy={refining}
-                    onApply={handleEditHeadline}
-                  />
-                )}
-                {asset.creativeBrief.marketingCreative?.brandMessage && (
-                  <p className="text-xs text-muted-foreground">"{asset.creativeBrief.marketingCreative.brandMessage}"</p>
-                )}
+                <CreativeTextEditor
+                  asset={asset}
+                  disabled={refining}
+                  onBusyChange={setRefining}
+                  onAssetChange={setAsset}
+                />
                 {asset.creativeBrief.marketingCreative?.secondaryInfo?.length ? (
                   <p className="text-xs text-muted-foreground">
                     {asset.creativeBrief.marketingCreative.secondaryInfo.join(' · ')}

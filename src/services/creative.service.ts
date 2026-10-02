@@ -20,9 +20,22 @@ const CREATIVE_ENDPOINT = "/api/ai/creative";
 
 const REQUEST_TIMEOUT_MS = 180_000;
 
-async function request<T>(path: string, init: RequestInit, fallback: string): Promise<T> {
+/** A failed request, with the HTTP status when the server answered (0 when it never did). */
+class RequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "RequestError";
+  }
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  fallback: string,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
@@ -41,9 +54,9 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
     );
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") {
-      throw new Error("This took too long. Please try again.");
+      throw new RequestError("This took too long. Please try again.", 0);
     }
-    throw new Error("Could not reach Rally's creative engine. Check your connection and try again.");
+    throw new RequestError("Could not reach Rally's creative engine. Check your connection and try again.", 0);
   } finally {
     clearTimeout(timeout);
   }
@@ -53,10 +66,70 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
   if (!response.ok) {
     const message =
       body && typeof body === "object" && typeof body.error === "string" ? body.error : fallback;
-    throw new Error(message);
+    throw new RequestError(message, response.status);
   }
 
   return body as T;
+}
+
+/**
+ * The slow calls (concepts, generate, refine, regenerate) run as background
+ * jobs: the server answers at once with a job id and the browser polls, so a
+ * generation that takes minutes is waited out instead of abandoned after one
+ * request's timeout. The result is exactly what the direct endpoint returns.
+ */
+const JOB_POLL_FIRST_MS = 1_500;
+const JOB_POLL_MAX_MS = 4_000;
+const JOB_POLL_REQUEST_TIMEOUT_MS = 30_000;
+/** Far beyond any real generation: a job that outlives this is reported, not waited on forever. */
+const JOB_MAX_WAIT_MS = 20 * 60 * 1000;
+const JOB_MAX_CONSECUTIVE_POLL_FAILURES = 6;
+
+interface JobView<T> {
+  id: string;
+  kind: string;
+  status: "running" | "done" | "failed";
+  result?: T;
+  error?: { message: string; status: number };
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function runJob<T>(kind: "concepts" | "generate" | "refine" | "regenerate", payload: unknown, fallback: string): Promise<T> {
+  // One key for this run: if the start request is retried, the server hands back the same job.
+  const idempotencyKey = crypto.randomUUID();
+  const { jobId } = await request<{ jobId: string }>(
+    "/jobs",
+    { method: "POST", body: JSON.stringify({ kind, payload }), headers: { "Idempotency-Key": idempotencyKey } },
+    fallback,
+  );
+
+  const deadline = Date.now() + JOB_MAX_WAIT_MS;
+  let delay = JOB_POLL_FIRST_MS;
+  let failures = 0;
+
+  while (Date.now() < deadline) {
+    await sleep(delay);
+    delay = Math.min(Math.round(delay * 1.25), JOB_POLL_MAX_MS);
+
+    let job: JobView<T>;
+    try {
+      job = await request<JobView<T>>(`/jobs/${jobId}`, { method: "GET" }, fallback, JOB_POLL_REQUEST_TIMEOUT_MS);
+      failures = 0;
+    } catch (cause) {
+      // A dropped connection or a slow answer while polling says nothing about the job: keep waiting.
+      // An answer that says "gone" or "not yours" is final.
+      const status = cause instanceof RequestError ? cause.status : 0;
+      const transient = status === 0 || status === 408 || status === 429 || status >= 500;
+      if (!transient || ++failures >= JOB_MAX_CONSECUTIVE_POLL_FAILURES) throw cause;
+      continue;
+    }
+
+    if (job.status === "done") return job.result as T;
+    if (job.status === "failed") throw new Error(job.error?.message ?? fallback);
+  }
+
+  throw new Error("This is taking much longer than expected. Please try again.");
 }
 
 export interface CreativeRequestInput {
@@ -114,11 +187,7 @@ export async function fetchCreativeStyles(): Promise<CreativeStyleSummary[]> {
  * generated yet — this is what the concept picker shows (spec §19).
  */
 export async function discoverConcepts(input: CreativeRequestInput): Promise<DiscoveredConcepts> {
-  return request<DiscoveredConcepts>(
-    "/concepts",
-    { method: "POST", body: JSON.stringify(input) },
-    "Could not come up with creative concepts. Please try again.",
-  );
+  return runJob<DiscoveredConcepts>("concepts", input, "Could not come up with creative concepts. Please try again.");
 }
 
 /** A single ready-to-read direction and summary, for a caller that wants one answer rather than a set of concepts to choose between. */
@@ -132,28 +201,100 @@ export async function understandCreative(input: CreativeRequestInput): Promise<U
 
 /** Runs the full pipeline and returns the persisted, completed asset. */
 export async function generateCreative(input: CreativeRequestInput): Promise<GeneratedAsset> {
-  return request<GeneratedAsset>(
-    "/generate",
-    { method: "POST", body: JSON.stringify(input) },
-    "Could not generate this creative. Please try again.",
-  );
+  return runJob<GeneratedAsset>("generate", input, "Could not generate this creative. Please try again.");
 }
 
 /** Natural-language refinement of a previously generated asset. */
 export async function refineCreative(assetId: string, instruction: string): Promise<GeneratedAsset> {
+  return runJob<GeneratedAsset>("refine", { assetId, instruction }, "Could not apply that change. Please try again.");
+}
+
+export type EditableTextField = "headline" | "supportingLine" | "offerText" | "eventBadge" | "brandMessage" | "cta";
+
+/** The typography a line has now. Anything absent is automatic. */
+export interface TextLineStyle {
+  fontFamily?: string;
+  fontWeight?: number;
+  /** 1 is the size Rally fitted for this wording. */
+  sizeScale: number;
+  color?: string;
+}
+
+/** A line of text on a finished creative that can be reworded or restyled in place. */
+export interface EditableTextLine {
+  field: EditableTextField;
+  role: string;
+  /** The wording as it is typeset now. */
+  text: string;
+  maxLength: number;
+  style: TextLineStyle;
+  /** The font families that can display this wording. */
+  fonts: string[];
+}
+
+export interface FontOption {
+  family: string;
+  category: string;
+  /** Weights that have real font files. */
+  weights: number[];
+  /** Root-relative URL of each weight's font file, keyed by weight: the file the render itself uses. */
+  files: Record<number, string>;
+}
+
+export interface EditableText {
+  canEdit: boolean;
+  /** Why not, when `canEdit` is false. */
+  reason?: string;
+  lines: EditableTextLine[];
+  fonts?: FontOption[];
+  /** Colours offered for text: the brand's own, then light and dark. */
+  palette?: string[];
+}
+
+/** What to change on one line. Every part is optional; absent parts stay as they are. */
+export interface TextLineChange {
+  text?: string;
+  style?: Partial<Pick<TextLineStyle, "fontFamily" | "fontWeight" | "sizeScale" | "color">>;
+}
+
+export async function fetchEditableText(assetId: string): Promise<EditableText> {
+  return request<EditableText>(
+    `/text/${encodeURIComponent(assetId)}`,
+    { method: "GET" },
+    "Could not load this creative's text.",
+  );
+}
+
+/**
+ * Rewords and/or restyles lines of a finished creative WITHOUT regenerating it:
+ * the picture is reused and only the text is re-fitted. Returns a new asset.
+ */
+export async function retypeCreative(
+  assetId: string,
+  changes: Partial<Record<EditableTextField, TextLineChange>>,
+): Promise<GeneratedAsset> {
+  const edits: Partial<Record<EditableTextField, string>> = {};
+  const styles: Partial<Record<EditableTextField, NonNullable<TextLineChange["style"]>>> = {};
+  for (const [field, change] of Object.entries(changes) as [EditableTextField, TextLineChange][]) {
+    if (change.text !== undefined) edits[field] = change.text;
+    if (change.style && Object.keys(change.style).length) styles[field] = change.style;
+  }
   return request<GeneratedAsset>(
-    "/refine",
-    { method: "POST", body: JSON.stringify({ assetId, instruction }) },
-    "Could not apply that change. Please try again.",
+    "/retype",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        assetId,
+        ...(Object.keys(edits).length && { edits }),
+        ...(Object.keys(styles).length && { styles }),
+      }),
+    },
+    "Could not change that text. Your creative is unchanged.",
   );
 }
 
 export async function regenerateCreative(assetId: string): Promise<GeneratedAsset> {
-  return request<GeneratedAsset>(
-    "/regenerate",
-    { method: "POST", body: JSON.stringify({ assetId }) },
-    "Could not regenerate this creative. Your existing image is unchanged.",
-  );
+  return runJob<GeneratedAsset>("regenerate", { assetId }, "Could not regenerate this creative. Your existing image is unchanged.");
 }
 
 export async function recordCreativeSignal(assetId: string, signal: "saved" | "reused"): Promise<void> {
@@ -198,6 +339,8 @@ export const creativeService = {
   understandCreative,
   generateCreative,
   refineCreative,
+  fetchEditableText,
+  retypeCreative,
   regenerateCreative,
   recordCreativeSignal,
   rejectCreativeConcept,

@@ -1,32 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-interface EditableHeadlineProps {
-  /** The headline currently on the creative. */
+interface EditableTextProps {
+  /** What this line is, in the member's words: "Headline", "Button text". */
+  label: string;
+  /** The wording currently on the creative. */
   value: string;
-  /** True while any refinement is in flight. */
+  maxLength: number;
+  /** One sentence on what applying does, shown while editing. */
+  hint: string;
+  /** True while any change to the creative is in flight. */
   busy: boolean;
-  /** Resolves true when the creative was redrawn with the new text. */
+  /** Resolves true when the creative now carries the new wording. */
   onApply: (text: string) => Promise<boolean>;
 }
 
-const MAX_LENGTH = 120;
-
 /**
- * The headline on the creative, editable in place: click it, type your own
- * wording, press Enter. The creative is then redrawn with exactly that text
- * (the scene, logo and layout stay as they are), so the member never has to
- * know there is a "refine" step behind it.
+ * A line of the creative's text, editable in place: click it, type your own
+ * wording, press Enter. Escape or Cancel puts the original back.
  */
-export function EditableHeadline({ value, busy, onApply }: EditableHeadlineProps) {
+export function EditableText({ label, value, maxLength, hint, busy, onApply }: EditableTextProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputId = useId();
 
-  // A redraw returns a new asset with a new headline: follow it.
+  // A change returns a new asset with new wording: follow it.
   useEffect(() => {
     if (!editing) setDraft(value);
   }, [value, editing]);
@@ -37,7 +39,7 @@ export function EditableHeadline({ value, busy, onApply }: EditableHeadlineProps
     inputRef.current?.select();
   }, [editing]);
 
-  const trimmed = draft.trim();
+  const trimmed = draft.replace(/\s+/g, " ").trim();
   const changed = trimmed.length > 0 && trimmed !== value.trim();
 
   async function commit() {
@@ -56,7 +58,7 @@ export function EditableHeadline({ value, busy, onApply }: EditableHeadlineProps
         type="button"
         onClick={() => setEditing(true)}
         disabled={busy}
-        aria-label="Edit headline"
+        aria-label={`Edit ${label.toLowerCase()}`}
         className={cn(
           "group w-full rounded-xl border bg-card p-3.5 text-left transition-colors",
           "hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -64,8 +66,8 @@ export function EditableHeadline({ value, busy, onApply }: EditableHeadlineProps
         )}
       >
         <span className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-          Headline on the image
-          <span className="flex items-center gap-1 text-muted-foreground transition-colors group-hover:text-foreground">
+          {label}
+          <span className="flex items-center gap-1 transition-colors group-hover:text-foreground">
             <Pencil className="h-3 w-3" />
             Edit
           </span>
@@ -81,15 +83,20 @@ export function EditableHeadline({ value, busy, onApply }: EditableHeadlineProps
 
   return (
     <div className="space-y-3 rounded-xl border border-foreground/30 bg-card p-3.5 ring-2 ring-ring/30">
-      <label htmlFor="creative-headline" className="text-xs font-medium text-muted-foreground">
-        Headline on the image
-      </label>
+      <div className="flex items-center justify-between text-xs">
+        <label htmlFor={inputId} className="font-medium text-muted-foreground">
+          {label}
+        </label>
+        <span className="tabular-nums text-muted-foreground">
+          {draft.length}/{maxLength}
+        </span>
+      </div>
       <Textarea
-        id="creative-headline"
+        id={inputId}
         ref={inputRef}
         value={draft}
         rows={2}
-        maxLength={MAX_LENGTH}
+        maxLength={maxLength}
         disabled={busy}
         onChange={(e) => setDraft(e.target.value.replace(/\n/g, " "))}
         onKeyDown={(e) => {
@@ -104,9 +111,7 @@ export function EditableHeadline({ value, busy, onApply }: EditableHeadlineProps
         className="min-h-0 resize-none bg-card text-sm font-medium"
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Rally redraws the creative with your wording. Enter to apply.
-        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
         <div className="flex items-center gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={cancel} disabled={busy}>
             Cancel

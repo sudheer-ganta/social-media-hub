@@ -21,7 +21,12 @@ import { generateReferenceStyleProfile } from '../ai/generators/reference-style.
 import { detectMarketingStrategy } from '../ai/strategy/marketing-strategy-detector';
 import { analyzeConceptPoolDivergence } from '../ai/strategy/creative-differentiation';
 import { normaliseDesignRecipe } from '../ai/render/design-recipe';
-import { designCreative } from '../ai/render/designer-composition';
+import { designCreative, fallbackConceptFrom, imageIsAbsent, retypeCreativeFromLayout } from '../ai/render/designer-composition';
+import { buildPersistedLayout } from '../ai/render/type-style-apply';
+import { applyTextEdits, CopyEditError, listEditableText, parseTextEdits, type EditableTextLine, type TextEdits } from '../ai/render/copy-edit';
+import { assertFontSupportsText, fontPickerOptions, LayoutMismatchError, type FontPickerOption, parseTextStyles, TextStyleError, type RoleTextStyle, type TextStylesByRole } from '../ai/render/type-style';
+import { EDITABLE_TEXT_FIELDS, FIELD_ROLE, type EditableTextField } from '../ai/render/text-fields';
+import type { TypographySelection } from '../ai/typography/font-selector';
 import { isEligibleFallback } from '../ai/intent/concept-realizability-gate';
 import {
   getStyleDNA,
@@ -1143,24 +1148,52 @@ interface FinishGenerationOptions {
   /** The request's latency/spend ledger. */
   metrics?: CreativeMetrics;
   canonicalConceptId?: string;
+  /**
+   * Text-edit mode: re-typeset over the creative's saved picture. Never calls
+   * the image model, and keeps the original's typography when it has one.
+   */
+  retype?: {
+    typography?: TypographySelection;
+    /** Every style the creative should carry: earlier choices and this one. Used when the layout has to be re-solved. */
+    textStyles?: TextStylesByRole;
+    /** Only the styles requested NOW (earlier ones are already in the saved layout). Used when re-rendering the saved layout. */
+    changes?: TextStylesByRole;
+  };
 }
+
+/**
+ * Handed to the composer on a text edit so that "never regenerates the
+ * picture" is enforced rather than assumed: if any code path reached for the
+ * image model, it fails loudly instead of quietly spending a generation.
+ */
+const NO_IMAGE_GENERATION: AiImageProvider = {
+  id: 'text-edit',
+  model: 'none',
+  isConfigured: () => true,
+  async generateImage() {
+    throw new CreativeError('Editing text must never regenerate the picture.', 500);
+  },
+};
 
 /** Compose original assets and exact copy, verify the finished pixels, then persist. */
 async function finishGeneration({
   userId, asset, direction, imageProvider, referenceUrls, styleReferenceUrls = [], priorVisualUrl,
   logoAssetUrl, creativeDna, referenceStyle, styleDna, canonicalBrief, graphicConcept, fallbackConcepts, renderContext, requestId, metrics, canonicalConceptId,
+  retype,
 }: FinishGenerationOptions): Promise<StoredGeneratedAsset> {
   let designVerified = false;
+  // Style references only steer image generation, which a text edit never runs.
+  const styleRefsToFetch = retype ? [] : styleReferenceUrls;
   try {
     const [products, references, logoResult, previous] = await Promise.all([
-      fetchReferenceImages(referenceUrls), fetchReferenceImages(styleReferenceUrls),
+      fetchReferenceImages(referenceUrls), fetchReferenceImages(styleRefsToFetch),
       logoAssetUrl ? fetchLogoAsset(logoAssetUrl, (renderContext?.brand as any)?.id) : Promise.resolve(null),
       priorVisualUrl ? fetchReferenceImages([priorVisualUrl]) : Promise.resolve({ images: [], failures: [] }),
     ]);
     if (products.failures.length || products.images.length !== referenceUrls.length) {
       throw new CreativeError('Every product image must be readable. Re-upload the missing product assets.', 422);
     }
-    if (references.failures.length || references.images.length !== styleReferenceUrls.length) {
+    if (references.failures.length || references.images.length !== styleRefsToFetch.length) {
       throw new CreativeError('Your style references could not all be read. Re-upload the missing references.', 422);
     }
     if (logoAssetUrl && logoResult?.failure) {
@@ -1171,6 +1204,9 @@ async function finishGeneration({
       }
     }
     if (!renderContext) throw new CreativeError('The campaign context is missing. Start a new creative.', 422);
+    if (retype && priorVisualUrl && !previous.images[0]) {
+      throw new CreativeError('The original picture could not be loaded, so its text cannot be edited. Try again, or use Refine.', 502);
+    }
 
     let logoAsset = logoResult?.image ?? undefined;
     if (!logoAsset) {
@@ -1184,11 +1220,31 @@ async function finishGeneration({
       logoAsset = { mimeType: 'image/png', data: buf.toString('base64') };
     }
 
-    const result = await timed(metrics, 'designerComposition', () => designCreative({
+    // A text edit re-renders the SAVED layout, so only the lines the member touched change. A creative
+    // made before its layout was kept, or one whose lines no longer match it, re-solves instead.
+    const savedLayout = retype && retype.typography ? renderContext.layout : undefined;
+    let reused: Awaited<ReturnType<typeof retypeCreativeFromLayout>> | undefined;
+    if (savedLayout && retype && retype.typography) {
+      try {
+        reused = await timed(metrics, 'designerComposition', () => retypeCreativeFromLayout({
+          direction, context: { ...renderContext, creativeDna, referenceStyle }, styleDna, graphicConcept,
+          products: products.images, logo: logoAsset, lockedVisual: previous.images[0],
+          typography: retype.typography!, layout: savedLayout as any, changes: retype.changes ?? {},
+        }));
+      } catch (error) {
+        if (!(error instanceof LayoutMismatchError)) throw error;
+        console.warn('[creative] saved layout no longer matches; re-solving', { requestId, assetId: asset.id });
+      }
+    }
+
+    const result = reused ?? await timed(metrics, 'designerComposition', () => designCreative({
       direction, context: { ...renderContext, creativeDna, referenceStyle }, styleDna,
       canonicalBrief, graphicConcept, fallbackConcepts,
-      products: products.images, references: references.images, logo: logoAsset, priorVisual: previous.images[0],
-      textProvider: providerForRole('creative'), imageProvider,
+      products: products.images, references: references.images, logo: logoAsset,
+      ...(retype
+        ? { retype: true, lockedVisual: previous.images[0], lockedTypography: retype.typography, textStyles: retype.textStyles }
+        : { priorVisual: previous.images[0] }),
+      textProvider: providerForRole('creative'), imageProvider: retype ? NO_IMAGE_GENERATION : imageProvider,
       onCall: kind => { if (metrics) { if (kind === 'text') metrics.textCalls += 1; else metrics.imageCalls += 1; } },
       onStageTiming: (stage, durationMs) => {
         if (metrics) metrics.stages[stage] = (metrics.stages[stage] ?? 0) + durationMs;
@@ -1200,11 +1256,15 @@ async function finishGeneration({
       'plan.json': JSON.stringify({ generationVersion: GENERATION_VERSION, plan: result.plan,
         sourceAssetUrls: referenceUrls, referenceImageUrls: styleReferenceUrls, typography: result.typography }, null, 2),
     });
-    if (metrics) metrics.cloudinaryUploads += result.visual ? 2 : 1;
+    // On a text edit the picture is already stored: point at it rather than uploading a second copy.
+    const reusedVisualUrl = retype ? priorVisualUrl : undefined;
+    if (metrics) metrics.cloudinaryUploads += result.visual && !reusedVisualUrl ? 2 : 1;
     const [uploaded, visualUpload] = await Promise.all([
       timed(metrics, 'cloudinary', () => cloudinaryService.uploadImageBuffer(result.data, result.mimeType)),
-      result.visual ? cloudinaryService.uploadImageBuffer(Buffer.from(result.visual.data, 'base64'), result.visual.mimeType)
-        .catch(() => undefined) : Promise.resolve(undefined),
+      reusedVisualUrl
+        ? Promise.resolve({ url: reusedVisualUrl })
+        : result.visual ? cloudinaryService.uploadImageBuffer(Buffer.from(result.visual.data, 'base64'), result.visual.mimeType)
+          .catch(() => undefined) : Promise.resolve(undefined),
     ]);
     const finalResolvedStyleId = styleDna?.style?.id || (direction as any)?.selectedStyleId || direction?.selectedStyle?.id;
     const completion = {
@@ -1214,12 +1274,22 @@ async function finishGeneration({
       ...(uploaded.format !== undefined && { format: uploaded.format }),
       renderContext: {
         ...renderContext,
-        referenceImageUrls: styleReferenceUrls,
+        referenceImageUrls: retype ? (renderContext.referenceImageUrls ?? []) : styleReferenceUrls,
         ...(styleDna && { styleDna: { id: finalResolvedStyleId || styleDna.style.id, variant: styleDna.variant, source: styleDna.source } }),
         ...(visualUpload && { visualImageUrl: visualUpload.url })
       },
       typography: result.typography,
     };
+    if (result.typeset && Object.keys(result.typeset).length) completion.renderContext.typeset = result.typeset;
+    if (retype && result.appliedTextStyles) {
+      completion.renderContext.textStyles = { ...(renderContext.textStyles ?? {}), ...result.appliedTextStyles };
+    }
+    // Keep the solved layout, so the next edit can re-render it rather than search for a new one.
+    if (result.plan && result.copyNodeRoles && result.copyById && result.baseScales) {
+      completion.renderContext.layout = buildPersistedLayout({
+        plan: result.plan, roles: result.copyNodeRoles, copy: result.copyById, baseScales: result.baseScales,
+      });
+    }
     const completed = canonicalConceptId
       ? await generatedAssetRepository.markCompletedAndAttachConcept(asset.id, canonicalConceptId, userId, completion)
       : await generatedAssetRepository.markCompleted(asset.id, completion);
@@ -1229,13 +1299,47 @@ async function finishGeneration({
     return completed;
   } catch (error) {
     await generatedAssetRepository.markFailed(asset.id);
+    if (error instanceof TextStyleError) throw new CreativeError(error.message, error.status);
     if (error instanceof CreativeError || error instanceof AiProviderError) throw error;
     if (designVerified) throw new CreativeError("Image created, but FlowPost couldn't save it. Try again.", 502);
     console.error('[creative] designer composition failed', { requestId, assetId: asset.id,
       detail: error instanceof Error ? error.message : String(error) });
+    if (retype) {
+      throw new CreativeError('That wording could not be fitted onto the creative. Try something shorter.', 422,
+        error instanceof Error ? error.message : String(error));
+    }
     throw new CreativeError('FlowPost could not verify this design against your brief, assets and style. Please try again.', 422,
       error instanceof Error ? error.message : String(error));
   }
+}
+
+/** The graphic concept this creative was rendered from, resolved exactly as the composer resolves it. */
+function conceptOf(asset: StoredGeneratedAsset): GraphicDesignConcept {
+  return asset.renderContext?.graphicConcept
+    ?? asset.creativeBrief.graphicConcept
+    ?? fallbackConceptFrom(asset.creativeBrief);
+}
+
+/** Colours offered for text: the brand's own, then plain light and dark. */
+function textPalette(brandColors: string[] | undefined): string[] {
+  const own = (brandColors ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase());
+  return [...new Set([...own, '#ffffff', '#111111'])].slice(0, 8);
+}
+
+/**
+ * Why this creative's text cannot be edited in place, or null when it can.
+ * A creative made before its picture was kept would have to generate a new one
+ * to be re-typeset, which is exactly what a text edit must never do.
+ */
+function retypeBlocker(asset: StoredGeneratedAsset): string | null {
+  if (asset.status !== 'COMPLETED' || !asset.imageUrl) return 'That creative has no image yet.';
+  if (!asset.renderContext) return 'This creative was made before text editing existed. Use Refine to change it.';
+  const hasPicture = Boolean(asset.renderContext.visualImageUrl);
+  const buildsWithoutPicture = asset.sourceAssetUrls.length > 0 || imageIsAbsent(conceptOf(asset));
+  if (!hasPicture && !buildsWithoutPicture) {
+    return 'This creative was made before text editing existed. Use Refine to change it.';
+  }
+  return null;
 }
 
 /**
@@ -1949,6 +2053,174 @@ export const creativeGenerationService = {
     const asset = await creativeGenerationService.refine(userId, { assetId: (body as Record<string, unknown>).assetId, regeneration: true }, requestId);
     await brandIntelligenceService.recordAssetSignal(userId, asset.id, 'regenerated').catch((error) => console.warn('[creative] intelligence signal skipped', error));
     return asset;
+  },
+
+  /**
+   * The lines on a finished creative that can be reworded in place, or the
+   * reason they cannot be. Read-only: nothing is generated or charged.
+   */
+  async editableText(userId: string, assetId: string): Promise<{
+    canEdit: boolean; reason?: string; lines: EditableTextLine[];
+    fonts?: FontPickerOption[]; palette?: string[];
+  }> {
+    const parent = await generatedAssetRepository.findById(assetId, userId);
+    if (!parent) throw new CreativeError('That creative could not be found.', 404);
+    const blocked = retypeBlocker(parent);
+    if (blocked) return { canEdit: false, reason: blocked, lines: [] };
+    const rc = parent.renderContext;
+    const lines = listEditableText(parent.creativeBrief, conceptOf(parent), rc?.intent?.requiredClaims ?? [], {
+      typeset: rc?.typeset,
+      textStyles: rc?.textStyles,
+    });
+    return lines.length
+      ? { canEdit: true, lines, fonts: fontPickerOptions(), palette: textPalette(rc?.creativeDna?.brandColors) }
+      : { canEdit: false, reason: 'This creative has no text that can be edited.', lines: [] };
+  },
+
+  /**
+   * Rewords text on a finished creative WITHOUT regenerating it.
+   *
+   * The picture is the parent's saved wordless visual and the fonts are the
+   * parent's own; only the copy changes, and the composition pipeline re-fits
+   * it. No image-model call is made (the composer is handed a provider that
+   * throws), so this is fast, costs no generation, and cannot change the scene.
+   * Like refine, it only ever adds a row: the parent stays in history untouched
+   * and the caller keeps showing it if this fails.
+   */
+  async retype(userId: string, body: unknown, requestId?: string): Promise<StoredGeneratedAsset> {
+    if (!body || typeof body !== 'object') throw new CreativeError('Send a JSON body naming the asset and the new text.');
+    const input = body as Record<string, unknown>;
+    const assetId = readString(input.assetId, 64);
+    if (!assetId) throw new CreativeError('Which creative should be edited?');
+
+    let edits: TextEdits = {};
+    let styles: Partial<Record<EditableTextField, RoleTextStyle>> = {};
+    try {
+      if (input.edits !== undefined) edits = parseTextEdits(input.edits);
+      if (input.styles !== undefined) styles = parseTextStyles(input.styles);
+    } catch (error) {
+      if (error instanceof CopyEditError || error instanceof TextStyleError) throw new CreativeError(error.message, error.status);
+      throw error;
+    }
+    if (!Object.keys(edits).length && !Object.keys(styles).length) {
+      throw new CreativeError('Say what to change: new wording, or a font, size or colour.', 422);
+    }
+
+    const parent = await generatedAssetRepository.findById(assetId, userId);
+    if (!parent) throw new CreativeError('That creative could not be found.', 404);
+    const blocked = retypeBlocker(parent);
+    if (blocked) throw new CreativeError(blocked, 422);
+
+    // The composer still asks the text model for nothing here (typography is
+    // reused), but a server with no storage cannot save the result.
+    assertStorageConfigured();
+
+    const inherited = parent.renderContext!;
+    const creativeDna = inherited.creativeDna;
+    const claims = inherited.intent?.requiredClaims ?? [];
+    const concept = conceptOf(parent);
+    const saved = { typeset: inherited.typeset, textStyles: inherited.textStyles };
+    const onCreative = new Map(listEditableText(parent.creativeBrief, concept, claims, saved).map((l) => [l.field, l]));
+
+    let direction;
+    let textStyles: TextStylesByRole;
+    let changesByRole: TextStylesByRole;
+    try {
+      for (const field of Object.keys(styles) as EditableTextField[]) {
+        if (!onCreative.has(field)) throw new CopyEditError('That text is not on this creative, so it cannot be restyled.');
+      }
+      direction = Object.keys(edits).length
+        ? applyTextEdits(parent.creativeBrief, concept, edits, claims)
+        : structuredClone(parent.creativeBrief);
+
+      // Only what was asked for now, by role: earlier choices already live in the saved layout.
+      changesByRole = {};
+      for (const field of EDITABLE_TEXT_FIELDS) {
+        if (styles[field]) changesByRole[FIELD_ROLE[field]] = styles[field];
+      }
+
+      // The member's earlier choices carry over, so rewording a line never resets its font.
+      textStyles = { ...(inherited.textStyles ?? {}) };
+      for (const field of EDITABLE_TEXT_FIELDS) {
+        const style = styles[field];
+        if (!style) continue;
+        const role = FIELD_ROLE[field];
+        const previous = { ...(textStyles[role] ?? {}) };
+        // A new family invalidates a weight picked for the old one: let the engine choose the nearest.
+        if (style.fontFamily && style.fontWeight === undefined) delete previous.fontWeight;
+        textStyles[role] = { ...previous, ...style };
+      }
+
+      // A font must be able to draw the wording it will carry.
+      for (const field of new Set([...Object.keys(edits), ...Object.keys(styles)] as EditableTextField[])) {
+        const family = styles[field]?.fontFamily ?? textStyles[FIELD_ROLE[field]]?.fontFamily ?? onCreative.get(field)?.style.fontFamily;
+        const text = edits[field] ?? onCreative.get(field)?.text;
+        if (family && text) assertFontSupportsText(family, text);
+      }
+    } catch (error) {
+      if (error instanceof CopyEditError || error instanceof TextStyleError) throw new CreativeError(error.message, error.status);
+      throw error;
+    }
+
+    const styleDna: ResolvedStyleDNA | undefined = (() => {
+      const style = inherited.styleDna && getStyleDNA(inherited.styleDna.id);
+      return style && inherited.styleDna
+        ? { style, source: inherited.styleDna.source, variant: inherited.styleDna.variant }
+        : undefined;
+    })();
+
+    console.info('[creative] retype started', {
+      requestId,
+      parentAssetId: parent.id,
+      fields: Object.keys(edits),
+      styled: Object.keys(styles),
+      reusesPicture: Boolean(inherited.visualImageUrl),
+      reusesTypography: Boolean(parent.typography),
+    });
+
+    const metrics = newMetrics();
+    const child = await generatedAssetRepository.create({
+      userId,
+      contextType: parent.contextType,
+      brandId: parent.brandId,
+      prompt: parent.prompt,
+      creativeBrief: direction,
+      renderContext: inherited,
+      sourceAssetUrls: parent.sourceAssetUrls,
+      provider: parent.provider,
+      model: parent.model,
+      source: 'AI_REFINED',
+      parentAssetId: parent.id,
+      campaignId: parent.campaignId,
+    });
+
+    try {
+      const completed = await finishGeneration({
+        userId,
+        asset: child,
+        direction,
+        imageProvider: NO_IMAGE_GENERATION,
+        referenceUrls: parent.sourceAssetUrls,
+        priorVisualUrl: inherited.visualImageUrl,
+        hasAssets: parent.sourceAssetUrls.length > 0,
+        logoAssetUrl: creativeDna?.logoAssetUrl || undefined,
+        creativeDna,
+        referenceStyle: inherited.referenceStyle,
+        styleDna,
+        canonicalBrief: inherited.canonicalBrief,
+        graphicConcept: inherited.graphicConcept,
+        renderContext: inherited,
+        requestId,
+        metrics,
+        retype: { typography: parent.typography ?? undefined, textStyles, changes: changesByRole },
+      });
+      await creativeAttributionRepository
+        .recordAssetEvent(userId, completed.id, 'ASSET_REFINED', requestId ? `${requestId}:retyped:${completed.id}` : undefined)
+        .catch(() => undefined);
+      return completed;
+    } finally {
+      logMetrics(metrics, requestId);
+    }
   },
 
   async recordSignal(userId: string, body: unknown): Promise<{ recorded: boolean }> {

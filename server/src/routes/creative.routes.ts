@@ -9,6 +9,7 @@ import { CloudinaryUploadError } from '../services/cloudinary.service';
 import { publicStyleLibrary } from '../ai/style-dna/style-dna';
 import { brandIntelligenceService } from '../services/creative-brand-intelligence.service';
 import { creativeIdempotencyService, IdempotencyInProgressError } from '../services/creative-idempotency.service';
+import { getJob, startJob, TooManyJobsError, type JobFailure } from '../services/creative-jobs.service';
 
 /**
  * FlowPost's brand-native creative engine. Mounted at `/api/ai/creative`.
@@ -20,6 +21,12 @@ import { creativeIdempotencyService, IdempotencyInProgressError } from '../servi
  *   POST /campaign      the same request fanned out into linked variations
  *                        (variationLabels, e.g. ["Hero","Product"]) sharing one campaignId
  *   POST /refine        natural-language edit of a previous asset
+ *   POST /jobs          starts any of the slow calls above in the background and
+ *                        answers at once with a job id: the browser polls rather
+ *                        than holding one request open for minutes
+ *   GET  /jobs/:id      that job's state, and its result when it is done
+ *   GET  /text/:id      the lines on a finished creative that can be reworded in place
+ *   POST /retype        reword those lines WITHOUT regenerating the picture
  *   GET  /history       this member's generation history for one scope
  *
  * Same thin-handler shape as `ai.routes.ts`: validation and orchestration
@@ -32,6 +39,29 @@ const router = Router();
 router.get('/styles', requireAuth, (_req, res) => {
   res.json({ styles: publicStyleLibrary() });
 });
+
+/**
+ * What the member is told for an error, and the HTTP status that goes with it.
+ * Known failures carry their own member-facing message; anything else is
+ * answered generically, because an unexpected error can quote a query, a vendor
+ * response or a connection string. The detail belongs in the log.
+ */
+function describeError(error: any): JobFailure & { known: boolean } {
+  const isKnown = error instanceof CreativeError
+    || error instanceof AiProviderError
+    || error instanceof CloudinaryUploadError
+    || error?.name === 'CreativeError'
+    || error?.name === 'AiProviderError'
+    || error?.name === 'CloudinaryUploadError'
+    || error instanceof UserFacingError
+    || error instanceof ContextError;
+  if (isKnown) {
+    return { known: true, status: typeof error?.status === 'number' ? error.status : 502, message: error?.message ?? 'Request failed' };
+  }
+  if (error instanceof IdempotencyInProgressError) return { known: true, status: 409, message: error.message };
+  if (error instanceof TooManyJobsError) return { known: true, status: error.status, message: error.message };
+  return { known: false, status: 500, message: 'Something went wrong. Please try again.' };
+}
 
 function handle(fn: (req: Request, res: Response) => Promise<void>) {
   return async (req: Request, res: Response) => {
@@ -46,29 +76,19 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
       await fn(req, res);
       console.info('[creative] request completed', { requestId, durationMs: Date.now() - startedAt });
     } catch (error: any) {
-      const isKnown = error instanceof CreativeError
-        || error instanceof AiProviderError
-        || error instanceof CloudinaryUploadError
-        || error?.name === 'CreativeError'
-        || error?.name === 'AiProviderError'
-        || error?.name === 'CloudinaryUploadError'
-        || error instanceof UserFacingError
-        || error instanceof ContextError;
-
-      if (isKnown) {
-        const status = typeof error?.status === 'number' ? error.status : 502;
+      const described = describeError(error);
+      if (described.known) {
         console.error('[creative] request failed', {
           requestId,
           durationMs: Date.now() - startedAt,
           errorType: error?.name ?? 'Error',
-          status,
+          status: described.status,
           message: error?.message,
           detail: error?.detail,
         });
-        res.status(status).json({ error: error?.message ?? 'Request failed' });
+        res.status(described.status).json({ error: described.message });
         return;
       }
-      if (error instanceof IdempotencyInProgressError) { res.status(409).json({ error: error.message }); return; }
 
       console.error('[creative] request failed (unexpected)', {
         requestId,
@@ -78,9 +98,7 @@ function handle(fn: (req: Request, res: Response) => Promise<void>) {
         error: error instanceof Error ? `${error.name}: ${error.message}` : error,
         stack: error instanceof Error ? error.stack : undefined,
       });
-      // Never the raw message: an unexpected error can quote a query, a vendor
-      // response or a connection string. It is in the log above.
-      res.status(500).json({ error: 'Something went wrong. Please try again.' });
+      res.status(described.status).json({ error: described.message });
     }
   };
 }
@@ -136,6 +154,97 @@ router.post(
   handle(async (req, res) => {
     const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'regenerate', req.header('Idempotency-Key'), () => creativeGenerationService.regenerate(req.user.id, req.body, res.locals.creativeRequestId));
     res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
+  }),
+);
+
+router.get(
+  '/text/:assetId',
+  requireAuth,
+  handle(async (req, res) => {
+    res.json(await creativeGenerationService.editableText(req.user.id, String(req.params.assetId)));
+  }),
+);
+
+router.post(
+  '/retype',
+  requireAuth,
+  handle(async (req, res) => {
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'retype', req.header('Idempotency-Key'), () => creativeGenerationService.retype(req.user.id, req.body, res.locals.creativeRequestId));
+    res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
+  }),
+);
+
+/**
+ * The slow calls, runnable as background jobs. Each runs the SAME service call
+ * (and the same idempotency wrapper) as its direct endpoint, so a job and a
+ * direct request can never disagree about what a call does.
+ */
+const JOB_KINDS: Record<string, (userId: string, payload: unknown, requestId: string, idempotencyKey?: string) => Promise<unknown>> = {
+  concepts: async (userId, payload, _requestId, key) =>
+    (await creativeIdempotencyService.runIdempotent(userId, 'concepts', key, () => creativeGenerationService.discoverConcepts(userId, payload))).value,
+  generate: async (userId, payload, requestId, key) =>
+    (await creativeIdempotencyService.runIdempotent(userId, 'generate', key, () => creativeGenerationService.generate(userId, payload, requestId))).value,
+  refine: async (userId, payload, requestId, key) =>
+    (await creativeIdempotencyService.runIdempotent(userId, 'refine', key, () => creativeGenerationService.refine(userId, payload, requestId))).value,
+  regenerate: async (userId, payload, requestId, key) =>
+    (await creativeIdempotencyService.runIdempotent(userId, 'regenerate', key, () => creativeGenerationService.regenerate(userId, payload, requestId))).value,
+  retype: async (userId, payload, requestId, key) =>
+    (await creativeIdempotencyService.runIdempotent(userId, 'retype', key, () => creativeGenerationService.retype(userId, payload, requestId))).value,
+};
+
+router.post(
+  '/jobs',
+  requireAuth,
+  handle(async (req, res) => {
+    const { kind, payload } = (req.body ?? {}) as { kind?: unknown; payload?: unknown };
+    const run = typeof kind === 'string' ? JOB_KINDS[kind] : undefined;
+    if (!run || typeof kind !== 'string') {
+      res.status(400).json({ error: 'That kind of request cannot run in the background.' });
+      return;
+    }
+    const userId = req.user.id;
+    const requestId = res.locals.creativeRequestId as string;
+    const idempotencyKey = req.header('Idempotency-Key') || undefined;
+    const startedAt = Date.now();
+
+    const jobId = startJob(
+      userId,
+      kind,
+      async () => {
+        const result = await run(userId, payload, requestId, idempotencyKey);
+        console.info('[creative] job completed', { requestId, kind, durationMs: Date.now() - startedAt });
+        return result;
+      },
+      (error: any) => {
+        const described = describeError(error);
+        console.error('[creative] job failed', {
+          requestId,
+          kind,
+          durationMs: Date.now() - startedAt,
+          status: described.status,
+          known: described.known,
+          message: error?.message,
+          detail: error?.detail,
+          ...(described.known ? {} : { stack: error instanceof Error ? error.stack : undefined }),
+        });
+        return { status: described.status, message: described.message };
+      },
+      idempotencyKey,
+    );
+    res.status(202).json({ jobId });
+  }),
+);
+
+router.get(
+  '/jobs/:jobId',
+  requireAuth,
+  handle(async (req, res) => {
+    const job = getJob(req.user.id, String(req.params.jobId));
+    if (!job) {
+      res.status(404).json({ error: 'This request is no longer available. Please try again.' });
+      return;
+    }
+    res.json(job);
   }),
 );
 

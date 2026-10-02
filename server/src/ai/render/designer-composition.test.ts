@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import sharp from 'sharp';
-import { designCreative, renderDesignerPlan, validateDesignerPlan, type DesignerPlan, type DesignNode } from './designer-composition';
+import { designCreative, renderDesignerPlan, retypeCreativeFromLayout, validateDesignerPlan, type DesignerPlan, type DesignNode } from './designer-composition';
+import { buildPersistedLayout } from './type-style-apply';
+import { LayoutMismatchError, TextStyleError } from './type-style';
 import { resolveBrandProfile } from '../brand/brand-profile';
 import { resolveCreativeDna } from '../brand/creative-dna';
 import { resolveDesignRecipe } from './design-recipe';
@@ -190,6 +192,131 @@ describe('designer generation and final review', () => {
     expect(primaryNode?.kind).toBe('copy');
     expect(primaryNode?.fontScale).toBeGreaterThan(0.02);
   }, 15000);
+  describe('text edit (retype) mode', () => {
+    it('re-typesets over the locked picture without calling the image model, the critic or font pairing', async () => {
+      const { input, generateJson, generateImage } = await setup(false);
+      const lockedVisual = await image('#ababab');
+      const lockedTypography = await typography();
+      const result = await designCreative({
+        ...input, retype: true, lockedVisual, lockedTypography,
+        direction: { ...direction, headline: 'Fresh wording' },
+      });
+      expect(generateImage).not.toHaveBeenCalled();
+      expect(criticCalls(generateJson)).toHaveLength(0);
+      expect(fontPairingCalls(generateJson)).toHaveLength(0);
+      expect(result.visual?.data).toBe(lockedVisual.data);
+      expect(result.typography).toBe(lockedTypography);
+      const typeset = result.plan.nodes.filter(n => n.kind === 'copy').flatMap(n => n.lines).join(' ').toLowerCase();
+      expect(typeset).toContain('fresh wording');
+      expect(typeset).not.toContain('international trips');
+    }, 20000);
+
+    it('keeps the original fonts: the locked typography is used as given', async () => {
+      const { input } = await setup(false);
+      const lockedTypography = await typography();
+      const result = await designCreative({ ...input, retype: true, lockedVisual: await image('#ababab'), lockedTypography });
+      expect(result.typography.headlineFont).toBe(lockedTypography.headlineFont);
+    }, 20000);
+
+    it('typesets a line in the font, size and colour the member chose, and reports what it applied', async () => {
+      const { input, generateImage } = await setup(false);
+      const lockedVisual = await image('#ababab');
+      const lockedTypography = await typography();
+      const styled = await designCreative({
+        ...input, retype: true, lockedVisual, lockedTypography,
+        textStyles: { HEADLINE: { fontFamily: 'Anton', color: '#ff3300', sizeScale: 0.8 } },
+      });
+      const headline = styled.plan.nodes.find((n) => n.id === 'primary-hook')!;
+      expect(headline.fontFamily).toBe('Anton');
+      expect(headline.color).toBe('#ff3300');
+      expect(styled.appliedTextStyles?.HEADLINE).toMatchObject({ fontFamily: 'Anton', color: '#ff3300', sizeScale: 0.8 });
+      expect(styled.typeset.HEADLINE).toMatchObject({ fontFamily: 'Anton', color: '#ff3300' });
+      expect(generateImage).not.toHaveBeenCalled();
+    }, 20000);
+
+    it('ignores style overrides outside retype mode', async () => {
+      const { input } = await setup(false);
+      const result = await designCreative({ ...input, textStyles: { HEADLINE: { fontFamily: 'Anton' } } });
+      expect(result.appliedTextStyles).toBeUndefined();
+    }, 20000);
+
+    describe('re-rendering the saved layout', () => {
+      async function original() {
+        const { input } = await setup(false);
+        const lockedVisual = await image('#ababab');
+        const lockedTypography = await typography();
+        const first = await designCreative({ ...input, retype: true, lockedVisual, lockedTypography });
+        const layout = buildPersistedLayout({ plan: first.plan, roles: first.copyNodeRoles, copy: first.copyById, baseScales: first.baseScales });
+        return { input, lockedVisual, lockedTypography, first, layout };
+      }
+      const rerender = (o: Awaited<ReturnType<typeof original>>, edited: CreativeDirection, changes = {}) =>
+        retypeCreativeFromLayout({
+          direction: edited, context, products: o.input.products, logo: o.input.logo,
+          lockedVisual: o.lockedVisual, typography: o.lockedTypography, layout: o.layout, changes,
+        });
+      const box = (n: DesignNode) => ({ x: n.x, y: n.y, width: n.width, height: n.height });
+
+      it('changes only the edited line: every other line keeps its exact box, size, breaks and colour', async () => {
+        const o = await original();
+        const edited = await rerender(o, { ...direction, headline: 'Quick trips' });
+        for (const before of o.first.plan.nodes.filter((n) => n.id !== 'primary-hook')) {
+          expect(edited.plan.nodes.find((n) => n.id === before.id)).toEqual(before);
+        }
+        const headBefore = o.first.plan.nodes.find((n) => n.id === 'primary-hook')!;
+        const headAfter = edited.plan.nodes.find((n) => n.id === 'primary-hook')!;
+        expect(box(headAfter)).toEqual(box(headBefore));
+        expect(headAfter.fontFamily).toBe(headBefore.fontFamily);
+        expect(headAfter.color).toBe(headBefore.color);
+        expect(headAfter.lines.join(' ')).toBe('Quick trips');
+        expect(headAfter.fontScale).toBeLessThanOrEqual(headBefore.fontScale + 1e-9);
+        expect(edited.data.length).toBeGreaterThan(0);
+      }, 20000);
+
+      it('restyles one line without touching the rest of the layout', async () => {
+        const o = await original();
+        const edited = await rerender(o, { ...direction, headline: 'Quick trips' }, { HEADLINE: { fontFamily: 'Anton', color: '#ff3300' } });
+        for (const before of o.first.plan.nodes.filter((n) => n.id !== 'primary-hook')) {
+          expect(edited.plan.nodes.find((n) => n.id === before.id)).toEqual(before);
+        }
+        const head = edited.plan.nodes.find((n) => n.id === 'primary-hook')!;
+        expect(head.fontFamily).toBe('Anton');
+        expect(head.color).toBe('#ff3300');
+        expect(edited.typeset.HEADLINE).toMatchObject({ fontFamily: 'Anton', color: '#ff3300' });
+      }, 20000);
+
+      it('shrinks long wording to fit its own box rather than moving or growing it', async () => {
+        const o = await original();
+        const edited = await rerender(o, { ...direction, headline: 'International trips planned slowly around the people you love most' });
+        const headBefore = o.first.plan.nodes.find((n) => n.id === 'primary-hook')!;
+        const headAfter = edited.plan.nodes.find((n) => n.id === 'primary-hook')!;
+        expect(box(headAfter)).toEqual(box(headBefore));
+        expect(headAfter.fontScale).toBeLessThan(headBefore.fontScale);
+        for (const before of o.first.plan.nodes.filter((n) => n.id !== 'primary-hook')) {
+          expect(edited.plan.nodes.find((n) => n.id === before.id)).toEqual(before);
+        }
+      }, 20000);
+
+      it('asks for a re-solve when the saved layout no longer matches the lines', async () => {
+        const o = await original();
+        const withoutOffer = { ...direction, marketingCreative: {} } as CreativeDirection;
+        await expect(rerender(o, withoutOffer)).rejects.toBeInstanceOf(LayoutMismatchError);
+      }, 20000);
+    });
+
+    it('never redesigns or regenerates, even when the critic would have rejected the design', async () => {
+      const { input, generateJson, generateImage } = await setup(false);
+      // A critic that rejects everything: outside retype mode this forces a redesign and a new image.
+      generateJson.mockReset().mockImplementation(async () => ({
+        observedSubject: 'Travel', templateLook: true, problems: ['Looks like a template.'],
+      }));
+      const result = await designCreative({ ...input, retype: true, lockedVisual: await image('#ababab'), lockedTypography: await typography() });
+      expect(result.data.length).toBeGreaterThan(0);
+      expect(generateImage).not.toHaveBeenCalled();
+      expect(artDirectorCalls(generateJson)).toHaveLength(0);
+      expect(generateJson).not.toHaveBeenCalled();
+    }, 20000);
+  });
+
   it('fails after bounded retries (max 2 attempts) when the actual output never passes the design critic', async () => {
     const { input, p, generateJson } = await setup();
     generateJson.mockReset().mockImplementation(async (call) => {
