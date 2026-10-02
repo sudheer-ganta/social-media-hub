@@ -15,7 +15,6 @@ import {
   Megaphone,
   Mic2,
   Scissors,
-  Sparkles,
   Wand2,
   type LucideIcon,
 } from "lucide-react";

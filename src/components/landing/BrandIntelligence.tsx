@@ -8,7 +8,7 @@ import {
   useTransform,
   type MotionValue,
 } from "framer-motion";
-import { ArrowRight, Image as ImageIcon, Megaphone, Quote, Sparkles } from "lucide-react";
+import { ArrowRight, Image as ImageIcon, Megaphone, Quote } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { POST_COPY, photos } from "./data";
@@ -18,6 +18,7 @@ import {
   Eyebrow,
   Magnetic,
   MaskLines,
+  RallyMark,
   Reveal,
   useLandingScroll,
 } from "./primitives";
