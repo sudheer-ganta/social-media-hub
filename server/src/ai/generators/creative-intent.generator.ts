@@ -1,6 +1,7 @@
 import { buildCreativeIntentPrompt } from '../prompts/creative-intent.prompt';
 import type { AiTextProvider } from '../providers';
 import type { CreativeIntentBrief, RawCreativeIntentPayload } from '../types';
+import { dropSubsumedClaims } from '../intent/copy-repair';
 
 /**
  * Turns the member's natural-language request into a
@@ -93,7 +94,7 @@ export function normaliseIntent(payload: RawCreativeIntentPayload): CreativeInte
     promotionType: asString(payload.promotionType, 80),
     venueType: asString(payload.venueType, 80),
     audience: asString(payload.audience),
-    requiredClaims: allClaims,
+    requiredClaims: dropSubsumedClaims(allClaims),
     optionalDetails: asClaims(payload.optionalDetails, 6),
     confidence: asConfidence(payload.confidence),
   };
@@ -129,7 +130,7 @@ export async function generateCreativeIntent({
   const intent = normaliseIntent((payload && typeof payload === 'object') ? payload : { requiredClaims: [] });
   // Literal discount offers cannot disappear because the model omitted a field.
   const discounts = request.match(/\d+(?:\.\d+)?\s*%\s*(?:off|discount)\b/gi) ?? [];
-  intent.requiredClaims = [...new Set([...(intent.requiredClaims ?? []), ...discounts])];
+  intent.requiredClaims = dropSubsumedClaims([...new Set([...(intent.requiredClaims ?? []), ...discounts])]);
     console.info('[creative] intent extracted', {
       model: provider.model,
       durationMs: Date.now() - startedAt,

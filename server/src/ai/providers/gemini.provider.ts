@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { env } from '../../config/env';
+import { recordUsage } from '../usage-meter';
 import {
   AiProviderError,
   type AiTextProvider,
@@ -36,6 +37,8 @@ const REQUEST_TIMEOUT_MS = 45_000;
  * limit error. Output is billed by what is used, not by this ceiling.
  */
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
+/** A truncated reply is retried with a larger cap, up to this. */
+const MAX_OUTPUT_TOKENS_CEILING = 32_768;
 
 /**
  * Thinking models bill for reasoning before answering, and a caption is a
@@ -65,7 +68,11 @@ function thinkingConfigFor(
 }
 
 /** One retry, and only for failures that are plausibly transient. */
-const MAX_ATTEMPTS = 2;
+/**
+ * Three, not two: a call that hangs is abandoned and asked again, and most hangs clear on the
+ * second ask. A reply cut off by the token cap gets a larger cap each time (8k, 16k, 32k).
+ */
+const MAX_ATTEMPTS = 3;
 const RETRY_BACKOFF_MS = 800;
 
 interface GeminiCandidate {
@@ -76,6 +83,7 @@ interface GeminiCandidate {
 interface GeminiResponse {
   candidates?: GeminiCandidate[];
   promptFeedback?: { blockReason?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
 }
 
 /**
@@ -273,14 +281,19 @@ export class GeminiProvider implements AiTextProvider {
     };
 
     let lastError: AiProviderError | undefined;
+    let outputCap = body.generationConfig.maxOutputTokens;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
+        // Thinking tokens count against this cap, so a long answer can be cut off
+        // mid-sentence. Asking again with the same cap would be cut off at the
+        // same place, so each retry after a truncation gets twice the room.
+        body.generationConfig.maxOutputTokens = outputCap;
         const { data } = await axios.post<GeminiResponse>(
           `${GEMINI_API_BASE}/${this.model}:generateContent`,
           body,
           {
-            timeout: REQUEST_TIMEOUT_MS,
+            timeout: options.timeoutMs ?? REQUEST_TIMEOUT_MS,
             // The key rides in a header, not the query string, so it cannot
             // end up in a proxy's access log.
             headers: {
@@ -289,6 +302,8 @@ export class GeminiProvider implements AiTextProvider {
             },
           },
         );
+        // Billed even when the reply is later rejected (blocked, truncated, empty).
+        recordUsage(data.usageMetadata);
 
         if (data.promptFeedback?.blockReason) {
           // Not retryable and not our bug: the request itself was refused.
@@ -306,6 +321,7 @@ export class GeminiProvider implements AiTextProvider {
         // JSON and would otherwise be reported as "we could not read the
         // response" — which sends whoever debugs it looking in the wrong place.
         if (candidate?.finishReason === 'MAX_TOKENS') {
+          outputCap = Math.min(outputCap * 2, MAX_OUTPUT_TOKENS_CEILING);
           throw new AiProviderError(
             'The AI ran out of room before it finished. Try a shorter caption length or fewer options.',
             502,

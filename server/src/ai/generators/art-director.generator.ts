@@ -114,6 +114,8 @@ export async function generateGraphicDesignConcept(
     prompt: built.prompt,
     responseSchema: built.responseSchema,
     temperature: built.temperature,
+    // This call has run for 44s against a 45s default; it needs some headroom.
+    timeoutMs: 60_000,
   })) as Record<string, unknown>;
 
   const payload = (raw && typeof raw === 'object') ? raw : {};

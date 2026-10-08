@@ -50,6 +50,14 @@ export function LandingNav() {
               </a>
             </li>
           ))}
+          <li>
+            <Link
+              to="/pricing"
+              className="rounded-full px-3.5 py-2 text-sm font-medium text-rl-muted transition-colors hover:bg-rl-ink/5 hover:text-rl-ink"
+            >
+              Pricing
+            </Link>
+          </li>
         </ul>
 
         <div className="flex items-center gap-2">
@@ -63,7 +71,7 @@ export function LandingNav() {
             to="/register"
             className="group inline-flex h-10 items-center gap-2 rounded-xl bg-rl-ink px-5 text-sm font-medium text-rl-bg transition-transform active:scale-[0.98]"
           >
-            Get started
+            Start free trial
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>

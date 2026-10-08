@@ -95,6 +95,13 @@ app.use(
     credentials: true,
   }),
 );
+
+// Razorpay webhooks. Mounted before the JSON parser: the signature covers the
+// exact raw bytes, which `express.json()` would consume and re-shape.
+import { billingWebhookRouter } from './routes/billing.routes';
+
+app.use('/api/billing/webhook', express.raw({ type: () => true, limit: '1mb' }), billingWebhookRouter);
+
 app.use(express.json());
 
 // Ceiling on everything, before any route does work.
@@ -187,6 +194,11 @@ app.use('/api/analytics', analyticsRoutes);
 import uploadsRoutes from './routes/uploads.routes';
 
 app.use('/api/uploads', uploadsRoutes);
+
+// Plans, credits and Razorpay checkout. See routes/billing.routes.ts.
+import billingRoutes from './routes/billing.routes';
+
+app.use('/api/billing', billingRoutes);
 
 // SMTP / Email service routes (test connection, notifications, digests, verification)
 import emailRoutes from './routes/email.routes';

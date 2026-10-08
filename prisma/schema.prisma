@@ -944,3 +944,145 @@ enum PostStatus {
 
   @@map("post_status")
 }
+
+// ─── Billing ────────────────────────────────────────────────────────────────
+//
+// Server-only tables: the SPA never reads them through PostgREST (RLS is on with
+// no policies), and money state is only ever changed by the backend — from a
+// verified Razorpay webhook or from the credit service. Amounts are integer
+// paise; credits are integers.
+
+/// Where a member's subscription stands. The entitlement a status grants is
+/// decided in `server/src/billing/entitlements.ts`, not by reading this alone.
+enum SubscriptionStatus {
+  /// Free trial running (no card). Ends at `trialEndsAt`.
+  TRIALING
+  ACTIVE
+  /// A renewal charge failed and Razorpay is retrying. Access continues for a
+  /// short grace period.
+  PAST_DUE
+  /// Razorpay gave up retrying. No AI until the member fixes the payment method.
+  HALTED
+  /// Cancelled; access runs to `currentPeriodEnd`.
+  CANCELED
+  /// Trial over, or a paid period fully lapsed. The free floor applies.
+  EXPIRED
+
+  @@map("subscription_status")
+}
+
+/// One row per member: their current plan and its Razorpay linkage.
+model Subscription {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  /// 'trial' | 'starter' | 'pro' | 'agency' — keys of `billing/plans.ts`.
+  planId          String             @map("plan_id")
+  /// 'monthly' | 'yearly'; null while on the trial.
+  billingInterval String?            @map("billing_interval")
+  status          SubscriptionStatus
+
+  trialEndsAt        DateTime? @map("trial_ends_at") @db.Timestamptz(6)
+  currentPeriodStart DateTime? @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd   DateTime? @map("current_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd  Boolean   @default(false) @map("cancel_at_period_end")
+  canceledAt         DateTime? @map("canceled_at") @db.Timestamptz(6)
+
+  razorpayCustomerId     String? @map("razorpay_customer_id")
+  /// The live Razorpay subscription this plan is billed through.
+  razorpaySubscriptionId String? @unique @map("razorpay_subscription_id")
+
+  /// A checkout the member has started but Razorpay has not yet activated.
+  /// Kept apart so abandoning checkout never disturbs the current plan.
+  checkoutSubscriptionId String? @unique @map("checkout_subscription_id")
+  checkoutPlanId         String? @map("checkout_plan_id")
+  checkoutInterval       String? @map("checkout_interval")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("subscriptions")
+}
+
+/// The spendable balance, in two buckets. `planCredits` is the monthly
+/// allowance and does not roll over; `topupCredits` is bought and does. Spending
+/// takes plan credits first. A CHECK constraint keeps both non-negative, so an
+/// overspend is impossible even under concurrent requests.
+model CreditAccount {
+  userId       String   @id @map("user_id") @db.Uuid
+  planCredits  Int      @default(0) @map("plan_credits")
+  topupCredits Int      @default(0) @map("topup_credits")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("credit_accounts")
+}
+
+enum CreditEntryType {
+  TRIAL_GRANT
+  PLAN_GRANT
+  TOPUP_GRANT
+  SPEND
+  REFUND
+  /// Unused plan credits dropped at renewal, trial end or cancellation.
+  EXPIRE
+  ADJUSTMENT
+
+  @@map("credit_entry_type")
+}
+
+/// Append-only history behind `credit_accounts`. Every change to a balance has a
+/// row here, written in the same transaction, so the balance can always be
+/// audited. `idempotencyKey` makes a retried webhook or a repeated refund a
+/// no-op rather than a double credit.
+model CreditLedgerEntry {
+  id             String          @id @default(uuid()) @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  type           CreditEntryType
+  planDelta      Int             @default(0) @map("plan_delta")
+  topupDelta     Int             @default(0) @map("topup_delta")
+  /// What was bought or granted: 'generate', 'refine', 'starter:monthly', ...
+  action         String?
+  requestId      String?         @map("request_id")
+  idempotencyKey String          @unique @map("idempotency_key")
+  metadata       Json?
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("credit_ledger_entries")
+}
+
+/// Money received, one row per Razorpay payment. The invoice-history source.
+model BillingPayment {
+  id                     String   @id @default(uuid()) @db.Uuid
+  userId                 String   @map("user_id") @db.Uuid
+  razorpayPaymentId      String   @unique @map("razorpay_payment_id")
+  razorpayOrderId        String?  @map("razorpay_order_id")
+  razorpaySubscriptionId String?  @map("razorpay_subscription_id")
+  razorpayInvoiceId      String?  @map("razorpay_invoice_id")
+  /// 'subscription' | 'topup'
+  kind                   String
+  planId                 String?  @map("plan_id")
+  amountPaise            Int      @map("amount_paise")
+  currency               String   @default("INR")
+  /// 'captured' | 'failed' | 'refunded'
+  status                 String
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("billing_payments")
+}
+
+/// Every webhook delivery, keyed by Razorpay's event id. Inserting first and
+/// processing second is what makes redelivery safe: a duplicate hits the primary
+/// key and is dropped.
+model BillingWebhookEvent {
+  id          String    @id
+  eventType   String    @map("event_type")
+  payload     Json
+  receivedAt  DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt DateTime? @map("processed_at") @db.Timestamptz(6)
+  error       String?
+
+  @@index([eventType, receivedAt(sort: Desc)])
+  @@map("billing_webhook_events")
+}

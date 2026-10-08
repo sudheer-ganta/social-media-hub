@@ -36,6 +36,15 @@ function asString(value: unknown, max = 400): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+
+/**
+ * Writing the full creative direction is the longest model call in the pipeline, and its
+ * reply plus its thinking can pass the default 8192-token cap. At the default it was cut
+ * off, retried at the same size, and failed the whole request before any image was made.
+ * The timeout is a little over the default rather than far over it: the call normally takes
+ * about 15s, and when one hangs a fresh attempt is faster than waiting on it.
+ */
+const DIRECTION_CALL_LIMITS = { maxOutputTokens: 16_384, timeoutMs: 60_000 } as const;
 import { isStructuredArtifact, isInternalMetadata } from '../intent/copy-sanitizer';
 
 const TECHNICAL_META_ARTIFACTS =
@@ -345,6 +354,7 @@ export async function generateCreativeDirection({
     prompt: built.prompt,
     responseSchema: built.responseSchema,
     temperature: built.temperature,
+    ...DIRECTION_CALL_LIMITS,
   })) as RawCreativeDirectionPayload;
 
   let direction = normaliseDirection(payload, mode, artDirectionFamily);
@@ -395,6 +405,7 @@ export async function generateCreativeDirection({
         .join('\n')}`,
       responseSchema: built.responseSchema,
       temperature: built.temperature,
+      ...DIRECTION_CALL_LIMITS,
     })) as RawCreativeDirectionPayload;
     const retried = normaliseDirection(retryPayload, mode, artDirectionFamily);
     const retriedMissing = missingFromCreative(retried, intent);

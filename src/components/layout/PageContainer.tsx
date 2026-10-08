@@ -1,4 +1,6 @@
 import { motion } from "framer-motion";
+import "@fontsource-variable/geist";
+import "@/components/dashboard/dashboard.css";
 import { cn } from "@/lib/utils";
 
 interface PageContainerProps {
@@ -33,20 +35,23 @@ export function PageContainer({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
-      className={cn("w-full min-w-0 overflow-x-clip px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8", className)}
+      className={cn("rd rd-app w-full min-w-0 overflow-x-clip px-4 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10", className)}
     >
       {(title || actions) && (
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <div className="min-w-0">
             {title && (
               typeof title === "string" ? (
-                <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
+                <h1 className="text-[clamp(32px,3.8vw,48px)] font-extrabold leading-[1.02] tracking-[-0.05em]">
+                  {title}
+                  <span className="text-rl-accent">.</span>
+                </h1>
               ) : (
                 title
               )
             )}
             {description && (
-              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+              <p className="mt-2 max-w-[62ch] text-[15.5px] leading-relaxed text-muted-foreground">{description}</p>
             )}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}

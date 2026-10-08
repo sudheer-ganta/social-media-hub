@@ -75,7 +75,7 @@ export function FinalCTA() {
                   to="/register"
                   className="group inline-flex h-[48px] items-center gap-2 rounded-[10px] bg-[#FF4D32] hover:bg-[#e04027] px-5 text-[14px] font-semibold text-[#FBFAF7] transition-all duration-200 active:scale-95 shadow-md shadow-[#FF4D32]/20"
                 >
-                  Get started
+                  Start free trial
                   <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
                 </Link>
               </Magnetic>

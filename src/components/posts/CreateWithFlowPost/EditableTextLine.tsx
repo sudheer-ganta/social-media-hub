@@ -54,7 +54,13 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 /** Perceived brightness of a #rrggbb colour, to pick a readable tick mark. */
 function isLight(hex: string): boolean {
-  const n = parseInt(hex.slice(1), 16);
+  if (!hex || typeof hex !== "string") return true;
+  let clean = hex.replace(/^#/, "");
+  if (clean.length === 3) {
+    clean = clean.split("").map((c) => c + c).join("");
+  }
+  const n = parseInt(clean, 16);
+  if (Number.isNaN(n)) return true;
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   return 0.299 * r + 0.587 * g + 0.114 * b > 150;
 }
@@ -352,12 +358,62 @@ export function EditableTextLine({ label, line, fonts, palette, busy, onApply }:
         </p>
       </div>
 
-      {palette.length > 0 && (
-        <div className="space-y-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Colour</span>
-          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={`${label} colour`}>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-muted-foreground">Text Colour</span>
+            {color && (
+              <span className="font-mono text-[11px] text-muted-foreground uppercase">
+                {color}
+              </span>
+            )}
+          </div>
+
+          {/* Quick & Studio Swatches */}
+          <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label={`${label} colour`}>
+            {/* Context/Scene Palette (e.g. White & Black) */}
             {palette.map((swatch) => {
-              const selected = color === swatch;
+              const selected = color?.toLowerCase() === swatch.toLowerCase();
+              return (
+                <button
+                  key={swatch}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={`Scene ${swatch}`}
+                  disabled={busy}
+                  onClick={() => setColor(swatch)}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-full border border-border shadow-xs transition-transform hover:scale-105",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    selected && "ring-2 ring-foreground ring-offset-2 ring-offset-card",
+                  )}
+                  style={{ backgroundColor: swatch }}
+                >
+                  {selected && (
+                    <Check
+                      className="h-3.5 w-3.5"
+                      strokeWidth={3}
+                      style={{ color: isLight(swatch) ? "#111111" : "#ffffff" }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+
+            {/* Studio Design Palette Swatches */}
+            {[
+              "#6366F1", // Indigo
+              "#3B82F6", // Blue
+              "#06B6D4", // Cyan
+              "#10B981", // Emerald
+              "#F59E0B", // Amber
+              "#F97316", // Orange
+              "#EF4444", // Crimson
+              "#EC4899", // Rose
+              "#8B5CF6", // Violet
+              "#94A3B8", // Slate
+            ].filter((c) => !palette.some((p) => p.toLowerCase() === c.toLowerCase())).map((swatch) => {
+              const selected = color?.toLowerCase() === swatch.toLowerCase();
               return (
                 <button
                   key={swatch}
@@ -368,7 +424,7 @@ export function EditableTextLine({ label, line, fonts, palette, busy, onApply }:
                   disabled={busy}
                   onClick={() => setColor(swatch)}
                   className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-full border border-border transition-shadow",
+                    "flex h-7 w-7 items-center justify-center rounded-full border border-border/60 shadow-xs transition-transform hover:scale-105",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     selected && "ring-2 ring-foreground ring-offset-2 ring-offset-card",
                   )}
@@ -385,8 +441,71 @@ export function EditableTextLine({ label, line, fonts, palette, busy, onApply }:
               );
             })}
           </div>
+
+          {/* Custom Color Wheel & Hex Code Input */}
+          <div className="flex items-center gap-2 pt-1">
+            <div className="relative flex items-center">
+              <label
+                htmlFor={`color-picker-${textId}`}
+                title="Open full color spectrum picker"
+                className={cn(
+                  "relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-border shadow-xs transition-all hover:scale-105 active:scale-95",
+                  "bg-linear-to-tr from-rose-500 via-amber-400 to-indigo-500",
+                )}
+              >
+                <span
+                  className="h-5 w-5 rounded-md border border-white/40 shadow-xs"
+                  style={{ backgroundColor: color ?? "#ffffff" }}
+                />
+                <input
+                  id={`color-picker-${textId}`}
+                  type="color"
+                  value={color && color.startsWith("#") && color.length === 7 ? color : "#ffffff"}
+                  disabled={busy}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center font-mono text-xs text-muted-foreground">
+                #
+              </span>
+              <input
+                type="text"
+                placeholder="HEX (e.g. 6366F1)"
+                value={color ? color.replace(/^#/, "") : ""}
+                maxLength={6}
+                disabled={busy}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^0-9A-Fa-f]/g, "");
+                  if (val.length === 3 || val.length === 6) {
+                    setColor(`#${val}`);
+                  } else if (val.length === 0) {
+                    setColor(null);
+                  } else {
+                    setColor(`#${val}`);
+                  }
+                }}
+                className="h-8 w-full rounded-md border border-input bg-card pl-6 pr-2.5 font-mono text-xs text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+
+            {color && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setColor(palette[0] ?? "#ffffff")}
+                disabled={busy}
+              >
+                Reset
+              </Button>
+            )}
+          </div>
         </div>
-      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
         <p className="text-xs leading-relaxed text-muted-foreground">Only the text changes. The picture stays as it is.</p>

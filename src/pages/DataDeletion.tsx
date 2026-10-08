@@ -1,45 +1,15 @@
-import { Footer } from "@/components/layout/Footer";
+import { PublicPage } from "@/components/layout/PublicPage";
 import { Link } from "react-router-dom";
-import { Trash2, ShieldCheck, Mail, ArrowLeft, ExternalLink } from "lucide-react";
+import { ShieldCheck, Mail, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function DataDeletion() {
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Navigation Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 h-14 flex items-center justify-between">
-          <Link
-            to="/"
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Rally
-          </Link>
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Rally Legal & Privacy
-          </span>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-10 max-w-4xl flex-grow">
-        {/* Page Header */}
-        <div className="mb-8 border-b border-border pb-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2.5 rounded-lg bg-destructive/10 text-destructive">
-              <Trash2 className="h-6 w-6" />
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              User Data Deletion Instructions
-            </h1>
-          </div>
-          <p className="text-muted-foreground text-base leading-relaxed">
-            Rally is committed to protecting your privacy and giving you complete control over your data.
-            In compliance with Meta (Facebook/Instagram), TikTok, X (Twitter), and GDPR/CCPA regulations,
-            you have full rights to request the permanent deletion of your data at any time.
-          </p>
-        </div>
-
+    <PublicPage
+      title="User Data Deletion Instructions"
+      intro="Rally is committed to protecting your privacy and giving you complete control over your data. In compliance with Meta (Facebook/Instagram), TikTok, X (Twitter), and GDPR/CCPA regulations, you have full rights to request the permanent deletion of your data at any time."
+      width="wide"
+    >
         <div className="space-y-8 text-sm md:text-base leading-relaxed">
           {/* Summary Box */}
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 flex items-start gap-4">
@@ -162,9 +132,6 @@ export default function DataDeletion() {
             </div>
           </section>
         </div>
-      </main>
-
-      <Footer />
-    </div>
+    </PublicPage>
   );
 }

@@ -55,6 +55,12 @@ export interface GenerateJsonOptions {
   temperature?: number;
   /** Hard ceiling on the reply, in tokens. */
   maxOutputTokens?: number;
+  /**
+   * How long one request may take before it is abandoned. The provider's default
+   * suits a short answer; a call that reasons at length (creative direction takes
+   * 40s or more) needs more, or it times out and its retry times out too.
+   */
+  timeoutMs?: number;
 }
 
 export interface AiTextProvider {

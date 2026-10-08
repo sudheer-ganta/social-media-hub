@@ -1,4 +1,5 @@
 import type { CampaignCopyLine } from '../prompts/campaign-creative.prompt';
+import { collapseSubsumed } from './copy-repair';
 import type { CopySemanticRole } from '../render/design-representation';
 
 /**
@@ -231,6 +232,16 @@ export function validateAndBuildRenderableCopy(
     seenTexts.add(key);
     deduped.push(entry);
   }
+
+  // A line whose every word another line already says is the same message twice
+  // ("30% off" beside "30% off all running shoes"). The headline and the call to
+  // action are never the ones removed.
+  const distinct = collapseSubsumed(
+    deduped.map((entry) => ({ role: entry.line.role as string, text: entry.line.text, entry })),
+    (item) => item.role === 'HEADLINE' || item.role === 'CTA',
+  ).map((item) => item.entry);
+  deduped.length = 0;
+  deduped.push(...distinct);
 
   // Rank by priority: ESSENTIAL (0) -> SUPPORTING (1) -> OPTIONAL (2)
   const priorityOrder: Record<CopyClassification, number> = {

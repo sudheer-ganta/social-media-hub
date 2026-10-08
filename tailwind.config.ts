@@ -34,6 +34,9 @@ export default {
           line: "rgb(var(--rl-line) / <alpha-value>)",
           accent: "rgb(var(--rl-accent) / <alpha-value>)",
           strong: "rgb(var(--rl-accent-strong) / <alpha-value>)",
+          // Same colour as `strong`. Existing components were written with this
+          // name, which was never defined, so they rendered uncoloured.
+          "accent-strong": "rgb(var(--rl-accent-strong) / <alpha-value>)",
           soft: "rgb(var(--rl-soft) / <alpha-value>)",
           dark: "rgb(var(--rl-dark) / <alpha-value>)",
         },

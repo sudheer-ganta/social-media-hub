@@ -1,4 +1,5 @@
 import { buildCreativeConceptsPrompt, MECHANISM_FAMILIES } from '../prompts/creative-concepts.prompt';
+import { UserFacingError } from '../../utils/user-facing-error';
 import { conceptText, evaluateConceptIntentAffordance, claimSatisfied } from '../intent/claim-match';
 import { evaluateConceptRealizability, isAbstractOccasionOrTheme, synthesizePhysicalDominantObject } from '../intent/concept-realizability-gate';
 import type { AiTextProvider } from '../providers';
@@ -611,7 +612,8 @@ export async function generateCreativeConcepts({
   // mechanism diversity): with more than three concepts standing, the weaker
   // of any mechanism duplicates is dropped rather than shown.
   concepts = trimDuplicateMechanisms(concepts);
-  if (!concepts.length) throw new Error('No concept met the campaign requirements. Please try again.');
+  // A known, member-facing error: the vague 500 this used to produce told them nothing to try.
+  if (!concepts.length) throw new UserFacingError('No concept met the campaign requirements. Try describing what you want a little differently.', 422);
   const finalDiversity = evaluateConceptDiversity(concepts);
 
   const durationMs = Date.now() - startedAt;

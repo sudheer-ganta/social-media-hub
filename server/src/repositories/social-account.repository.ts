@@ -414,7 +414,38 @@ export async function deleteByUserAndProvider(
   return count;
 }
 
+/** How many accounts the member has connected, across every publishing context. */
+export async function countByUser(userId: string): Promise<number> {
+  return prisma.socialAccount.count({ where: { userId } });
+}
+
+/**
+ * Whether this exact connection already exists, so a reconnect (which refreshes
+ * the row) is never counted against a plan's account limit as if it were new.
+ */
+export async function connectionExists(identity: {
+  userId: string;
+  provider: string;
+  providerAccountId: string;
+  contextType?: string | null;
+  brandId?: string | null;
+}): Promise<boolean> {
+  const found = await prisma.socialAccount.findFirst({
+    where: {
+      userId: identity.userId,
+      provider: identity.provider,
+      providerAccountId: identity.providerAccountId,
+      contextType: identity.contextType ?? 'personal',
+      brandId: identity.brandId ?? null,
+    },
+    select: { id: true },
+  });
+  return Boolean(found);
+}
+
 export const socialAccountRepository = {
+  countByUser,
+  connectionExists,
   upsert,
   listByUser,
   findByUserAndProvider,

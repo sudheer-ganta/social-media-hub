@@ -25,6 +25,7 @@
     "verify:analytics": "ts-node --transpileOnly src/scripts/verify-analytics-live.ts",
     "fetch:fonts": "ts-node --transpile-only src/scripts/fetch-fonts.ts",
     "verify:smtp": "ts-node --transpile-only src/scripts/verify-smtp.ts",
+    "billing:sync-plans": "ts-node --transpile-only src/scripts/sync-razorpay-plans.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

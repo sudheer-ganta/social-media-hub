@@ -52,6 +52,14 @@ const TECHNICAL_META_ARTIFACTS =
 const LAYOUT_DIRECTION_LEAKS =
   /\b(?:upper|lower|bottom|top|middle|left|right)\s+(?:third|half|corner|quadrant|column|edge|margin|zone)\b|\b(?:statement typography|high contrast against|typography with|set in (?:serif|sans|bold)|negative space|placed across|positioned in|placed in|sits in the|rendered as|overlay text)\b/i;
 
+/**
+ * Wording about how a picture is framed, which belongs in an image prompt and never on the
+ * creative. It reaches the copy when the member's own request is echoed as a line, and it
+ * was rendered as visible text ("... sourdough filling the frame") and rejected for it.
+ */
+const IMAGE_DIRECTION_LEAKS =
+  /\b(?:filling|fills|fill|spanning|spans|covering|covers)\s+(?:the\s+)?(?:entire\s+|whole\s+)?(?:frame|canvas|image|screen|background)\b|\bedge[- ]to[- ]edge\b|\bfull[- ]bleed\b|\bin the frame\b/i;
+
 function cleanCopyLine(text?: string): string {
   const trimmed = (text ?? '').trim();
   if (
@@ -59,7 +67,8 @@ function cleanCopyLine(text?: string): string {
     isStructuredArtifact(trimmed) ||
     isInternalMetadata(trimmed) ||
     TECHNICAL_META_ARTIFACTS.test(trimmed) ||
-    LAYOUT_DIRECTION_LEAKS.test(trimmed)
+    LAYOUT_DIRECTION_LEAKS.test(trimmed) ||
+    IMAGE_DIRECTION_LEAKS.test(trimmed)
   ) {
     return '';
   }

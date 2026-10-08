@@ -347,6 +347,28 @@ export interface EvaluateConceptRealizabilityOptions {
   userPrompt?: string;
 }
 
+const COMMON_WORDS = new Set([
+  'with', 'that', 'this', 'from', 'your', 'have', 'will', 'into', 'about', 'their', 'there', 'where', 'which',
+  'would', 'could', 'should', 'being', 'been', 'than', 'then', 'them', 'they', 'what', 'when', 'more', 'most',
+  'some', 'such', 'only', 'also', 'over', 'under', 'every', 'each', 'other', 'these', 'those', 'while', 'after',
+  'before', 'between', 'around', 'through', 'create', 'post', 'promote', 'announce', 'announcing', 'campaign',
+]);
+
+/** The words of a text that say something: four letters or more, and not an everyday connective. */
+function distinctiveWords(text: string): string[] {
+  return [...new Set(
+    text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length >= 4 && !COMMON_WORDS.has(word)),
+  )];
+}
+
+/** The same word allowing for plurals and endings: "shoes" and "shoe", "launching" and "launch". */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  const stem = (word: string) => word.replace(/(?:ing|ed|es|s)$/, '');
+  const [x, y] = [stem(a), stem(b)];
+  return x.length >= 3 && y.length >= 3 && (x === y || (x.length >= 5 && y.length >= 5 && x.slice(0, 5) === y.slice(0, 5)));
+}
+
 export function evaluateConceptRealizability(
   optionsOrConcept: EvaluateConceptRealizabilityOptions | GraphicDesignConcept | ScoredCreativeConcept | CreativeConcept | any,
   maybeBrief?: any,
@@ -567,7 +589,14 @@ export function evaluateConceptRealizability(
       conceptProse.includes('ramen') ||
       conceptProse.includes('restaurant');
 
-    if (!mentionsFood) {
+    // A concept that picks up the member's own words is on-brief whatever it is about. A
+    // launch party at a cafe with live acoustic music is rightly about the music, and a fixed
+    // list of food words rejected every such concept ("no semantic connection to food").
+    const briefWords = distinctiveWords(`${combinedBriefContext} ${(intent?.requiredClaims ?? []).join(' ')}`);
+    const conceptWords = distinctiveWords(conceptProse);
+    const usesTheirWords = briefWords.some((word) => conceptWords.some((other) => sameWord(word, other)));
+
+    if (!mentionsFood && !usesTheirWords) {
       semanticRelevance = 20;
       failures.push(
         `DOMAIN_RELEVANCE_MISMATCH: Concept has no semantic connection to food, dining, or restaurant domain requested in brief.`

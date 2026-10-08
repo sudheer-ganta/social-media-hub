@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Settings, Moon, Sun } from "lucide-react";
+import { CreditCard, Moon, Plug, Settings, Sun } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -21,6 +21,22 @@ export function MobileHeader() {
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
+
+        <Link
+          to="/integrations"
+          className="flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Accounts"
+        >
+          <Plug className="h-4 w-4" />
+        </Link>
+
+        <Link
+          to="/billing"
+          className="flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Plans and billing"
+        >
+          <CreditCard className="h-4 w-4" />
+        </Link>
 
         <Link
           to="/settings"

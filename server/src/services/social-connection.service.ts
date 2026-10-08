@@ -4,6 +4,7 @@ import {
 } from '../repositories/social-account.repository';
 import { activityService } from './activity.service';
 import type { ProviderId } from '../providers/provider.interface';
+import { billingService } from './billing.service';
 
 /**
  * What happens *after* a provider finishes its OAuth conversation.
@@ -102,6 +103,15 @@ export function parseScopes(
 export async function connectAccount(
   input: ConnectAccountInput,
 ): Promise<SafeSocialAccount> {
+  // A plan's account limit applies to new connections only; a reconnect passes.
+  await billingService.assertCanConnectAccount({
+    userId: input.userId,
+    provider: input.provider,
+    providerAccountId: input.providerAccountId,
+    contextType: input.contextType ?? 'personal',
+    brandId: input.brandId ?? null,
+  });
+
   const account = await socialAccountRepository.upsert({
     userId: input.userId,
     provider: input.provider,

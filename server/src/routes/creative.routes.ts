@@ -10,6 +10,7 @@ import { publicStyleLibrary } from '../ai/style-dna/style-dna';
 import { brandIntelligenceService } from '../services/creative-brand-intelligence.service';
 import { creativeIdempotencyService, IdempotencyInProgressError } from '../services/creative-idempotency.service';
 import { getJob, startJob, TooManyJobsError, type JobFailure } from '../services/creative-jobs.service';
+import { billingService } from '../services/billing.service';
 
 /**
  * FlowPost's brand-native creative engine. Mounted at `/api/ai/creative`.
@@ -107,7 +108,7 @@ router.post(
   '/concepts',
   requireAuth,
   handle(async (req, res) => {
-    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'concepts', req.header('Idempotency-Key'), () => creativeGenerationService.discoverConcepts(req.user.id, req.body));
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'concepts', req.header('Idempotency-Key'), () => billingService.metered(req.user.id, 'concepts', res.locals.creativeRequestId, () => creativeGenerationService.discoverConcepts(req.user.id, req.body)));
     res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
   }),
 );
@@ -125,7 +126,7 @@ router.post(
   '/generate',
   requireAuth,
   handle(async (req, res) => {
-    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'generate', req.header('Idempotency-Key'), () => creativeGenerationService.generate(req.user.id, req.body, res.locals.creativeRequestId));
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'generate', req.header('Idempotency-Key'), () => billingService.metered(req.user.id, 'generate', res.locals.creativeRequestId, () => creativeGenerationService.generate(req.user.id, req.body, res.locals.creativeRequestId)));
     res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
   }),
 );
@@ -134,7 +135,13 @@ router.post(
   '/campaign',
   requireAuth,
   handle(async (req, res) => {
-    const assets = await creativeGenerationService.generateCampaign(req.user.id, req.body, res.locals.creativeRequestId);
+    const labels = (req.body as { variationLabels?: unknown } | undefined)?.variationLabels;
+    const variations = Array.isArray(labels) ? labels.length : 2;
+    const assets = await billingService.metered(
+      req.user.id, 'campaignVariation', res.locals.creativeRequestId,
+      () => creativeGenerationService.generateCampaign(req.user.id, req.body, res.locals.creativeRequestId),
+      variations,
+    );
     res.json({ assets });
   }),
 );
@@ -143,7 +150,7 @@ router.post(
   '/refine',
   requireAuth,
   handle(async (req, res) => {
-    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'refine', req.header('Idempotency-Key'), () => creativeGenerationService.refine(req.user.id, req.body, res.locals.creativeRequestId));
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'refine', req.header('Idempotency-Key'), () => billingService.metered(req.user.id, 'refine', res.locals.creativeRequestId, () => creativeGenerationService.refine(req.user.id, req.body, res.locals.creativeRequestId)));
     res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
   }),
 );
@@ -152,7 +159,7 @@ router.post(
   '/regenerate',
   requireAuth,
   handle(async (req, res) => {
-    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'regenerate', req.header('Idempotency-Key'), () => creativeGenerationService.regenerate(req.user.id, req.body, res.locals.creativeRequestId));
+    const result = await creativeIdempotencyService.runIdempotent(req.user.id, 'regenerate', req.header('Idempotency-Key'), () => billingService.metered(req.user.id, 'regenerate', res.locals.creativeRequestId, () => creativeGenerationService.regenerate(req.user.id, req.body, res.locals.creativeRequestId)));
     res.setHeader('X-Idempotency-Cache', result.cacheHit ? 'hit' : 'miss'); res.json(result.value);
   }),
 );
@@ -180,14 +187,14 @@ router.post(
  * direct request can never disagree about what a call does.
  */
 const JOB_KINDS: Record<string, (userId: string, payload: unknown, requestId: string, idempotencyKey?: string) => Promise<unknown>> = {
-  concepts: async (userId, payload, _requestId, key) =>
-    (await creativeIdempotencyService.runIdempotent(userId, 'concepts', key, () => creativeGenerationService.discoverConcepts(userId, payload))).value,
+  concepts: async (userId, payload, requestId, key) =>
+    (await creativeIdempotencyService.runIdempotent(userId, 'concepts', key, () => billingService.metered(userId, 'concepts', requestId, () => creativeGenerationService.discoverConcepts(userId, payload)))).value,
   generate: async (userId, payload, requestId, key) =>
-    (await creativeIdempotencyService.runIdempotent(userId, 'generate', key, () => creativeGenerationService.generate(userId, payload, requestId))).value,
+    (await creativeIdempotencyService.runIdempotent(userId, 'generate', key, () => billingService.metered(userId, 'generate', requestId, () => creativeGenerationService.generate(userId, payload, requestId)))).value,
   refine: async (userId, payload, requestId, key) =>
-    (await creativeIdempotencyService.runIdempotent(userId, 'refine', key, () => creativeGenerationService.refine(userId, payload, requestId))).value,
+    (await creativeIdempotencyService.runIdempotent(userId, 'refine', key, () => billingService.metered(userId, 'refine', requestId, () => creativeGenerationService.refine(userId, payload, requestId)))).value,
   regenerate: async (userId, payload, requestId, key) =>
-    (await creativeIdempotencyService.runIdempotent(userId, 'regenerate', key, () => creativeGenerationService.regenerate(userId, payload, requestId))).value,
+    (await creativeIdempotencyService.runIdempotent(userId, 'regenerate', key, () => billingService.metered(userId, 'regenerate', requestId, () => creativeGenerationService.regenerate(userId, payload, requestId)))).value,
   retype: async (userId, payload, requestId, key) =>
     (await creativeIdempotencyService.runIdempotent(userId, 'retype', key, () => creativeGenerationService.retype(userId, payload, requestId))).value,
 };

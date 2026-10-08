@@ -1,4 +1,7 @@
 import sharp, { type OverlayOptions } from 'sharp';
+import { ensureRequiredClaims } from '../intent/copy-claims';
+import { legibleBestEnabled, pickLegibleBest, type RejectedAttempt } from './legible-best';
+import { PICTURE_SCALES, makeReadingSpace, needsReadingSpace, readingSpaceHelped, type CollisionReading } from './reading-space';
 import { Resvg } from '@resvg/resvg-js';
 import { existsSync } from 'fs';
 import type { AiTextProvider, AiImageProvider } from '../providers';
@@ -1589,18 +1592,37 @@ export async function designCreative(input: DesignerInput) {
 
   const requiredClaims = context.intent?.requiredClaims ?? [];
   const effectiveCopyPlan = resolveEffectiveCopyPlan(direction, currentGraphicConcept);
-  const rawCopy = collectCampaignCopy(
+  let rawCopy = collectCampaignCopy(
     direction, currentGraphicConcept.elementsToOmit, effectiveCopyPlan, requiredClaims,
   );
   let renderableCopy = validateAndBuildRenderableCopy(rawCopy, requiredClaims, effectiveCopyPlan.maxTextElements || 3);
   let copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
-  let semanticCopy = renderableCopy.map((r) => ({
+  const toSemantic = (rows: typeof renderableCopy) => rows.map((r) => ({
     id: r.id,
     role: r.role,
     semanticRole: (r.semanticRole === 'primary-hook' ? 'primary-hook' : r.semanticRole === 'secondary-hook' ? 'secondary-hook' : 'supporting-note') as 'primary-hook' | 'secondary-hook' | 'supporting-note',
     text: r.text,
   }));
-  const missing = evaluateIntentFidelity(context.intent?.requiredClaims ?? [], copy.map(c => c.text).join(' ')).missingRequirements;
+  let semanticCopy = toSemantic(renderableCopy);
+  let missing = evaluateIntentFidelity(context.intent?.requiredClaims ?? [], copy.map(c => c.text).join(' ')).missingRequirements;
+  if (missing.length) {
+    // The writing model sometimes never used a word the member insisted on. Put it
+    // in rather than failing a render that has not cost an image yet.
+    const ensured = ensureRequiredClaims({
+      rawCopy, requiredClaims, intent: context.intent, baseBudget: effectiveCopyPlan.maxTextElements || 3,
+    });
+    console.warn('[creative] required claims were missing from the copy', {
+      restored: ensured.restored, stillMissing: ensured.missing,
+      before: copy.map((c) => `${c.role}: ${c.text}`), after: ensured.renderable.map((r) => `${r.role}: ${r.text}`),
+    });
+    if (ensured.missing.length < missing.length) {
+      rawCopy = ensured.raw;
+      renderableCopy = ensured.renderable;
+      copy = renderableCopy.map((r) => ({ role: r.role, text: r.text }));
+      semanticCopy = toSemantic(renderableCopy);
+      missing = ensured.missing;
+    }
+  }
   if (missing.length) throw new Error(`Copy is missing required campaign facts: ${missing.join(', ')}.`);
   if (!input.logo) throw new Error('A readable brand logo is required.');
   if ((input.references.length || input.products.length) && !textProvider.supportsVision) throw new Error('The composition provider must be able to inspect uploaded images.');
@@ -1729,6 +1751,8 @@ export async function designCreative(input: DesignerInput) {
     ? Object.assign({ ...input.lockedVisual }, { fidelityVerified: true })
     : undefined;
   let firstAttemptResult: any = null;
+  // Every design the critic turned down, kept so the best of them can still be delivered if enabled.
+  const rejectedAttempts: Array<RejectedAttempt<any>> = [];
   let activeRecoveryContext: CompositionRecoveryContext | undefined;
 
   const availableFallbacks = input.fallbackConcepts ? [...input.fallbackConcepts] : [];
@@ -1940,9 +1964,9 @@ export async function designCreative(input: DesignerInput) {
 
     // ── STEP 2: Analyze Actual Visual Image Field ──
     const analysisStart = Date.now();
-    const visualBuffer = visual ? Buffer.from(visual.data, 'base64') : Buffer.alloc(0);
+    let visualBuffer: Buffer = visual ? Buffer.from(visual.data, 'base64') : Buffer.alloc(0);
     const rawImageField = await analyzeImageField(visualBuffer);
-    const designField = createDesignField(rawImageField);
+    let designField = createDesignField(rawImageField);
     onStageTiming?.('imageAnalysis', Date.now() - analysisStart);
 
     // Evaluate Image Affordance
@@ -1985,7 +2009,7 @@ export async function designCreative(input: DesignerInput) {
 
     // ── STEP 4: Run Dynamic Design Engine Autonomous Composition Discovery ──
     const discoveryStart = Date.now();
-    const discoveryResult = discoverOptimizedComposition({
+    const discoveryInput: Parameters<typeof discoverOptimizedComposition>[0] = {
       copyItems,
       logoItem: input.logo ? {
         id: 'brand-mark',
@@ -2012,9 +2036,61 @@ export async function designCreative(input: DesignerInput) {
         requiredClaims: creativeRealizationContract.requiredClaims,
       },
       recoveryContext: activeRecoveryContext,
-    });
+    };
+    let discoveryResult = discoverOptimizedComposition(discoveryInput);
     onStageTiming?.('composition', Date.now() - discoveryStart);
-    const bestState = discoveryResult.bestState;
+    let bestState = discoveryResult.bestState;
+
+    // ── STEP 4b: When the best placement still collides, make room and search again ──
+    // On a picture with detail everywhere there is no quiet place for the words, so the
+    // search ends with type on the subject and the design is rejected downstream. Making
+    // reading space around the whole picture repairs that collision directly and cheaply
+    // (no model call). It is kept only if it is measurably safer, and never on a text edit,
+    // which must not touch the picture.
+    //
+    // Only with CREATIVE_ACCEPT_LEGIBLE_BEST on. Measured on live runs, the repaired designs
+    // are legible but the critic still turned most of them down as generic (1 in 9 passed,
+    // against about 1 in 5 for the same collisions left alone), so by itself it adds work and
+    // no deliveries. Its value is in giving the best-attempt policy a legible design to deliver.
+    const collisionOf = (state: typeof bestState): CollisionReading => ({
+      risk: state.textImageRelationshipState?.legibilityRisk ?? 'LOW',
+      overlap: state.textImageRelationshipState?.evidence.observedOverlapRatio ?? 0,
+    });
+    if (
+      legibleBestEnabled() && !input.retype && visual && !isPureTypographicPoster
+      && !(visual as { readingSpaceMade?: boolean }).readingSpaceMade
+      && needsReadingSpace(collisionOf(bestState))
+    ) {
+      try {
+        const before = collisionOf(bestState);
+        let kept: { roomy: Awaited<ReturnType<typeof makeReadingSpace>>; field: typeof designField; result: typeof discoveryResult; reading: CollisionReading } | undefined;
+        // Least change first: only as much room as it takes to get the type clear of the subject.
+        for (const scale of PICTURE_SCALES) {
+          const roomy = await makeReadingSpace(visualBuffer, scale);
+          const field = createDesignField(await analyzeImageField(roomy.data));
+          const result = discoverOptimizedComposition({ ...discoveryInput, field });
+          const reading = collisionOf(result.bestState);
+          const helped = readingSpaceHelped(kept?.reading ?? before, reading);
+          console.info('[reading-space] second placement', { attemptId: attempt, scale, before, after: reading, kept: helped });
+          if (helped) kept = { roomy, field, result, reading };
+          if (!needsReadingSpace(reading)) break;
+        }
+        if (kept) {
+          visual = Object.assign(
+            { ...visual, mimeType: 'image/png', data: kept.roomy.data.toString('base64') },
+            { fidelityVerified: true, readingSpaceMade: true },
+          );
+          visualBuffer = kept.roomy.data;
+          designField = kept.field;
+          discoveryResult = kept.result;
+          bestState = kept.result.bestState;
+        }
+      } catch (error) {
+        console.warn('[reading-space] could not make room; keeping the first placement', {
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     console.info('[typography] state-evaluated', {
       elementCount: bestState.elements.length,
@@ -2236,8 +2312,8 @@ export async function designCreative(input: DesignerInput) {
           emotionalTone: direction.mood || 'confident',
           brandVoice: { tone: direction.mood || 'confident', personality: ['authentic'] },
           creativeStyle: {
-            id: styleDna?.style.id || 'editorial',
-            name: styleDna?.style.name || 'Editorial',
+            id: styleDna?.style?.id || 'editorial',
+            name: styleDna?.style?.name || 'Editorial',
             visualLanguage: [],
             typographyLanguage: [],
             compositionLanguage: [],
@@ -2343,6 +2419,7 @@ export async function designCreative(input: DesignerInput) {
     if (critic.passed || input.retype) {
       return currentResult;
     }
+    rejectedAttempts.push({ result: currentResult, critic, reading: collisionOf(bestState) });
 
     if (attempt === 0) {
       firstAttemptResult = currentResult;
@@ -2424,8 +2501,8 @@ export async function designCreative(input: DesignerInput) {
         emotionalTone: direction.mood || 'confident',
         brandVoice: { tone: direction.mood || 'confident', personality: ['authentic'] },
         creativeStyle: {
-          id: styleDna?.style.id || 'editorial',
-          name: styleDna?.style.name || 'Editorial',
+          id: styleDna?.style?.id || 'editorial',
+          name: styleDna?.style?.name || 'Editorial',
           visualLanguage: [],
           typographyLanguage: [],
           compositionLanguage: [],
@@ -2615,6 +2692,16 @@ export async function designCreative(input: DesignerInput) {
 
       if (fallbackAccepted) {
         continue;
+      }
+
+      const legible = legibleBestEnabled() ? pickLegibleBest(rejectedAttempts) : undefined;
+      if (legible) {
+        console.warn('[creative] delivering the best attempt: no legibility or collision defects, rejected only as generic', {
+          attempts: rejectedAttempts.length,
+          objections: legible.critic.problems ?? [],
+          reading: legible.reading,
+        });
+        return legible.result;
       }
 
       const rejectionReason = critic.redesignFeedback || (critic.problems || []).join('; ');

@@ -7,6 +7,7 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronsLeft,
+  CreditCard,
   FileText,
   Images,
   LayoutDashboard,
@@ -64,7 +65,10 @@ const NAV_MAIN: NavItem[] = [
   { to: "/integrations", label: "Accounts", icon: Plug },
 ];
 
-const NAV_FOOT: NavItem[] = [{ to: "/settings", label: "Settings", icon: Settings }];
+const NAV_FOOT: NavItem[] = [
+  { to: "/billing", label: "Plans & billing", icon: CreditCard },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
 
 /** "42m", "3h 12m", "2d 4h", or "now" once the time has passed. */
 function until(target: dayjs.Dayjs, now: dayjs.Dayjs): string {

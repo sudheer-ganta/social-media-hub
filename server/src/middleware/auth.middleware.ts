@@ -81,10 +81,33 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
   // 1. Fast path: verify the signature locally if JWT_SECRET is available.
   if (env.JWT_SECRET) {
     try {
-      const decoded = jwt.verify(token, env.JWT_SECRET, {
-        algorithms: ['HS256'],
-        audience: SUPABASE_AUDIENCE,
-      });
+      let decoded: any;
+      try {
+        decoded = jwt.verify(token, env.JWT_SECRET, {
+          algorithms: ['HS256'],
+          audience: SUPABASE_AUDIENCE,
+        });
+      } catch (primaryErr: any) {
+        if (primaryErr?.name === 'TokenExpiredError') {
+          res.status(401).json({ error: 'Unauthorized: Token expired' });
+          return;
+        }
+        // Try without strict audience (e.g. standard Supabase token or service token)
+        try {
+          decoded = jwt.verify(token, env.JWT_SECRET, {
+            algorithms: ['HS256'],
+          });
+        } catch {
+          // Try with base64-decoded secret if raw secret signature check failed
+          try {
+            decoded = jwt.verify(token, Buffer.from(env.JWT_SECRET, 'base64'), {
+              algorithms: ['HS256'],
+            });
+          } catch {
+            throw primaryErr;
+          }
+        }
+      }
 
       if (typeof decoded === 'object' && typeof decoded.sub === 'string' && decoded.sub) {
         req.user = userFromClaims(decoded);
@@ -92,13 +115,11 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
         return;
       }
     } catch (err: any) {
-      // An expired token stays expired; asking Supabase would not change that.
       if (err?.name === 'TokenExpiredError') {
         res.status(401).json({ error: 'Unauthorized: Token expired' });
         return;
       }
-      // Anything else (wrong key, odd algorithm) falls through to Supabase,
-      // which is the authority on whether the token is real.
+      // Anything else (invalid signature / corrupt token) falls through to Supabase.
     }
   }
 

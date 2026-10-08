@@ -21,10 +21,13 @@ const Integrations = lazy(() => import("@/pages/Integrations"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const StudioPreview = lazy(() => import("@/pages/dev/StudioPreview"));
 const AnalyticsPreview = lazy(() => import("@/pages/dev/AnalyticsPreview"));
+const BillingPreview = lazy(() => import("@/pages/dev/BillingPreview"));
 const Privacy = lazy(() => import("@/pages/Privacy"));
 const Terms = lazy(() => import("@/pages/Terms"));
 const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
 const CreativeHistory = lazy(() => import("@/pages/CreativeHistory"));
+const Billing = lazy(() => import("@/pages/Billing"));
+const Pricing = lazy(() => import("@/pages/Pricing"));
 
 /**
  * "/" is both the signed-in Dashboard and the public homepage. Signed-out
@@ -54,6 +57,7 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/data-deletion" element={<DataDeletion />} />
@@ -72,6 +76,7 @@ export default function App() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="creatives" element={<CreativeHistory />} />
             <Route path="integrations" element={<Integrations />} />
+            <Route path="billing" element={<Billing />} />
             <Route path="settings" element={<Settings />} />
             {/* AI Studio is now a mode inside Create Post. Kept so bookmarks
                 and the old "Open in AI Studio" links still land somewhere. */}
@@ -88,6 +93,9 @@ export default function App() {
           )}
           {import.meta.env.DEV && (
             <Route path="/dev/analytics-preview" element={<AnalyticsPreview />} />
+          )}
+          {import.meta.env.DEV && (
+            <Route path="/dev/billing-preview" element={<BillingPreview />} />
           )}
 
           <Route path="*" element={<Navigate to="/" replace />} />

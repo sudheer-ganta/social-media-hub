@@ -208,6 +208,31 @@ export const env = {
   // that don't support it.
   GEMINI_THINKING_BUDGET: process.env.GEMINI_THINKING_BUDGET || '0',
 
+  // ── Billing (Razorpay) ─────────────────────────────────────────────────────
+  //
+  // Key ID and secret from Razorpay Dashboard → Account & Settings → API Keys.
+  // Use `rzp_test_…` keys until the flow is verified end to end. The secret
+  // never leaves the server; only the key ID is sent to the browser, because
+  // Checkout needs it.
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || '',
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
+  // Set when creating the webhook in the dashboard. It is *not* the key secret.
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+  // Razorpay plan ids, one per (plan, interval). Created by
+  // `npm run billing:sync-plans`, which prints these lines.
+  RAZORPAY_PLAN_IDS: {
+    starter_monthly: process.env.RAZORPAY_PLAN_STARTER_MONTHLY || '',
+    starter_yearly: process.env.RAZORPAY_PLAN_STARTER_YEARLY || '',
+    pro_monthly: process.env.RAZORPAY_PLAN_PRO_MONTHLY || '',
+    pro_yearly: process.env.RAZORPAY_PLAN_PRO_YEARLY || '',
+    agency_monthly: process.env.RAZORPAY_PLAN_AGENCY_MONTHLY || '',
+    agency_yearly: process.env.RAZORPAY_PLAN_AGENCY_YEARLY || '',
+  } as Record<string, string>,
+  // Off until billing is live. While off, the credit and limit checks run but
+  // never block anyone, so shipping this code cannot lock existing members out.
+  // Only the exact string `true` turns enforcement on.
+  BILLING_ENFORCED: process.env.BILLING_ENFORCED === 'true',
+
   // ── SMTP / Email Transport ────────────────────────────────────────────────
   SMTP_HOST: process.env.SMTP_HOST || '',
   SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),

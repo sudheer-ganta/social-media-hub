@@ -40,6 +40,8 @@ import { designContextService, type DesignContext } from './design-context.servi
 import { brandIntelligenceService, type BrandIntelligenceProfile } from './creative-brand-intelligence.service';
 import { creativeAttributionRepository } from '../repositories/creative-attribution.repository';
 import { aiUsageRepository } from '../repositories/ai-usage.repository';
+import { beginUsageMeter } from '../ai/usage-meter';
+import { buildFallbackWordmark } from '../ai/render/fallback-wordmark';
 import type { CreativeResearchContext } from '../ai/prompts/creative-research.prompt';
 import { analyseImage } from '../ai/generators/image-analysis.generator';
 import { fetchInlineImage, ImageFetchError } from '../ai/vision/image-source';
@@ -1075,7 +1077,7 @@ async function runGeneration({
     creativeDna,
     ...(referenceStyle && { referenceStyle }),
     referenceImageUrls: request.referenceImageUrls ?? [],
-    ...(styleDna && { styleDna: { id: styleDna.style.id, variant: styleDna.variant, source: styleDna.source } }),
+    ...(styleDna && { styleDna: { id: styleDna?.style?.id || 'editorial', variant: styleDna.variant, source: styleDna.source } }),
     ...(intent && { intent }),
     canonicalBrief,
     graphicConcept,
@@ -1210,14 +1212,8 @@ async function finishGeneration({
 
     let logoAsset = logoResult?.image ?? undefined;
     if (!logoAsset) {
-      const brandName = renderContext?.brand?.name || direction.headline || 'BRAND';
-      const cleanName = brandName.replace(/[^\w\s.-]/g, '').trim() || 'BRAND';
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="160" viewBox="0 0 600 160">
-        <rect width="600" height="160" fill="none"/>
-        <text x="300" y="100" font-family="sans-serif" font-weight="800" font-size="52" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">${cleanName.toUpperCase()}</text>
-      </svg>`;
-      const buf = await sharp(Buffer.from(svg)).png().toBuffer();
-      logoAsset = { mimeType: 'image/png', data: buf.toString('base64') };
+      // No logo on file: a legible, correctly sized stand-in made from the brand name.
+      logoAsset = await buildFallbackWordmark(renderContext?.brand?.name || direction.headline || 'BRAND');
     }
 
     // A text edit re-renders the SAVED layout, so only the lines the member touched change. A creative
@@ -1275,7 +1271,7 @@ async function finishGeneration({
       renderContext: {
         ...renderContext,
         referenceImageUrls: retype ? (renderContext.referenceImageUrls ?? []) : styleReferenceUrls,
-        ...(styleDna && { styleDna: { id: finalResolvedStyleId || styleDna.style.id, variant: styleDna.variant, source: styleDna.source } }),
+        ...(styleDna && { styleDna: { id: finalResolvedStyleId || styleDna?.style?.id || 'editorial', variant: styleDna.variant, source: styleDna.source } }),
         ...(visualUpload && { visualImageUrl: visualUpload.url })
       },
       typography: result.typography,
@@ -1577,7 +1573,7 @@ export const creativeGenerationService = {
     await Promise.all(concepts.map((concept) => creativeAttributionRepository.appendEvent(scope, {
       eventType: 'CONCEPT_VIEWED', conceptId: concept.conceptId,
     })));
-    return { ...outcome, concepts, intent, ...(referenceStyle && { referenceStyle }), ...(styleDna && { resolvedStyleId: styleDna.style.id }) };
+    return { ...outcome, concepts, intent, ...(referenceStyle && { referenceStyle }), ...(styleDna?.style?.id && { resolvedStyleId: styleDna.style.id }) };
   },
 
   /**
@@ -1690,7 +1686,9 @@ export const creativeGenerationService = {
     const imageProvider = activeImageProvider();
 
     const metrics = newMetrics();
+    const usageMeter = beginUsageMeter();
     let generationSucceeded = false;
+    let failureCode: string | undefined;
     try {
       if (!textProvider.isConfigured() || !imageProvider.isConfigured()) {
         throw new CreativeError('AI generation is not set up on this server yet.', 503);
@@ -1773,11 +1771,15 @@ export const creativeGenerationService = {
       generationSucceeded = true;
       return asset;
     } catch (error) {
+      // Class and status only, plus a short detail: enough to group failures by
+      // cause without storing anything the member typed.
+      const e = error as { name?: string; status?: number; detail?: string };
+      failureCode = [e.name ?? 'Error', e.status, e.detail?.slice(0, 60)].filter(Boolean).join(':');
       if (claimedConceptId) await creativeConceptRepository.markFailed(claimedConceptId, scope);
       throw error;
     } finally {
       logMetrics(metrics, requestId);
-      await aiUsageRepository.recordAiUsage({ ownerId: userId, action: 'generate', provider: imageProvider.id, model: imageProvider.model, contextType: request.contextType, ...(request.brandId && { brandId: request.brandId }), ...(requestId && { requestId }), imageCalls: metrics.imageCalls, retryCount: Math.max(0, metrics.imageCalls - 2), success: generationSucceeded, durationMs: Date.now() - metrics.startedAt });
+      await aiUsageRepository.recordAiUsage({ ownerId: userId, action: 'generate', provider: imageProvider.id, model: imageProvider.model, contextType: request.contextType, ...(request.brandId && { brandId: request.brandId }), ...(requestId && { requestId }), inputTokens: usageMeter.inputTokens, outputTokens: usageMeter.outputTokens, imageCalls: metrics.imageCalls, retryCount: Math.max(0, metrics.imageCalls - 2), success: generationSucceeded, durationMs: Date.now() - metrics.startedAt, ...(failureCode && { errorCode: failureCode }) });
     }
   },
 
@@ -1995,7 +1997,7 @@ export const creativeGenerationService = {
       goal,
       funnelStage,
       platforms,
-      ...(styleDna && { styleDna: { id: styleDna.style.id, variant: styleDna.variant, source: styleDna.source } }),
+      ...(styleDna && { styleDna: { id: styleDna?.style?.id || 'editorial', variant: styleDna.variant, source: styleDna.source } }),
     };
 
     const child = await generatedAssetRepository.create({

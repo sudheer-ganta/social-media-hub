@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { env } from '../../config/env';
+import { recordUsage } from '../usage-meter';
 import { AiProviderError } from './provider.interface';
 import type {
   AiImageProvider,
@@ -45,6 +46,7 @@ interface GeminiImageCandidate {
 interface GeminiImageResponse {
   candidates?: GeminiImageCandidate[];
   promptFeedback?: { blockReason?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -190,6 +192,7 @@ export class GeminiImageProvider implements AiImageProvider {
             },
           },
         );
+        recordUsage(data.usageMetadata);
 
         if (data.promptFeedback?.blockReason) {
           throw new AiProviderError(
