@@ -30,12 +30,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@google/genai": "^2.21.0",
+    "@google/genai": "^2.27.0",
     "@google/generative-ai": "^0.24.1",
-    "@prisma/adapter-pg": "^7.9.1",
-    "@prisma/client": "^7.9.1",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
     "@resvg/resvg-js": "^2.6.2",
-    "@supabase/supabase-js": "^2.112.2",
+    "@supabase/supabase-js": "^2.117.2",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
@@ -43,8 +43,8 @@
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^10.0.13",
-    "pg": "^8.22.0",
+    "nodemailer": "^10.0.15",
+    "pg": "^8.23.1",
     "sharp": "^0.35.3"
   },
   "devDependencies": {
@@ -53,7 +53,7 @@
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^22.13.4",
     "@types/nodemailer": "^8.0.2",
-    "@types/pg": "^8.20.4",
+    "@types/pg": "^8.23.1",
     "prisma": "^7.9.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.7.3",
