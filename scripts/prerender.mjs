@@ -13,6 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { assertNoSecrets } from "./prerender-safety.mjs";
 
 const SITE = "https://www.userally.in";
 const NAME = "Rally";
@@ -93,19 +94,6 @@ function head(page) {
     tags.push(`<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>`);
   }
   return tags.map((t) => `    ${t}`).join("\n");
-}
-
-/** Fail the build if anything secret-shaped or env-derived ended up in public HTML. */
-function assertNoSecrets(html, file) {
-  const problems = [];
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key.startsWith("VITE_") && value && value.length >= 8 && html.includes(value)) {
-      problems.push(`value of ${key}`);
-    }
-  }
-  if (/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/.test(html)) problems.push("a JWT-shaped string");
-  if (/service_role|sk_live|rzp_live/i.test(html)) problems.push("a credential marker");
-  if (problems.length) throw new Error(`prerender: ${file} contains ${problems.join(", ")}`);
 }
 
 async function main() {
