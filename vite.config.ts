@@ -22,13 +22,17 @@ const vitestConfig = {
   },
 };
 
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Only for the build-time prerender (vite build --ssr): bundling every
+  // dependency lets Node load them without choking on CSS imports from packages.
+  // Must not apply to Vitest, which would then inline vitest itself.
+  ssr: isSsrBuild ? { noExternal: true } : undefined,
   server: {
     port: Number(process.env.PORT) || 5173,
   },
@@ -45,4 +49,4 @@ export default defineConfig({
     },
   },
   ...vitestConfig,
-});
+}));

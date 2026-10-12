@@ -61,7 +61,7 @@ jobs:
         run: npx vitest run
 
       - name: Build frontend
-        run: npx vite build
+        run: npm run build
 
   audit:
     # Separate and non-blocking: a new advisory in a transitive dependency should

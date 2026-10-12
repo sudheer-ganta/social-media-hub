@@ -21,6 +21,7 @@ export default tseslint.config(
   {
     ignores: [
       "**/dist/**",
+      "**/dist-ssr/**",
       "**/node_modules/**",
       "server/src/generated/**",
       "server/artifacts/**",

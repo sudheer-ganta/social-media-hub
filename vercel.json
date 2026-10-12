@@ -41,12 +41,33 @@
           "value": "max-age=63072000; includeSubDomains"
         }
       ]
+    },
+    {
+      "source": "/(login|register|forgot-password|reset-password|posts|calendar|scheduled|analytics|creatives|integrations|billing|settings|onboarding|ai-studio|app-shell.html)(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
     }
   ],
   "rewrites": [
     {
+      "source": "/privacy",
+      "destination": "/privacy/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms/index.html"
+    },
+    {
+      "source": "/data-deletion",
+      "destination": "/data-deletion/index.html"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/app-shell.html"
     }
   ]
 }

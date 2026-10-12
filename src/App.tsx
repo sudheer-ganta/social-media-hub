@@ -1,12 +1,14 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { lazyRoute } from "@/lib/lazyRoute";
+import { showsPrerenderedLanding } from "@/lib/prerender";
 import { AppProviders } from "@/app/providers";
 import { AppLayout } from "@/app/AppLayout";
 import { useAuth } from "@/app/AuthProvider";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { RouteLoader } from "@/components/shared/RouteLoader";
 
-const Landing = lazy(() => import("@/pages/Landing"));
+const Landing = lazyRoute(() => import("@/pages/Landing"));
 const Login = lazy(() => import("@/pages/auth/Login"));
 const Register = lazy(() => import("@/pages/auth/Register"));
 const ForgotPassword = lazy(() => import("@/pages/auth/ForgotPassword"));
@@ -22,12 +24,26 @@ const Settings = lazy(() => import("@/pages/Settings"));
 const StudioPreview = lazy(() => import("@/pages/dev/StudioPreview"));
 const AnalyticsPreview = lazy(() => import("@/pages/dev/AnalyticsPreview"));
 const BillingPreview = lazy(() => import("@/pages/dev/BillingPreview"));
-const Privacy = lazy(() => import("@/pages/Privacy"));
-const Terms = lazy(() => import("@/pages/Terms"));
-const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
+const Privacy = lazyRoute(() => import("@/pages/Privacy"));
+const Terms = lazyRoute(() => import("@/pages/Terms"));
+const DataDeletion = lazyRoute(() => import("@/pages/DataDeletion"));
 const CreativeHistory = lazy(() => import("@/pages/CreativeHistory"));
 const Billing = lazy(() => import("@/pages/Billing"));
 const Pricing = lazy(() => import("@/pages/Pricing"));
+
+/** Routes that are prerendered at build time (scripts/prerender.mjs). */
+const PRERENDERED_ROUTES: Record<string, { preload: () => Promise<unknown> }> = {
+  "/": Landing,
+  "/privacy": Privacy,
+  "/terms": Terms,
+  "/data-deletion": DataDeletion,
+};
+
+/** Load the current page's chunk so hydration can reuse the static HTML. */
+export function preloadPrerenderedRoute(pathname: string): Promise<unknown> {
+  const route = PRERENDERED_ROUTES[pathname.replace(/\/+$/, "") || "/"];
+  return route ? route.preload() : Promise.resolve();
+}
 
 /**
  * "/" is both the signed-in Dashboard and the public homepage. Signed-out
@@ -37,7 +53,11 @@ function AppShellGate() {
   const { session, loading } = useAuth();
   const { pathname } = useLocation();
 
-  if (!loading && !session && pathname === "/") return <Landing />;
+  // While auth is still resolving, the prerendered homepage must be matched
+  // exactly (hydration), so signed-out-looking first renders show the landing page.
+  if (!session && pathname === "/" && (!loading || showsPrerenderedLanding())) {
+    return <Landing />;
+  }
 
   return (
     <ProtectedRoute>
@@ -46,11 +66,10 @@ function AppShellGate() {
   );
 }
 
-export default function App() {
+/** Route tree, shared by the browser (App) and the build-time prerender. */
+export function AppRoutes() {
   return (
-    <AppProviders>
-      <BrowserRouter>
-        <Suspense fallback={<RouteLoader />}>
+    <Suspense fallback={<RouteLoader />}>
         <Routes>
           {/* Public auth & legal routes */}
           <Route path="/login" element={<Login />} />
@@ -100,8 +119,16 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </Suspense>
-    </BrowserRouter>
-  </AppProviders>
+    </Suspense>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProviders>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AppProviders>
   );
 }

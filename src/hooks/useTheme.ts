@@ -4,6 +4,8 @@ import type { Theme } from "@/types";
 const STORAGE_KEY = "sch-theme";
 
 function systemTheme(): "light" | "dark" {
+  // No window during the build-time prerender; light matches the static HTML.
+  if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
@@ -18,6 +20,7 @@ function applyTheme(theme: Theme) {
 
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof localStorage === "undefined") return "system";
     const stored = localStorage.getItem(STORAGE_KEY);
     return stored === "light" || stored === "dark" ? stored : "system";
   });

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import "@fontsource-variable/geist";
 import "@/components/landing/landing.css";
 import { AIAssistance } from "@/components/landing/AIAssistance";
@@ -16,6 +16,12 @@ import { LandingScrollContext } from "@/components/landing/primitives";
  */
 export default function Landing() {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // The prerendered HTML is shown fully revealed (see index.css). Once React owns
+  // the page, hand control back to the entrance animations.
+  useLayoutEffect(() => {
+    document.getElementById("root")?.removeAttribute("data-prerendered");
+  }, []);
 
   return (
     <LandingScrollContext.Provider value={scrollRef}>
