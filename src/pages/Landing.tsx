@@ -17,8 +17,8 @@ import { LandingScrollContext } from "@/components/landing/primitives";
 export default function Landing() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // The prerendered HTML is shown fully revealed (see index.css). Once React owns
-  // the page, hand control back to the entrance animations.
+  // The prerendered HTML is generated fully visible (scripts/prerender-visibility.mjs).
+  // Once React owns the page, the entrance animations take over.
   useLayoutEffect(() => {
     document.getElementById("root")?.removeAttribute("data-prerendered");
   }, []);

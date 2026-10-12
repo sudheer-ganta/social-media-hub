@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertNoSecrets } from "./prerender-safety.mjs";
+import { revealPrerenderedMarkup } from "./prerender-visibility.mjs";
 
 const SITE = "https://www.userally.in";
 const NAME = "Rally";
@@ -109,7 +110,8 @@ async function main() {
   writeFileSync(path.join(dist, "app-shell.html"), template);
 
   for (const page of PAGES) {
-    const body = await render(page.path);
+    // Static HTML must read without JS: strip animation hiding before it is written.
+    const body = revealPrerenderedMarkup(await render(page.path));
     let html = template;
     html = swap(html, "    <title>Rally</title>\n", "");
     html = html.replace(/\s*<meta\s+name="description"[\s\S]*?\/>/, "");

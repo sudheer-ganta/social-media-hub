@@ -195,18 +195,3 @@
     @apply text-foreground;
   }
 }
-
-/*
- * Prerendered public pages (scripts/prerender.ts). The server markup carries the
- * entrance animations' hidden starting state as inline styles, which would make
- * the static HTML invisible until JS runs. Until hydration removes the
- * data-prerendered attribute (Landing.tsx), show the content in its final state.
- * Scale-based states are demo-widget internals and stay as rendered.
- */
-#root[data-prerendered] [style*="opacity:0"]:not([style*="scale("]) {
-  opacity: 1 !important;
-  transform: none !important;
-}
-#root[data-prerendered] [style*="translateY(112%)"] {
-  transform: none !important;
-}
